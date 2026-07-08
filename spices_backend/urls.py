@@ -29,6 +29,7 @@ from admin_panel.views import ReceivableAccountViewSet, DashboardViewSet, Coupon
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
     AssistantChatView,
+    AssistantTranscribeView,
     ConversationListCreateView,
     ConversationMessagesView,
     AdminConversationListView,
@@ -122,6 +123,7 @@ urlpatterns = [
     # NOTE: the static `admin/` route is declared before the `<uuid>` routes so
     # it is matched first and never shadowed.
     path('api/assistant/chat/', AssistantChatView.as_view(), name='assistant-chat'),
+    path('api/assistant/transcribe/', AssistantTranscribeView.as_view(), name='assistant-transcribe'),
     path('api/assistant/conversations/admin/', AdminConversationListView.as_view(), name='assistant-admin-list'),
     path('api/assistant/conversations/', ConversationListCreateView.as_view(), name='assistant-conversations'),
     path('api/assistant/conversations/<uuid:conversation_id>/messages/', ConversationMessagesView.as_view(), name='assistant-messages'),

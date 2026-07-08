@@ -3,7 +3,12 @@ import logging
 import requests
 from django.conf import settings
 from django.core.cache import cache
-from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+    throttle_classes,
+)
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
@@ -69,6 +74,12 @@ def ingest_events(request):
 
 
 @api_view(['POST'])
+# No authentication: this endpoint is identity-free by design. Leaving the
+# default CookieJWTAuthentication on would make it enforce CSRF whenever a
+# (possibly stale) access_token cookie rides along, 403-ing the sendBeacon
+# call — which cannot set an X-CSRFToken header. Disabling auth keeps the
+# beacon truly anonymous and CSRF-free.
+@authentication_classes([])
 @permission_classes([AllowAny])
 @throttle_classes([AnonEventThrottle])
 def ingest_anon(request):
@@ -144,7 +155,7 @@ def reverse_geocode(request):
         resp = requests.get(
             NOMINATIM_URL,
             params={'lat': lat, 'lon': lng, 'format': 'jsonv2', 'addressdetails': 1},
-            headers={'User-Agent': 'NidhiMasala/1.0 (nidhimasala.kaushaljain.com)'},
+            headers={'User-Agent': 'NidhiMasala/1.0 (nidhimasala.com)'},
             timeout=6,
         )
         resp.raise_for_status()

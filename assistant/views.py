@@ -16,13 +16,15 @@ chooses whose data to read (G1).
 
 import logging
 
+from django.conf import settings
 from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 
+from . import whisper_client
 from .models import AssistantConversation, AssistantMessage
 from .serializers import (
     AssistantChatRequestSerializer,
@@ -31,8 +33,12 @@ from .serializers import (
     AdminReplySerializer,
     ConversationPatchSerializer,
 )
-from .throttles import AssistantBurstThrottle, AssistantDailyThrottle
-from .agent import Agent, MAX_HISTORY_TURNS
+from .throttles import (
+    AssistantBurstThrottle,
+    AssistantDailyThrottle,
+    AssistantTranscribeThrottle,
+)
+from .agent import Agent, MAX_HISTORY_MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +78,7 @@ def _paginate(qs, request):
 # ---------------------------------------------------------------------------
 
 class AssistantChatView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
 
     def post(self, request):
@@ -150,12 +156,63 @@ class AssistantChatView(APIView):
         return AssistantConversation.objects.create(user=user, anon_session=anon_session)
 
     def _load_history(self, conversation):
+        # Load the most recent messages (bounded to avoid an unbounded queryset
+        # on a runaway thread); the agent then token-trims to the context budget.
         msgs = conversation.messages.filter(role__in=['user', 'assistant', 'admin']) \
-            .order_by('-created_at', '-id')[:MAX_HISTORY_TURNS]
+            .order_by('-created_at', '-id')[:MAX_HISTORY_MESSAGES]
         return [
             {'role': m.role, 'content': m.content, 'sender_name': m.sender_name}
             for m in reversed(list(msgs))
         ]
+
+
+# ---------------------------------------------------------------------------
+# Voice transcription (self-hosted whisper.cpp)
+# ---------------------------------------------------------------------------
+
+class AssistantTranscribeView(APIView):
+    """Speech-to-text for voice chat input.
+
+    Accepts an audio blob (multipart field ``audio``), runs it through the
+    self-hosted whisper.cpp server, and returns the transcript. The frontend
+    then sends that transcript to /chat/ exactly like typed text — this endpoint
+    never touches the LLM and persists nothing. Login-only, like the rest of the
+    assistant (G1)."""
+
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistantTranscribeThrottle, AssistantDailyThrottle]
+
+    # Voice orders are short; cap upload size so a bad client can't hand the
+    # whisper server a huge file. 16 kHz mono WAV is ~32 KB/s, so this is minutes.
+    MAX_AUDIO_BYTES = 8 * 1024 * 1024
+
+    def post(self, request):
+        if not settings.USE_SELF_HOSTED_STT:
+            return Response(
+                {'error': 'Voice transcription is not enabled.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        audio = request.FILES.get('audio')
+        if not audio:
+            return Response({'error': 'No audio provided.'}, status=status.HTTP_400_BAD_REQUEST)
+        if audio.size and audio.size > self.MAX_AUDIO_BYTES:
+            return Response(
+                {'error': 'Audio too large.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        language = (request.data.get('language') or '').strip()
+        try:
+            result = whisper_client.transcribe(
+                audio.read(), audio.name, audio.content_type, language,
+            )
+        except whisper_client.WhisperUnavailable:
+            return Response(
+                {'error': 'Transcription service is temporarily unavailable.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(result)
 
 
 # ---------------------------------------------------------------------------

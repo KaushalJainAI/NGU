@@ -23,9 +23,37 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 4
-MAX_HISTORY_TURNS = 8          # sliding window of prior messages kept in context
-MAX_MESSAGE_LEN = 1000         # input cap (also enforced in the view)
+MAX_MESSAGE_LEN = 1000         # input cap for a single *new* user turn (also enforced in the view)
 MAX_OUTPUT_TOKENS = 600
+
+# --- Conversation memory -----------------------------------------------------
+# The assistant remembers as much of the thread as fits under a token budget,
+# instead of a fixed message count. History is trimmed newest-first until the
+# budget is reached, so long threads keep continuity without ever overflowing
+# the model's context window.
+#
+# Token counts are *estimated* from characters (no tokenizer dependency at
+# request time): 3 chars/token deliberately over-counts English (~4 chars/token)
+# so the estimate errs toward staying under the real limit, never over it.
+CHARS_PER_TOKEN = 3
+# Hard ceiling — a single turn's prompt is never allowed to exceed this many
+# estimated tokens, so we stay inside the model's context window (minimax-m2.5
+# ~204k). Configurable per-deployment via env.
+MODEL_CONTEXT_TOKENS = int(os.getenv('ASSISTANT_MODEL_CONTEXT_TOKENS', '200000'))
+# Headroom reserved out of the ceiling for the reply and for <<DATA>> tool
+# observations appended across up to MAX_ITERATIONS loop cycles, so the running
+# prompt can't blow past MODEL_CONTEXT_TOKENS mid-turn.
+TOOL_OBS_RESERVE_TOKENS = 8000
+# Safety bound on how many rows the view loads from the DB before the agent
+# token-trims them (a runaway thread must not pull an unbounded queryset).
+MAX_HISTORY_MESSAGES = 500
+
+
+def _estimate_tokens(text):
+    """Conservative char-based token estimate (ceil division by CHARS_PER_TOKEN)."""
+    if not text:
+        return 0
+    return (len(text) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN
 
 
 def _build_llm():
@@ -121,19 +149,35 @@ class Agent:
                     'sources': sources, 'escalate': True, 'llm_used': False}
 
         # Build the message list: system + language directive + history + new turn.
-        messages = [('system', SYSTEM_PROMPT + '\n\n' + language_directive(language))]
-        for h in (history or [])[-MAX_HISTORY_TURNS:]:
+        system_text = SYSTEM_PROMPT + '\n\n' + language_directive(language)
+        messages = [('system', system_text)]
+
+        # Token-budgeted history: keep as many of the most recent turns as fit
+        # under the ceiling, reserving room for the reply + tool observations so
+        # the running prompt can never exceed MODEL_CONTEXT_TOKENS mid-loop.
+        budget = MODEL_CONTEXT_TOKENS - MAX_OUTPUT_TOKENS - TOOL_OBS_RESERVE_TOKENS
+        used = _estimate_tokens(system_text) + _estimate_tokens(message)
+        kept = []
+        for h in reversed(history or []):
+            cost = _estimate_tokens(h.get('content', ''))
+            if used + cost > budget:
+                break            # older turns beyond the budget are dropped
+            used += cost
+            kept.append(h)
+        kept.reverse()           # restore chronological order
+
+        for h in kept:
             h_role = h.get('role', 'user')
             if h_role == 'admin':
                 # Admin messages are passed to the LLM as assistant turns with a
                 # clear label so the model knows a human team member spoke.
                 name = h.get('sender_name') or 'Admin'
                 content = f"[{name} — Nidhi Team]: {h.get('content', '')}"
-                messages.append(('assistant', content[:MAX_MESSAGE_LEN]))
+                messages.append(('assistant', content))
             elif h_role == 'assistant':
-                messages.append(('assistant', h.get('content', '')[:MAX_MESSAGE_LEN]))
+                messages.append(('assistant', h.get('content', '')))
             else:
-                messages.append(('user', h.get('content', '')[:MAX_MESSAGE_LEN]))
+                messages.append(('user', h.get('content', '')))
         messages.append(('user', message))
 
         repaired = False

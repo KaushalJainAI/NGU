@@ -158,6 +158,44 @@ class TestAdminReply:
         assert 'Kaushal' in joined and 'Nidhi Team' in joined
 
 
+# ==================== Token-budgeted history ==================== #
+
+@pytest.mark.django_db
+class TestHistoryBudget:
+    def test_full_recent_history_reaches_llm_when_small(self, test_user, monkeypatch):
+        """A short thread is passed to the model in full (no fixed 8-msg cap)."""
+        history = [
+            {'role': 'user', 'content': f'msg {i}', 'sender_name': ''}
+            for i in range(40)
+        ]
+        captured = _capture(monkeypatch, _env(final_reply='ok'))
+        Agent(test_user).run('now', history=history)
+        joined = ' '.join(m[1] for m in captured['messages'])
+        # All 40 prior turns fit comfortably under the budget → none dropped.
+        assert 'msg 0' in joined and 'msg 39' in joined
+
+    def test_oldest_turns_dropped_when_over_budget(self, test_user, monkeypatch):
+        """When history exceeds the token ceiling, oldest turns are trimmed while
+        the newest are always kept — and the prompt stays under the ceiling."""
+        import assistant.agent as agent_mod
+        # Shrink the ceiling so the test is cheap and deterministic.
+        monkeypatch.setattr(agent_mod, 'MODEL_CONTEXT_TOKENS', 4000)
+        monkeypatch.setattr(agent_mod, 'TOOL_OBS_RESERVE_TOKENS', 0)
+        big = 'x' * 3000  # ~1000 estimated tokens each
+        history = [
+            {'role': 'user', 'content': f'OLD{i} {big}', 'sender_name': ''}
+            for i in range(10)
+        ]
+        history.append({'role': 'user', 'content': 'NEWEST tiny', 'sender_name': ''})
+        captured = _capture(monkeypatch, _env(final_reply='ok'))
+        Agent(test_user).run('now', history=history)
+        joined = ' '.join(m[1] for m in captured['messages'])
+        assert 'NEWEST' in joined        # newest turn always kept
+        assert 'OLD0' not in joined       # oldest turns dropped
+        total_tokens = sum(agent_mod._estimate_tokens(m[1]) for m in captured['messages'])
+        assert total_tokens <= agent_mod.MODEL_CONTEXT_TOKENS
+
+
 # ==================== Customer thread endpoints ==================== #
 
 @pytest.mark.django_db
@@ -180,6 +218,13 @@ class TestCustomerThreads:
     def test_anonymous_cannot_list(self, api_client):
         resp = api_client.get(LIST_URL)
         assert resp.status_code in (401, 403)
+
+    def test_anonymous_cannot_chat(self, api_client):
+        """The AI assistant is login-only: anonymous chat must be rejected before
+        any LLM/agent work runs (resource + cost guard)."""
+        resp = api_client.post(CHAT_URL, {'message': 'hello'}, format='json')
+        assert resp.status_code in (401, 403)
+        assert AssistantConversation.objects.count() == 0
 
     def test_last_message_preview_in_list(self, authenticated_client, test_user):
         conv = AssistantConversation.objects.create(user=test_user, title='t')

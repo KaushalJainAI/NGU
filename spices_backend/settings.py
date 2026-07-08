@@ -164,6 +164,14 @@ MODELTRANSLATION_FALLBACK_LANGUAGES = ('en',)
 USE_CLOUDINARY = config('USE_CLOUDINARY', default=True, cast=bool)
 USE_S3 = config('USE_S3', default=False, cast=bool)
 
+# --- Self-hosted voice transcription (whisper.cpp) ---
+# When enabled, the assistant's voice input is transcribed by the local whisper
+# container (small-q5 model) instead of the browser Web Speech API. Off by
+# default so dev environments without the container fall back to text.
+USE_SELF_HOSTED_STT = config('USE_SELF_HOSTED_STT', default=False, cast=bool)
+WHISPER_URL = config('WHISPER_URL', default='http://whisper:8080/inference')
+WHISPER_TIMEOUT = config('WHISPER_TIMEOUT', default=30, cast=int)
+
 if USE_CLOUDINARY:
     CLOUDINARY_STORAGE = {
         'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME'),
@@ -282,6 +290,7 @@ REST_FRAMEWORK = {
         'password_reset': '10/day',  # Password reset OTP: 10 per day
         'assistant': '20/min',   # AI assistant: 20 messages per minute
         'assistant_day': '500/day',  # AI assistant: hard daily cap (cost guard)
+        'assistant_stt': config('THROTTLE_ASSISTANT_STT', default='15/min'),  # voice transcription (CPU-heavy)
         'events': '600/hour',    # Behavioral event ingest (batched on client)
         'anon_events': config('THROTTLE_ANON_EVENTS', default='120/min'),  # Anonymous counter beacons (per-IP)
         'search_suggest': '60/min',  # Autocomplete: keystroke-friendly but bounded

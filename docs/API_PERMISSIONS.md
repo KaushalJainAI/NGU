@@ -73,6 +73,7 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/payment-account/` | GET | Get payment account for checkout |
 | `/api/payment-methods/` | GET/POST | List/add saved payment methods |
 | `/api/assistant/chat/` | POST | AI assistant (with cart/order tools) |
+| `/api/assistant/transcribe/` | POST | Voice → text (self-hosted whisper.cpp); audio upload |
 | `/api/assistant/conversations/` | GET/POST | List / create chat threads |
 | `/api/assistant/conversations/{id}/messages/` | GET | Thread message history |
 | `/api/events/` | POST | Ingest behavioral events (view, click, purchase…) |

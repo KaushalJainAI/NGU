@@ -152,6 +152,10 @@ There is one conversation system for everything — AI shopping help, voice orde
 and human-admin support all share the same thread (`AssistantConversation` /
 `AssistantMessage`). The old order-scoped `support.ChatSession` system was removed.
 
+Voice input is transcribed by a self-hosted whisper.cpp container (`small-q5`)
+via `POST /api/assistant/transcribe/`, then flows through `/chat/` as text — the
+browser Web Speech API is no longer used. See `docs/ASSISTANT.md`.
+
 **Why?** A single inbox for admins and a single widget for customers. Order context
 is carried as text in the conversation rather than a rigid order↔thread FK, so a
 customer can ask about anything in one place. See `docs/ASSISTANT.md`.
