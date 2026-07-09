@@ -536,6 +536,24 @@ CACHE_TTL_LONG = 900          # 15 minutes - for categories, static data
 CACHE_TTL_DASHBOARD = 120     # 2 minutes - for dashboard stats
 CACHE_TTL_INSIGHTS = 300      # 5 minutes - for analytics insights endpoints
 
+# Analytics / geocoding runtime knobs.
+ANALYTICS_MAX_BATCH = config('ANALYTICS_MAX_BATCH', default=50, cast=int)
+NOMINATIM_URL = config('NOMINATIM_URL', default='https://nominatim.openstreetmap.org/reverse')
+NOMINATIM_USER_AGENT = config('NOMINATIM_USER_AGENT', default='NidhiMasala/1.0 (nidhimasala.com)')
+
+# Invoice issuer details. Defaults are the current registered business details;
+# override per deployment if billing identity changes.
+SELLER_NAME = config('SELLER_NAME', default='Nidhi Grah Udyog')
+SELLER_PROPRIETOR = config('SELLER_PROPRIETOR', default='Lalit Kumar Jain')
+SELLER_TAGLINE = config('SELLER_TAGLINE', default='Pure & Authentic Indian Spices')
+SELLER_ADDRESS = config('SELLER_ADDRESS', default='7, Industrial Area, Runija Road,<br/>Barnagar, Ujjain, Madhya Pradesh 456771')
+SELLER_GSTIN = config('SELLER_GSTIN', default='23ABUPJ8925C1ZI')
+SELLER_FSSAI = config('SELLER_FSSAI', default='11414730000288')
+SELLER_STATE = config('SELLER_STATE', default='Madhya Pradesh')
+SELLER_STATE_CODE = config('SELLER_STATE_CODE', default='23')
+SELLER_EMAIL = config('SELLER_EMAIL', default='nidhigrahudyog@rediffmail.com')
+SELLER_PHONE = config('SELLER_PHONE', default='+91 93029 22251')
+
 # Coarse IP -> region lookups for anonymous-traffic analytics (MaxMind GeoLite2).
 # Optional: if the .mmdb is absent the analytics module degrades gracefully and
 # simply omits the geo dimension. See analytics/geoip.py and ANALYTICS.md.

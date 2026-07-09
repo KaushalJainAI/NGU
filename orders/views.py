@@ -9,7 +9,7 @@ Architecture:
 Order Creation Flow:
 1. Validate cart exists and has items
 2. Validate coupon if provided (checks is_active, valid_until)
-3. Calculate totals: subtotal, discount, shipping (free >₹500), tax (5%)
+3. Calculate totals: subtotal, discount, env-configured shipping, per-line tax
 4. Create Order + OrderItems in atomic transaction
 5. Reduce product stock within transaction
 6. Clear cart AFTER successful transaction (prevents rollback issues)
@@ -38,7 +38,10 @@ from .models import Order, OrderItem
 from .serializers import OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
 from cart.models import Cart
 from admin_panel.models import Coupon
-from spices_backend.limits import MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL
+from spices_backend.limits import (
+    MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL,
+    SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
+)
 from spices_backend.abuse import flag_suspicious
 
 logger = logging.getLogger(__name__)
@@ -92,7 +95,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             source = cart_item.combo
         else:
             source = cart_item.product
-        return Decimal(str(getattr(source, 'tax_rate', 5) or 0))
+        return Decimal(str(getattr(source, 'tax_rate', DEFAULT_TAX_RATE) or 0))
 
     def _cart_line_price(self, cart_item):
         """Unit final price for a cart line (variant-aware)."""
@@ -167,7 +170,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         # Calculate order breakdown (per-product GST, summed across lines)
         discounted_subtotal = subtotal - total_discount
-        shipping_charge = Decimal('0') if discounted_subtotal >= 500 else Decimal('50')
+        shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
         tax = self._compute_cart_tax(cart, subtotal, total_discount)
         total_amount = discounted_subtotal + shipping_charge + tax
 
@@ -304,7 +307,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'quantity': cart_item.quantity,
                 'item_price': item_price,
                 # Per-product GST rate (%). Papad/papad katran are 0; default 5.
-                'tax_rate': Decimal(str(getattr(item, 'tax_rate', 5) or 0)),
+                'tax_rate': Decimal(str(getattr(item, 'tax_rate', DEFAULT_TAX_RATE) or 0)),
                 'components': components,  # combo component draws (empty for products)
             })
             subtotal += item_price * cart_item.quantity
@@ -339,7 +342,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             tax += item_tax
 
         # Calculate shipping and total
-        shipping_charge = Decimal('0') if discounted_subtotal >= 500 else Decimal('50')
+        shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
         total_amount = (discounted_subtotal + shipping_charge + tax).quantize(Decimal('0.01'))
 
         # Belt-and-suspenders: refuse an order whose computed money values would

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 4
 MAX_MESSAGE_LEN = 1000         # input cap for a single *new* user turn (also enforced in the view)
-MAX_OUTPUT_TOKENS = 600
+MAX_OUTPUT_TOKENS = int(os.getenv('ASSISTANT_MAX_OUTPUT_TOKENS', '600'))
 
 # --- Conversation memory -----------------------------------------------------
 # The assistant remembers as much of the thread as fits under a token budget,
@@ -43,10 +43,10 @@ MODEL_CONTEXT_TOKENS = int(os.getenv('ASSISTANT_MODEL_CONTEXT_TOKENS', '200000')
 # Headroom reserved out of the ceiling for the reply and for <<DATA>> tool
 # observations appended across up to MAX_ITERATIONS loop cycles, so the running
 # prompt can't blow past MODEL_CONTEXT_TOKENS mid-turn.
-TOOL_OBS_RESERVE_TOKENS = 8000
+TOOL_OBS_RESERVE_TOKENS = int(os.getenv('ASSISTANT_TOOL_OBS_RESERVE_TOKENS', '8000'))
 # Safety bound on how many rows the view loads from the DB before the agent
 # token-trims them (a runaway thread must not pull an unbounded queryset).
-MAX_HISTORY_MESSAGES = 500
+MAX_HISTORY_MESSAGES = int(os.getenv('ASSISTANT_MAX_HISTORY_MESSAGES', '500'))
 
 
 def _estimate_tokens(text):
@@ -76,7 +76,7 @@ def _build_llm():
             return ChatOpenAI(
                 model=model_name,
                 openai_api_key=api_key,
-                openai_api_base="https://openrouter.ai/api/v1",
+                openai_api_base=os.getenv('OPENROUTER_API_BASE', 'https://openrouter.ai/api/v1'),
                 temperature=0.2,
                 max_tokens=MAX_OUTPUT_TOKENS,
             )

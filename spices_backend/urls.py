@@ -25,7 +25,7 @@ from cart.views import CartViewSet, ValidateCouponAPIView, FavoritesViewSet
 from orders.views import OrderViewSet
 from reviews.views import ReviewViewSet
 from payments.views import PaymentMethodViewSet
-from admin_panel.views import ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PolicyViewSet, PaymentAccountView
+from admin_panel.views import ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PaymentAccountView
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
     AssistantChatView,
@@ -61,7 +61,9 @@ router.register(r'product-images', ProductImageViewSet, basename='product-image'
 router.register(r'product-variants', ProductVariantViewSet, basename='product-variant')
 router.register(r'coupons', CouponViewSet, basename='coupon')
 
-router.register(r'policies', PolicyViewSet, basename='policy')
+# Policy management is retired for now — the storefront serves static policy
+# pages directly. The Policy model/viewset remain in the codebase but are not
+# routed. Re-register here to bring the endpoint back if needed.
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
 
 # Support endpoints

@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 # Register your models here.
-from .models import ReceivableAccount, Coupon, Policy
+from .models import ReceivableAccount, Coupon
 
 @admin.register(ReceivableAccount)
 class ReceivableAccountAdmin(admin.ModelAdmin):
@@ -17,8 +17,5 @@ class CouponAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'valid_until')
     ordering = ('-valid_until', '-id')
 
-
-@admin.register(Policy)
-class PolicyAdmin(admin.ModelAdmin):
-    list_display = ['type']
-    search_fields = ['type']
+# Policy admin is intentionally not registered — policy content is served as
+# static storefront pages. The Policy model is kept but inactive.

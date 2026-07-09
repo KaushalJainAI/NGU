@@ -38,7 +38,7 @@ LANG_NAMES = {
 # literally translated word-by-word.
 NAME_FIELDS = {"name", "title"}
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_URL = config("OPENROUTER_CHAT_COMPLETIONS_URL", default="https://openrouter.ai/api/v1/chat/completions")
 
 
 class Command(BaseCommand):

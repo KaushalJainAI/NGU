@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Cart, CartItem, Favorite
 from products.serializers import ProductListSerializer
 from admin_panel.serializers import CouponSerializer
+from spices_backend.limits import SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +62,7 @@ class CartItemResponseSerializer(serializers.Serializer):
     def get_tax_rate(self, obj):
         """GST rate (%) for this line, from its product/combo (default 5)."""
         item = self._get_item(obj)
-        return float(getattr(item, 'tax_rate', 5) or 0) if item else 0.0
+        return float(getattr(item, 'tax_rate', DEFAULT_TAX_RATE) or 0) if item else 0.0
 
     def get_id(self, obj):
         item = self._get_item(obj)
@@ -170,11 +171,11 @@ class CartResponseSerializer(serializers.Serializer):
         tax = 0.0
         for ci in cart.items.select_related('product', 'combo', 'variant').all():
             source = ci.combo if (ci.item_type == 'combo') else ci.product
-            rate = float(getattr(source, 'tax_rate', 5) or 0)
+            rate = float(getattr(source, 'tax_rate', DEFAULT_TAX_RATE) or 0)
             tax += float(ci.subtotal) * rate / 100
         tax = round(tax, 2)
         discount = 0
-        shipping = 0 if subtotal >= 500 or subtotal == 0 else 50
+        shipping = 0 if subtotal >= float(FREE_SHIPPING_THRESHOLD) or subtotal == 0 else float(SHIPPING_CHARGE)
         total = round(subtotal + tax + shipping - discount, 2)
         return {
             'subtotal': subtotal,

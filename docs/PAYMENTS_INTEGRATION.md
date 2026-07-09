@@ -56,10 +56,13 @@ RAZORPAY_KEY_SECRET=...
 subtotal            = Σ (item_price × quantity)
 total_discount      = subtotal × (coupon.discount_percent / 100)   [0 if no coupon]
 discounted_subtotal = subtotal − total_discount
-shipping_charge     = ₹0   if discounted_subtotal ≥ ₹500 else ₹50
-tax                 = discounted_subtotal × 5%
+shipping_charge     = ₹0   if discounted_subtotal ≥ FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
+tax                 = discounted_subtotal × DEFAULT_TAX_RATE% (per-line tax_rate if set)
 total_amount        = discounted_subtotal + shipping_charge + tax
 ```
+
+`SHIPPING_CHARGE` (default ₹69), `FREE_SHIPPING_THRESHOLD` (default ₹500), and `DEFAULT_TAX_RATE`
+(default 5%) are configurable env vars — see `spices_backend/limits.py`.
 
 All amounts stored as `Decimal(max_digits=10, decimal_places=2)` to avoid floating-point
 errors. See `ORDER_LIFECYCLE.md` for the full order creation flow.

@@ -21,12 +21,13 @@ from .serializers import UserEventSerializer, UserGeoSerializer
 logger = logging.getLogger(__name__)
 
 # Hard cap on how many events one request may carry.
-MAX_BATCH = 50
+MAX_BATCH = settings.ANALYTICS_MAX_BATCH
 
 # Nominatim (OpenStreetMap) reverse-geocode endpoint. Their usage policy
 # requires an identifying User-Agent and <=1 req/sec; we satisfy the latter by
 # caching results aggressively (coords rounded to 3 decimals -> shared key).
-NOMINATIM_URL = 'https://nominatim.openstreetmap.org/reverse'
+NOMINATIM_URL = settings.NOMINATIM_URL
+NOMINATIM_USER_AGENT = settings.NOMINATIM_USER_AGENT
 GEOCODE_TTL = getattr(settings, 'CACHE_TTL_GEOCODE', 60 * 60 * 24 * 30)  # 30 days
 
 
@@ -155,7 +156,7 @@ def reverse_geocode(request):
         resp = requests.get(
             NOMINATIM_URL,
             params={'lat': lat, 'lon': lng, 'format': 'jsonv2', 'addressdetails': 1},
-            headers={'User-Agent': 'NidhiMasala/1.0 (nidhimasala.com)'},
+            headers={'User-Agent': NOMINATIM_USER_AGENT},
             timeout=6,
         )
         resp.raise_for_status()

@@ -8,6 +8,7 @@ defaults are the agreed safe values. Keep this file dependency-free (only
 python-decouple) so it can be imported from settings, serializers, views and
 throttles without circular imports.
 """
+from decimal import Decimal
 from decouple import config
 
 # --- Cart / order quantities -------------------------------------------------
@@ -25,6 +26,15 @@ MAX_SYNC_ITEMS = config("MAX_SYNC_ITEMS", default=100, cast=int)
 # Hard ceiling on any computed order money value, kept under the numeric(10,2)
 # column limit as a belt-and-suspenders guard behind MAX_ITEM_QUANTITY.
 MAX_ORDER_TOTAL = config("MAX_ORDER_TOTAL", default=9_999_999, cast=int)
+
+# --- Pricing (shipping / tax) ------------------------------------------------
+# Flat shipping fee charged below the free-shipping threshold, and the
+# post-discount subtotal (in rupees) at/above which shipping becomes free.
+SHIPPING_CHARGE = config("SHIPPING_CHARGE", default=Decimal("69"), cast=Decimal)
+FREE_SHIPPING_THRESHOLD = config("FREE_SHIPPING_THRESHOLD", default=Decimal("500"), cast=Decimal)
+
+# Fallback GST rate (%) used only when a product/combo has no tax_rate set.
+DEFAULT_TAX_RATE = config("DEFAULT_TAX_RATE", default=Decimal("5"), cast=Decimal)
 
 # --- Reviews -----------------------------------------------------------------
 MAX_REVIEW_COMMENT = config("MAX_REVIEW_COMMENT", default=2000, cast=int)

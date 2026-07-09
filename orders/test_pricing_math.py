@@ -11,7 +11,7 @@ add-to-cart and checkout.
 Pricing rules (orders/views.py):
   discount        = subtotal * percent/100          (quantized to 0.01)
   discounted_sub  = subtotal - discount
-  shipping        = 0 if discounted_sub >= 500 else 50
+  shipping        = 0 if discounted_sub >= FREE_SHIPPING_THRESHOLD (500) else SHIPPING_CHARGE (69)
   tax             = discounted_sub * 0.05            (quantized to 0.01)
   total           = discounted_sub + shipping + tax
 """

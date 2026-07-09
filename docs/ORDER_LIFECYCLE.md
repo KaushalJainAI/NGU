@@ -61,15 +61,17 @@ Applied to the collected `subtotal`:
 subtotal            = Σ (item_price × quantity)
 total_discount      = subtotal × (coupon.discount_percent / 100)
 discounted_subtotal = subtotal − total_discount
-shipping_charge     = ₹0   if discounted_subtotal ≥ ₹500
-                    = ₹50  otherwise
-tax                 = discounted_subtotal × 5%
+shipping_charge     = ₹0   if discounted_subtotal ≥ FREE_SHIPPING_THRESHOLD
+                    = SHIPPING_CHARGE  otherwise
+tax                 = discounted_subtotal × DEFAULT_TAX_RATE% (or per-line tax_rate if set)
 total_amount        = discounted_subtotal + shipping_charge + tax
 ```
 
 **Key points:**
 - Free shipping threshold is checked against the **post-discount** subtotal.
-- Tax is 5% on the **post-discount** subtotal; shipping is not taxed.
+- `SHIPPING_CHARGE` (default ₹69), `FREE_SHIPPING_THRESHOLD` (default ₹500), and
+  `DEFAULT_TAX_RATE` (default 5%) are env-configurable — see `spices_backend/limits.py`.
+- Tax is on the **post-discount** subtotal; shipping is not taxed.
 - No tax on shipping.
 
 ### 4. Atomic transaction
