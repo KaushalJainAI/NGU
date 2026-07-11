@@ -469,13 +469,33 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         """Validate discount price"""
         price = data.get('price', getattr(self.instance, 'price', None))
         discount_price = data.get('discount_price')
-        
+
         if discount_price and price and discount_price >= price:
             raise serializers.ValidationError({
                 'discount_price': 'Discount price must be less than the regular price.'
             })
-        
+
         return data
+
+    def create(self, validated_data):
+        # sections is a M2M through ProductSectionPlacement — pop it and set()
+        # explicitly after the product exists, rather than letting DRF's default
+        # M2M handling touch the intermediary table implicitly.
+        sections = validated_data.pop('sections', None)
+        product = super().create(validated_data)
+        if sections is not None:
+            product.sections.set(sections)
+        return product
+
+    def update(self, instance, validated_data):
+        # `sections` absent from the payload → leave placements untouched
+        # (partial update). Present (even as []) → replace the set, so an admin
+        # can clear all section placements from the edit form.
+        sections = validated_data.pop('sections', None)
+        product = super().update(instance, validated_data)
+        if sections is not None:
+            product.sections.set(sections)
+        return product
 
 
 class ProductComboItemReadSerializer(serializers.ModelSerializer):

@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 
 from rest_framework import viewsets, permissions, status, mixins
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, SAFE_METHODS
 from rest_framework.views import APIView
@@ -86,6 +87,51 @@ class CouponViewSet(viewsets.ModelViewSet):
     serializer_class = CouponSerializer
     permission_classes = [IsAdminUser]
     throttle_classes = [UserRateThrottle]
+    # Admin management list with no pagination UI: return every coupon so the
+    # 13th+ isn't silently hidden by the global PAGE_SIZE. (Small, admin-only.)
+    pagination_class = None
+
+    @action(detail=False, methods=['post'])
+    def validate(self, request):
+        """Admin utility: check whether a coupon code exists and is redeemable.
+
+        Reports the *structural* validity an admin cares about — active, not
+        expired, usage limit not reached. Per-checkout concerns (single-user
+        assignment, minimum-order amount) are intentionally NOT treated as
+        failures here, since they depend on who is buying and what's in the cart;
+        the coupon's configured limits are returned so the admin can see them.
+        """
+        from django.utils import timezone
+
+        code = (request.data.get('code') or '').strip()
+        if not code:
+            return Response(
+                {'valid': False, 'error': 'Coupon code is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            coupon = Coupon.objects.get(code__iexact=code)
+        except Coupon.DoesNotExist:
+            return Response(
+                {'valid': False, 'error': f"Coupon '{code}' does not exist."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        reasons = []
+        if not coupon.is_active:
+            reasons.append('inactive')
+        if coupon.valid_until and coupon.valid_until < timezone.now():
+            reasons.append('expired')
+        if coupon.max_usage is not None and coupon.usage_count >= coupon.max_usage:
+            reasons.append('usage limit reached')
+
+        valid = not reasons
+        return Response({
+            'valid': valid,
+            'reason': None if valid else ', '.join(reasons),
+            'coupon': CouponSerializer(coupon).data,
+        })
 
 
 class DashboardViewSet(viewsets.ViewSet):
@@ -112,8 +158,6 @@ class DashboardViewSet(viewsets.ViewSet):
         total_products = Product.objects.count()
         total_combos = ProductCombo.objects.count()
         active_coupons = Coupon.objects.count()
-        graph_node_count = 0
-        graph_edges_count = 0
 
         recent_orders_qs = Order.objects.order_by('-created_at')[:5]
         recent_orders = RecentOrderSerializer(recent_orders_qs, many=True).data
@@ -123,8 +167,6 @@ class DashboardViewSet(viewsets.ViewSet):
             "totalCombos": total_combos,
             "totalOrders": total_orders,
             "activeCoupons": active_coupons,
-            "graphNodesCount": graph_node_count,
-            "graphEdgeCount": graph_edges_count,
             "recentOrders": recent_orders
         }
         

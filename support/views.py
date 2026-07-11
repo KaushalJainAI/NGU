@@ -33,7 +33,10 @@ class ContactSubmissionViewSet(viewsets.ModelViewSet):
     - Only admins can GET/PUT/DELETE
     """
     throttle_classes = [ContactRateThrottle]
-    
+    # Admin inbox has no pagination UI, so return every submission — otherwise
+    # the 13th+ customer message is invisible (hidden by global PAGE_SIZE).
+    pagination_class = None
+
     def get_permissions(self):
         if self.action == 'create':
             return []

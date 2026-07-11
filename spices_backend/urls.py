@@ -18,7 +18,7 @@ from users.views import (
 )
 from products.views import (
     CategoryViewSet, ProductViewSet, ComboProductViewSet, ProductImageViewSet,
-    ProductVariantViewSet, get_spice_forms, unified_search,
+    ProductVariantViewSet, ProductSectionViewSet, get_spice_forms, unified_search,
     search_suggest
 )
 from cart.views import CartViewSet, ValidateCouponAPIView, FavoritesViewSet
@@ -59,6 +59,7 @@ router.register(r'payment-methods', PaymentMethodViewSet, basename='payment-meth
 router.register(r'receivable-accounts', ReceivableAccountViewSet, basename='receivable-accounts')
 router.register(r'product-images', ProductImageViewSet, basename='product-image')
 router.register(r'product-variants', ProductVariantViewSet, basename='product-variant')
+router.register(r'product-sections', ProductSectionViewSet, basename='product-section')
 router.register(r'coupons', CouponViewSet, basename='coupon')
 
 # Policy management is retired for now — the storefront serves static policy
@@ -78,6 +79,9 @@ urlpatterns = [
 
     # Main API endpoints
     path('api/', include(router.urls)),
+
+    # Razorpay payment endpoints (create-order / verify / webhook / status)
+    path('api/payments/', include('payments.urls')),
 
     # Authentication endpoints
     path('api/auth/register/', UserRegistrationView.as_view(), name='register'),

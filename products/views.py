@@ -21,6 +21,7 @@ from .serializers import (
     ProductComboSerializer,
     ProductImageSerializer,
     HomepageSectionSerializer,
+    ProductSectionSerializer,
     ProductVariantWriteSerializer,
 )
 from .cache import (
@@ -119,6 +120,21 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance.is_active = False
         instance.save(update_fields=['is_active'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProductSectionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Flat list of homepage sections (id, name, section_type, …).
+
+    Powers the section multi-select on the admin product/combo edit forms. Kept
+    read-only: sections are authored in the Django admin, and the storefront's
+    rich nested payload lives at /products/sections/. Public read is harmless
+    (section names aren't sensitive); writes stay admin-only via the shared
+    IsAdminOrReadOnly base, though no write verbs are exposed here.
+    """
+    queryset = ProductSection.objects.all().order_by('display_order', 'name')
+    serializer_class = ProductSectionSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    pagination_class = None
 
 
 class ProductViewSet(viewsets.ModelViewSet):

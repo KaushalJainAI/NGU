@@ -298,6 +298,8 @@ REST_FRAMEWORK = {
         'order': config('THROTTLE_ORDER', default='10/min'),           # orders placed per minute
         'order_day': config('THROTTLE_ORDER_DAY', default='100/day'),  # daily order ceiling
         'cart_write': config('THROTTLE_CART_WRITE', default='60/min'), # cart mutations / minute
+        # Payment endpoints — verify is an HMAC oracle if left unthrottled.
+        'payment': config('THROTTLE_PAYMENT', default='20/min'),
     }
 }
 
@@ -430,6 +432,23 @@ if not DEBUG:
 # Payment Gateway Settings
 RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
 RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+# HMAC secret used to verify inbound Razorpay webhook signatures (raw body).
+# Blank until a webhook is registered in the dashboard; the handler rejects all
+# deliveries with 400 while blank (fail-closed).
+RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+# L3 reconciliation: an ONLINE order left unpaid longer than this is considered
+# abandoned and auto-cancelled (stock released) unless Razorpay shows it captured.
+PAYMENT_STUCK_TTL_MINUTES = config('PAYMENT_STUCK_TTL_MINUTES', default=15, cast=int)
+# Address that receives payment exception alerts; falls back to EMAIL_HOST_USER.
+PAYMENT_ALERT_EMAIL = config('PAYMENT_ALERT_EMAIL', default='') or config('EMAIL_HOST_USER', default='')
+
+# Background scheduler cadence (see `manage.py run_scheduler`). Reconcile runs
+# often enough that an abandoned checkout is cancelled within one interval of the
+# 15-minute TTL; rollups keep the admin Insights dashboard live.
+RECONCILE_INTERVAL_MINUTES = config('RECONCILE_INTERVAL_MINUTES', default=5, cast=int)
+ROLLUP_INTERVAL_MINUTES = config('ROLLUP_INTERVAL_MINUTES', default=5, cast=int)
+# Storefront base URL for links embedded in customer payment emails.
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
 # Email Configuration
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')

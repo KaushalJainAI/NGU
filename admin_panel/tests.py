@@ -163,10 +163,15 @@ class TestCouponEdgeCases:
 
 # ==================== POLICY MANAGEMENT TESTS ====================
 
+@pytest.mark.skip(
+    reason="Policy API retired — routes unregistered in spices_backend/urls.py; "
+           "the storefront serves static policy pages. Remove this skip if the "
+           "PolicyViewSet is re-registered."
+)
 @pytest.mark.django_db
 class TestPolicyManagement:
     """Tests for policy management."""
-    
+
     base_url = '/api/policies/'
     
     def test_list_policies_public(self, api_client):
@@ -226,10 +231,15 @@ class TestPolicyManagement:
 
 # ==================== POLICY EDGE CASES ====================
 
+@pytest.mark.skip(
+    reason="Policy API retired — routes unregistered in spices_backend/urls.py; "
+           "the storefront serves static policy pages. Remove this skip if the "
+           "PolicyViewSet is re-registered."
+)
 @pytest.mark.django_db
 class TestPolicyEdgeCases:
     """Edge case tests for policies."""
-    
+
     base_url = '/api/policies/'
     
     def test_retrieve_nonexistent_policy(self, api_client, db):

@@ -27,3 +27,7 @@ class OrderDailyThrottle(_FlaggedThrottle):
 
 class CartWriteThrottle(_FlaggedThrottle):
     scope = "cart_write"     # e.g. 60/min — cart mutations (add/update/sync/clear)
+
+
+class PaymentRateThrottle(_FlaggedThrottle):
+    scope = "payment"        # e.g. 20/min — create-order + verify (HMAC-oracle guard)

@@ -59,9 +59,9 @@ class TestTotalsWithoutCoupon:
         o = Order.objects.get(user=test_user)
         assert o.subtotal == Decimal("400.00")
         assert o.discount_amount == Decimal("0")
-        assert o.shipping_charge == Decimal("50")      # 400 < 500
+        assert o.shipping_charge == Decimal("69")      # 400 < 500
         assert o.tax == Decimal("20.00")               # 400 * 0.05
-        assert o.total_amount == Decimal("470.00")     # 400 + 50 + 20
+        assert o.total_amount == Decimal("489.00")     # 400 + 69 + 20
 
     def test_subtotal_exactly_500_is_free_shipping(self, authenticated_client, test_user, test_category):
         _cart_line(test_user, _product(test_category, "250.00"), 2)  # subtotal 500
@@ -89,9 +89,11 @@ class TestTotalsWithCoupon:
         )
 
     def test_ten_percent_off_above_threshold(self, authenticated_client, test_user, test_category):
-        c = self._coupon(10, code="SAVE10")
+        # Note: "SAVE10" is a real seeded coupon (migration 0008), so tests use
+        # a distinct code to avoid a UNIQUE collision with the seeded row.
+        c = self._coupon(10, code="TENOFF")
         _cart_line(test_user, _product(test_category, "300.00"), 2)  # 600
-        r = _place(authenticated_client, coupon_code="SAVE10")
+        r = _place(authenticated_client, coupon_code="TENOFF")
         assert r.status_code == 201
         o = Order.objects.get(user=test_user)
         assert o.discount_amount == Decimal("60.00")   # 600 * 10%
@@ -103,15 +105,17 @@ class TestTotalsWithCoupon:
         assert c.usage_count == 1                       # usage accounted exactly once
 
     def test_coupon_code_is_case_insensitive(self, authenticated_client, test_user, test_category):
-        self._coupon(10, code="SAVE10")
+        self._coupon(10, code="TENOFF")
         _cart_line(test_user, _product(test_category, "300.00"), 2)
-        r = _place(authenticated_client, coupon_code="save10")   # lower-case
+        r = _place(authenticated_client, coupon_code="tenoff")   # lower-case
         assert r.status_code == 201
         assert Order.objects.get(user=test_user).discount_amount == Decimal("60.00")
 
-    def test_full_discount_still_charges_shipping(self, authenticated_client, test_user, test_category):
-        # 100% coupon -> items free, but a sub-₹500 order still pays shipping and
-        # tax is 0. Guards against a "free order" total of 0.
+    def test_full_discount_is_zero_total_order(self, authenticated_client, test_user, test_category):
+        # A full-value coupon makes this a ZERO-TOTAL order: shipping and tax are
+        # waived so the total is genuinely ₹0, and it is placed straight as paid
+        # with no gateway call (PAYMENT_INTEGRATION_PLAN.md §14.3/§4.4). This
+        # reverses the older "free order still pays shipping" rule.
         self._coupon(100, code="FREE100")
         _cart_line(test_user, _product(test_category, "200.00"), 2)  # 400
         r = _place(authenticated_client, coupon_code="FREE100")
@@ -119,8 +123,10 @@ class TestTotalsWithCoupon:
         o = Order.objects.get(user=test_user)
         assert o.discount_amount == Decimal("400.00")
         assert o.tax == Decimal("0.00")
-        assert o.shipping_charge == Decimal("50")
-        assert o.total_amount == Decimal("50.00")
+        assert o.shipping_charge == Decimal("0.00")
+        assert o.total_amount == Decimal("0.00")
+        assert o.payment_status == "paid"
+        assert o.status == "confirmed"
 
     def test_coupon_below_minimum_is_rejected(self, authenticated_client, test_user, test_category):
         self._coupon(10, code="BIGSPEND", minimum_order_amount=Decimal("1000.00"))

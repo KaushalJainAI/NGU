@@ -23,6 +23,22 @@ class Order(models.Model):
         ('razorpay', 'Razorpay'),
     ]
 
+    # Standardised payment_status vocabulary (PAYMENT_INTEGRATION_PLAN.md §1b.2).
+    # 'processing' is the "captured at Razorpay but our /verify/ hasn't confirmed
+    # yet" window — surfaced to the customer as "Confirming your payment…".
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('paid', 'Paid'),
+        ('failed', 'Failed'),
+        # Set by L3 reconciliation when an ONLINE order is abandoned past the
+        # payment TTL: the order is cancelled and its stock released. Distinct
+        # from 'failed' (an actual gateway decline) so ops can tell an
+        # explicitly-rejected/expired checkout apart from a hard failure.
+        ('rejected', 'Payment Rejected'),
+        ('refunded', 'Refunded'),
+    ]
+
     order_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='orders')
     
@@ -33,7 +49,7 @@ class Order(models.Model):
     # Order Details
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
-    payment_status = models.CharField(max_length=20, default='pending')
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
     
     # Pricing (with discount support)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, help_text="Original subtotal before discount")
@@ -44,7 +60,18 @@ class Order(models.Model):
     
     # Coupon
     coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name='orders')
-    
+
+    # Shipment tracking (set by admin once the parcel is dispatched). Adding a
+    # value triggers a "your order is on its way" email to the customer.
+    tracking_number = models.CharField(max_length=100, blank=True, default='')
+
+    # Soft delete (Recycle Bin). A deleted order is hidden from the normal admin
+    # list but retained so it can be restored. Distinct from 'cancelled' status:
+    # cancellation is a business outcome (stock restored, customer notified),
+    # deletion is an admin housekeeping action that can be undone.
+    is_deleted = models.BooleanField(default=False)
+    deleted_at = models.DateTimeField(blank=True, null=True)
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -57,6 +84,7 @@ class Order(models.Model):
             models.Index(fields=['-created_at']),
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['status']),
+            models.Index(fields=['is_deleted', '-created_at']),
         ]
 
     def __str__(self):

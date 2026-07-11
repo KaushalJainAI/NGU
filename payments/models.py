@@ -19,17 +19,85 @@ class Payment(models.Model):
     ]
 
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='payment')
+    # For Razorpay this holds the razorpay_order_id (exists earliest, unique per
+    # order) — see the payment_id convention in PAYMENT_INTEGRATION_PLAN.md §12.
     payment_id = models.CharField(max_length=200, unique=True)
     payment_gateway = models.CharField(max_length=20, choices=PAYMENT_GATEWAY_CHOICES)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    # First-class column for the captured payment id (the razorpay_payment_id),
+    # in addition to the copy kept in transaction_details — easier reconciliation.
+    razorpay_payment_id = models.CharField(max_length=200, blank=True, null=True, db_index=True)
+    # Error code/description from a payment.failed event, for support + retry UX.
+    failure_reason = models.CharField(max_length=255, blank=True, null=True)
+    failure_code = models.CharField(max_length=64, blank=True, null=True)
     transaction_details = models.JSONField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Payment {self.payment_id} - {self.status}"
-    
+
+
+class PaymentEvent(models.Model):
+    """Append-only audit trail. Every payment state transition writes one row,
+    inside the same atomic transaction as the state change, so history can never
+    disagree with state (PAYMENT_INTEGRATION_PLAN.md §7.6a)."""
+    SOURCE_CHOICES = [
+        ('client', 'Client callback'),
+        ('webhook', 'Webhook'),
+        ('reconcile', 'Reconciliation job'),
+        ('admin', 'Admin action'),
+        ('system', 'System'),
+    ]
+
+    payment = models.ForeignKey(
+        Payment, on_delete=models.CASCADE, related_name='events', null=True, blank=True
+    )
+    # Kept even when payment is null (e.g. orphan_payment / signature_invalid on
+    # an order with no Payment row yet) so nothing fails silently.
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name='payment_events', null=True, blank=True
+    )
+    event_type = models.CharField(max_length=64)
+    source = models.CharField(max_length=16, choices=SOURCE_CHOICES, default='system')
+    from_status = models.CharField(max_length=20, blank=True, null=True)
+    to_status = models.CharField(max_length=20, blank=True, null=True)
+    message = models.TextField(blank=True, default='')
+    # True for events a human needs to look at (exceptions queue).
+    is_exception = models.BooleanField(default=False)
+    # True once the exception has been acted on / dismissed by an admin.
+    resolved = models.BooleanField(default=False)
+    raw_payload = models.JSONField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['is_exception', 'resolved']),
+            models.Index(fields=['payment', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.event_type} ({self.source}) @ {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class ProcessedWebhookEvent(models.Model):
+    """Idempotency ledger keyed on Razorpay's x-razorpay-event-id header. The
+    unique constraint — not the advisory exists() check — is the authoritative
+    guard against double-applying a redelivered webhook (§7.2)."""
+    event_id = models.CharField(max_length=200, unique=True)
+    event_type = models.CharField(max_length=64, blank=True, default='')
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['received_at'])]
+
+    def __str__(self):
+        return self.event_id
+
+
 class PaymentMethod(models.Model):
     """
     Model to store user payment methods (NEVER store raw card numbers)

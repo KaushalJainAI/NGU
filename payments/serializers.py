@@ -7,6 +7,19 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = ['id', 'order', 'payment_id', 'payment_gateway', 'amount', 'status', 'created_at']
 
+
+class CreateOrderSerializer(serializers.Serializer):
+    """Input for POST /api/payments/create-order/."""
+    order_id = serializers.IntegerField()
+
+
+class VerifyPaymentSerializer(serializers.Serializer):
+    """Input for POST /api/payments/verify/ — the three fields Razorpay Checkout
+    hands back to the browser."""
+    razorpay_order_id = serializers.CharField(max_length=200)
+    razorpay_payment_id = serializers.CharField(max_length=200)
+    razorpay_signature = serializers.CharField(max_length=512)
+
    
 class PaymentMethodSerializer(serializers.ModelSerializer):
     masked_display = serializers.ReadOnlyField()

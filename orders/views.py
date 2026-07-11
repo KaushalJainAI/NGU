@@ -31,8 +31,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db import transaction, models
+from django.db.models import Q
 from django.utils import timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import logging
 from .models import Order, OrderItem
 from .serializers import OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
@@ -43,11 +44,62 @@ from spices_backend.limits import (
     SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
 )
 from spices_backend.abuse import flag_suspicious
+from .emails import send_order_confirmation, send_order_status_email
 
 logger = logging.getLogger(__name__)
 
 
+def restore_order_stock(order):
+    """Give an order's stock back to inventory (products, variants, and combo
+    components), mirroring exactly what checkout consumed.
+
+    MUST be called inside a `transaction.atomic()` block with `order` already
+    locked (``select_for_update``). This is the single source of truth for
+    restocking so every cancel path — the customer `cancel` action and the admin
+    status change — restores inventory identically. The caller is responsible for
+    setting ``order.status``/``cancelled_at`` afterwards.
+    """
+    from products.models import Product, ProductVariant, ProductComboItem
+
+    variant_updates = {}
+    product_updates = {}
+
+    for item in order.items.select_related('product', 'combo', 'variant').all():
+        if item.item_type == 'product' and item.variant:
+            variant_updates[item.variant.pk] = variant_updates.get(item.variant.pk, 0) + item.quantity
+        elif item.product:
+            product_updates[item.product.pk] = product_updates.get(item.product.pk, 0) + item.quantity
+        elif item.combo:
+            # G2 symmetry: a combo consumed its component products at checkout,
+            # so cancelling must give that inventory back.
+            for ci in ProductComboItem.objects.filter(combo=item.combo).select_related('product'):
+                product_updates[ci.product_id] = product_updates.get(ci.product_id, 0) + ci.quantity * item.quantity
+
+    # Batch restore stock for variants (+ mirror default to product)
+    if variant_updates:
+        variants = list(ProductVariant.objects.select_for_update().filter(pk__in=variant_updates.keys()))
+        for variant in variants:
+            restore_by = variant_updates[variant.pk]
+            variant.stock += restore_by
+            if variant.is_default:
+                product_updates[variant.product_id] = product_updates.get(variant.product_id, 0) + restore_by
+        ProductVariant.objects.bulk_update(variants, ['stock'])
+
+    # Batch restore stock for products (legacy lines + default mirror + combo components)
+    if product_updates:
+        products = list(Product.objects.select_for_update().filter(pk__in=product_updates.keys()))
+        for product in products:
+            product.stock += product_updates[product.pk]
+        Product.objects.bulk_update(products, ['stock'])
+
+
 class OrderViewSet(viewsets.ModelViewSet):
+    # Fields an admin may edit via PATCH/PUT. Everything else on an order
+    # (money, items, user…) is immutable through the API.
+    ADMIN_EDITABLE_FIELDS = {'status', 'tracking_number', 'shipping_address',
+                             'phone_number', 'payment_status'}
+    # Statuses from which an order can no longer be cancelled.
+    UNCANCELLABLE_STATUSES = {'delivered', 'delivering', 'cancelled'}
     permission_classes = [IsAuthenticated]
 
     def get_throttles(self):
@@ -58,13 +110,77 @@ class OrderViewSet(viewsets.ModelViewSet):
             return [OrderRateThrottle(), OrderDailyThrottle()]
         return super().get_throttles()
 
+    # Admin list sort keys → real ORM ordering. Kept small and explicit so the
+    # admin can only sort by columns that actually exist (no arbitrary orderby).
+    _ADMIN_ORDERING = {
+        'newest': '-created_at',
+        'oldest': 'created_at',
+        'highestTotal': '-total_amount',
+        'lowestTotal': 'total_amount',
+    }
+
     def get_queryset(self):
         user = self.request.user
         # Admin/superusers can see all orders
         if user.is_staff or user.is_superuser:
-            return Order.objects.all().prefetch_related('items__product', 'items__combo', 'items__variant').select_related('user')
-        # Regular users only see their own orders
-        return Order.objects.filter(user=user).prefetch_related('items__product', 'items__combo', 'items__variant')
+            qs = Order.objects.all().prefetch_related(
+                'items__product', 'items__combo', 'items__variant').select_related('user')
+            # Recycle Bin: only the `list` action honours the ?deleted flag, so
+            # detail actions (restore/retrieve/update) can still reach a
+            # soft-deleted order. Default list hides deleted orders; ?deleted=true
+            # shows ONLY the recycle bin.
+            if self.action == 'list':
+                only_deleted = self.request.query_params.get('deleted') in ('1', 'true', 'True')
+                qs = qs.filter(is_deleted=only_deleted)
+                # Server-side filter/sort for the admin list. This MUST run in the
+                # DB, not the browser: the admin list is paginated (PAGE_SIZE=12),
+                # so a client-side filter would only ever see the first page and
+                # could report e.g. "no cancelled orders" while later pages hold
+                # plenty.
+                qs = self._apply_admin_filters(qs)
+            return qs
+        # Regular users only see their own, non-deleted orders
+        return Order.objects.filter(user=user, is_deleted=False).prefetch_related(
+            'items__product', 'items__combo', 'items__variant')
+
+    def _apply_admin_filters(self, qs):
+        """Apply status / payment-method / amount / search / sort query params to
+        the admin order list, entirely in the database."""
+        params = self.request.query_params
+
+        status_val = (params.get('status') or '').strip()
+        if status_val:
+            qs = qs.filter(status=status_val)
+
+        payment_method = (params.get('payment_method') or '').strip()
+        if payment_method:
+            qs = qs.filter(payment_method=payment_method)
+
+        for key, lookup in (('min_amount', 'total_amount__gte'), ('max_amount', 'total_amount__lte')):
+            raw = (params.get(key) or '').strip()
+            if raw:
+                try:
+                    qs = qs.filter(**{lookup: Decimal(raw)})
+                except (InvalidOperation, ValueError):
+                    pass  # ignore an unparseable amount rather than 500
+
+        search = (params.get('search') or '').strip()
+        if search:
+            cond = Q(user__email__icontains=search) | \
+                Q(user__first_name__icontains=search) | \
+                Q(user__last_name__icontains=search) | \
+                Q(shipping_address__icontains=search)
+            # Order numbers are ORD-000123 → let a numeric search hit the id too.
+            digits = ''.join(ch for ch in search if ch.isdigit())
+            if digits:
+                try:
+                    cond |= Q(id=int(digits))
+                except (ValueError, OverflowError):
+                    pass
+            qs = qs.filter(cond)
+
+        ordering = self._ADMIN_ORDERING.get((params.get('ordering') or '').strip())
+        return qs.order_by(ordering) if ordering else qs
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -83,7 +199,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         except Coupon.DoesNotExist:
             return None, {'error': f"'{coupon_code}' is not a valid coupon code."}
 
-        reason = coupon.get_invalid_reason(order_amount=order_amount)
+        # Pass the user so single-user (assigned) coupons are enforced.
+        reason = coupon.get_invalid_reason(order_amount=order_amount, user=user)
         if reason:
             return None, {'error': reason}
 
@@ -128,16 +245,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         return tax
 
     def _calculate_discount(self, price, coupon):
-        """
-        Calculate discount based on coupon's discount_percent field.
-        Simple percentage calculation only.
-        """
+        """Absolute ₹ discount for `price` under `coupon`. Delegates to
+        Coupon.discount_for(), which handles both percent and fixed coupons and
+        clamps the discount to the subtotal (total floors at ₹0)."""
         if not coupon:
             return Decimal('0.00')
-
-        # Use discount_percent field (not discount_type or discount_value)
-        discount = price * (Decimal(str(coupon.discount_percent)) / Decimal('100'))
-        return discount.quantize(Decimal('0.01'))
+        return coupon.discount_for(price)
 
     @action(detail=False, methods=['post'])
     def validate_coupon(self, request):
@@ -165,18 +278,27 @@ class OrderViewSet(viewsets.ModelViewSet):
         if error:
             return Response(error, status=status.HTTP_400_BAD_REQUEST)
 
-        # Calculate discount using discount_percent
+        # Absolute ₹ discount (percent or fixed, clamped to subtotal).
         total_discount = self._calculate_discount(subtotal, coupon)
 
-        # Calculate order breakdown (per-product GST, summed across lines)
+        # Calculate order breakdown (per-product GST, summed across lines).
         discounted_subtotal = subtotal - total_discount
-        shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
-        tax = self._compute_cart_tax(cart, subtotal, total_discount)
-        total_amount = discounted_subtotal + shipping_charge + tax
+        if discounted_subtotal <= 0:
+            # Full-value coupon → zero-total order: shipping + tax are waived so
+            # the total is genuinely ₹0 (mirrors the placed-order path, §14.3).
+            discounted_subtotal = Decimal('0')
+            shipping_charge = Decimal('0')
+            tax = Decimal('0')
+            total_amount = Decimal('0')
+        else:
+            shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
+            tax = self._compute_cart_tax(cart, subtotal, total_discount)
+            total_amount = discounted_subtotal + shipping_charge + tax
 
         return Response({
             'valid': True,
             'coupon_code': coupon.code,
+            'discount_type': coupon.discount_type,
             'discount_percent': coupon.discount_percent,
             'subtotal': float(subtotal),
             'discount_amount': float(total_discount),
@@ -184,7 +306,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             'shipping_charge': float(shipping_charge),
             'tax': float(tax),
             'total_amount': float(total_amount),
-            'savings': float(total_discount)
+            'savings': float(total_discount),
+            'is_zero_total': total_amount == 0,
         })
 
     def create(self, request):
@@ -312,9 +435,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             })
             subtotal += item_price * cart_item.quantity
 
-        # Calculate discount
+        # Calculate discount (percent or fixed, clamped to subtotal).
         total_discount = self._calculate_discount(subtotal, coupon) if coupon else Decimal('0')
         discounted_subtotal = subtotal - total_discount
+
+        # A full-value coupon that covers the whole subtotal produces a ZERO-TOTAL
+        # order: shipping + tax are waived and it is placed straight as paid with
+        # no gateway call (PAYMENT_INTEGRATION_PLAN.md §4.4/§14.3).
+        is_zero_total = bool(coupon) and discounted_subtotal <= 0
 
         # Per-line money (proportional discount + per-product tax). Computed once
         # here so the OrderItem rows, the order header tax, and the grand total
@@ -326,14 +454,21 @@ class OrderViewSet(viewsets.ModelViewSet):
             quantity = item_data['quantity']
             item_total = item_price * quantity
 
-            if total_discount > 0 and subtotal > 0:
-                item_discount = ((item_total / subtotal) * total_discount).quantize(Decimal('0.01'))
+            if is_zero_total:
+                # The whole line is discounted away — no tax, nothing to pay.
+                item_discount = item_total.quantize(Decimal('0.01'))
+                discounted_item_price = Decimal('0.00')
+                discounted_item_total = Decimal('0.00')
+                item_tax = Decimal('0.00')
             else:
-                item_discount = Decimal('0')
+                if total_discount > 0 and subtotal > 0:
+                    item_discount = ((item_total / subtotal) * total_discount).quantize(Decimal('0.01'))
+                else:
+                    item_discount = Decimal('0')
 
-            discounted_item_price = (item_price - (item_discount / quantity)).quantize(Decimal('0.01'))
-            discounted_item_total = (discounted_item_price * quantity).quantize(Decimal('0.01'))
-            item_tax = (discounted_item_total * item_data['tax_rate'] / Decimal('100')).quantize(Decimal('0.01'))
+                discounted_item_price = (item_price - (item_discount / quantity)).quantize(Decimal('0.01'))
+                discounted_item_total = (discounted_item_price * quantity).quantize(Decimal('0.01'))
+                item_tax = (discounted_item_total * item_data['tax_rate'] / Decimal('100')).quantize(Decimal('0.01'))
 
             item_data['item_discount'] = item_discount
             item_data['discounted_item_price'] = discounted_item_price
@@ -342,8 +477,15 @@ class OrderViewSet(viewsets.ModelViewSet):
             tax += item_tax
 
         # Calculate shipping and total
-        shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
-        total_amount = (discounted_subtotal + shipping_charge + tax).quantize(Decimal('0.01'))
+        if is_zero_total:
+            total_discount = subtotal            # record the full waiver
+            discounted_subtotal = Decimal('0')
+            shipping_charge = Decimal('0')
+            tax = Decimal('0')
+            total_amount = Decimal('0.00')
+        else:
+            shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
+            total_amount = (discounted_subtotal + shipping_charge + tax).quantize(Decimal('0.01'))
 
         # Belt-and-suspenders: refuse an order whose computed money values would
         # overflow the numeric(10,2) columns, returning a clean 400 instead of a
@@ -356,6 +498,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Create order in transaction
         try:
             with transaction.atomic():
+                # Double-submit guard (§7.7): lock the Cart row FIRST and re-check
+                # items under the lock. Two concurrent creates from the same user
+                # serialise here; the loser finds an empty cart (the winner deleted
+                # the items inside its txn) and gets a clean "Cart is empty" 400
+                # instead of a duplicate order / double stock decrement.
+                locked_cart = Cart.objects.select_for_update().get(pk=cart.pk)
+                if not locked_cart.items.exists():
+                    raise ValueError('Cart is empty')
+
+                # A zero-total (full-coupon) order needs no gateway — place it
+                # straight as confirmed + paid. Everything else starts pending.
+                order_status = 'confirmed' if is_zero_total else 'pending'
+                order_payment_status = 'paid' if is_zero_total else 'pending'
+
                 # Create order
                 order = Order.objects.create(
                     user=request.user,
@@ -365,7 +521,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                     tax=tax,
                     total_amount=total_amount,
                     coupon=coupon,
-                    status='pending',
+                    status=order_status,
+                    payment_status=order_payment_status,
                     **serializer.validated_data
                 )
 
@@ -466,14 +623,14 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # never be over-redeemed by concurrent checkouts.
                 if coupon:
                     locked_coupon = Coupon.objects.select_for_update().get(pk=coupon.pk)
-                    reason = locked_coupon.get_invalid_reason(order_amount=subtotal)
+                    reason = locked_coupon.get_invalid_reason(order_amount=subtotal, user=request.user)
                     if reason:
                         raise ValueError(reason)
                     locked_coupon.usage_count = models.F('usage_count') + 1
                     locked_coupon.save(update_fields=['usage_count'])
 
                 # Clear cart items securely inside the transaction to prevent desynchronization
-                cart.items.all().delete()
+                locked_cart.items.all().delete()
 
                 # Transaction complete - prepare response data
                 order_data = OrderDetailSerializer(order).data
@@ -496,6 +653,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Purchase analytics are captured by the analytics app via a post_save
         # signal on Order (see analytics/signals.py) — no inline call needed.
 
+        # Order-placed confirmation email (best-effort, background thread).
+        send_order_confirmation(order)
+
         return Response({
             'message': 'Order created successfully',
             'order_id': order.id,
@@ -504,10 +664,92 @@ class OrderViewSet(viewsets.ModelViewSet):
             'order': order_data
         }, status=status.HTTP_201_CREATED)
 
+    def update(self, request, *args, **kwargs):
+        """Admin-only order edit (status, tracking number, shipping details).
+
+        Two things make this override necessary instead of DRF's default save:
+
+        1. **Restock parity.** Setting ``status='cancelled'`` here must return
+           stock to inventory exactly like the `cancel` action does — otherwise
+           the admin status dropdown silently drifts inventory. Both paths now
+           funnel through ``restore_order_stock``.
+        2. **Customer notifications.** A status change or a newly-entered
+           tracking number emails the customer ("processing" / "on its way" /
+           "delivered").
+
+        Regular users may never edit an order directly — they can only cancel
+        their own order via the `cancel` action. Editing (advancing status,
+        adding tracking) is an admin power.
+        """
+        from rest_framework.exceptions import PermissionDenied
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied("You do not have permission to modify this order.")
+
+        with transaction.atomic():
+            obj = self.get_object()  # 404s if outside the caller's queryset
+            # Canonical lock order (§7.2): Order first, then Payment — so an admin
+            # status change can't interleave with an in-flight capture.
+            order = Order.objects.select_for_update().get(pk=obj.pk)
+            from payments.models import Payment
+            Payment.objects.select_for_update().filter(order=order).first()
+
+            old_status = order.status
+            old_tracking = (order.tracking_number or '').strip()
+
+            data = {k: v for k, v in request.data.items() if k in self.ADMIN_EDITABLE_FIELDS}
+            new_status = data.get('status', old_status)
+
+            valid_statuses = {c[0] for c in Order.STATUS_CHOICES}
+            if new_status not in valid_statuses:
+                return Response({'error': f'Invalid status: {new_status}'},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            cancelling = new_status == 'cancelled' and old_status != 'cancelled'
+            if cancelling and old_status in ('delivered', 'delivering'):
+                return Response(
+                    {'error': f'Cannot cancel order with status: {old_status}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Restock BEFORE flipping status, once, only on the transition into
+            # 'cancelled' (never on a no-op re-cancel).
+            if cancelling:
+                restore_order_stock(order)
+                order.cancelled_at = timezone.now()
+
+            # Apply the editable fields.
+            if 'shipping_address' in data:
+                order.shipping_address = data['shipping_address']
+            if 'phone_number' in data:
+                order.phone_number = data['phone_number']
+            if 'payment_status' in data:
+                order.payment_status = data['payment_status']
+            if 'tracking_number' in data:
+                order.tracking_number = (data['tracking_number'] or '').strip()
+            order.status = new_status
+            if new_status == 'delivered' and order.delivered_at is None:
+                order.delivered_at = timezone.now()
+
+            order.save()
+
+        # Side-effect notifications, outside the transaction.
+        new_tracking = (order.tracking_number or '').strip()
+        status_changed = new_status != old_status
+        tracking_added = bool(new_tracking) and new_tracking != old_tracking
+        send_order_status_email(order, status_changed=status_changed,
+                                tracking_added=tracking_added)
+
+        return Response(OrderDetailSerializer(order, context={'request': request}).data)
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """
-        Cancel order and restore stock (both products AND combos)
+        Cancel order and restore stock (both products AND combos).
+
+        Customer-facing cancel path: a user may cancel their own order (admins
+        may cancel any). Restock is delegated to the shared
+        ``restore_order_stock`` helper so this behaves identically to an admin
+        cancelling via the status dropdown.
         """
         with transaction.atomic():
             # Lock the order to prevent concurrent cancellations
@@ -515,57 +757,88 @@ class OrderViewSet(viewsets.ModelViewSet):
             if obj.user != request.user and not request.user.is_staff:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("You do not have permission to cancel this order.")
-                
+
+            # Canonical lock order (§7.2): Order FIRST, then Payment. Locking the
+            # Payment here serialises against an in-flight capture so a cancel and
+            # a payment can't interleave into a "cancelled but paid" state.
             order = Order.objects.select_for_update().get(pk=obj.pk)
-            
-            if order.status in ['delivered', 'cancelled', 'delivering']:
+            from payments.models import Payment
+            payment = Payment.objects.select_for_update().filter(order=order).first()
+
+            if order.status in self.UNCANCELLABLE_STATUSES:
                 return Response(
-                    {'success': False, 'error': f'Cannot cancel order with status: {order.status}'}, 
+                    {'success': False, 'error': f'Cannot cancel order with status: {order.status}'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            from products.models import Product, ProductVariant, ProductComboItem
 
-            # Gather quantities for batch stock restoration
-            variant_updates = {}
-            product_updates = {}
+            # Never let a customer self-cancel an order whose money is actually
+            # captured — that would restore stock and keep the payment with no
+            # refund record (§7.8). Route them to support (refunds are phase 2).
+            # A zero-total coupon order is 'paid' with NO Payment row → still
+            # cancellable (nothing to refund). Staff may cancel + refund manually.
+            if (payment and payment.status == 'completed'
+                    and not (request.user.is_staff or request.user.is_superuser)):
+                return Response(
+                    {'success': False,
+                     'error': 'This order is already paid. Please contact support to '
+                              'cancel and arrange a refund.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
-            for item in order.items.select_related('product', 'combo', 'variant').all():
-                if item.item_type == 'product' and item.variant:
-                    variant_updates[item.variant.pk] = variant_updates.get(item.variant.pk, 0) + item.quantity
-                elif item.product:
-                    product_updates[item.product.pk] = product_updates.get(item.product.pk, 0) + item.quantity
-                elif item.combo:
-                    # G2 symmetry: a combo consumed its component products at
-                    # checkout, so cancelling must give that inventory back.
-                    for ci in ProductComboItem.objects.filter(combo=item.combo).select_related('product'):
-                        product_updates[ci.product_id] = product_updates.get(ci.product_id, 0) + ci.quantity * item.quantity
+            restore_order_stock(order)
 
-            # Batch restore stock for variants (+ mirror default to product)
-            if variant_updates:
-                variants = list(ProductVariant.objects.select_for_update().filter(pk__in=variant_updates.keys()))
-                for variant in variants:
-                    restore_by = variant_updates[variant.pk]
-                    variant.stock += restore_by
-                    if variant.is_default:
-                        product_updates[variant.product_id] = product_updates.get(variant.product_id, 0) + restore_by
-                ProductVariant.objects.bulk_update(variants, ['stock'])
-
-            # Batch restore stock for products (legacy lines + default mirror + combo components)
-            if product_updates:
-                products = list(Product.objects.select_for_update().filter(pk__in=product_updates.keys()))
-                for product in products:
-                    product.stock += product_updates[product.pk]
-                Product.objects.bulk_update(products, ['stock'])
-            
             order.status = 'cancelled'
             order.cancelled_at = timezone.now()
             order.save(update_fields=['status', 'cancelled_at'])
-        
+
+        # Tell the customer their order was cancelled (best-effort).
+        send_order_status_email(order, status_changed=True, tracking_added=False)
+
         return Response({
             'success': True,
             'message': 'Order cancelled successfully',
             'order': OrderDetailSerializer(order).data
+        })
+
+    def destroy(self, request, *args, **kwargs):
+        """Soft-delete (move to Recycle Bin) — admin only.
+
+        We deliberately do NOT hard-delete: an order is a financial record, and
+        soft-deletion lets an admin recover it via ``restore``. Stock and payment
+        state are left untouched (deletion is housekeeping, not cancellation), so
+        an admin who wants to release stock should cancel the order first.
+        """
+        from rest_framework.exceptions import PermissionDenied
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied("You do not have permission to delete this order.")
+
+        order = self.get_object()
+        if not order.is_deleted:
+            order.is_deleted = True
+            order.deleted_at = timezone.now()
+            order.save(update_fields=['is_deleted', 'deleted_at'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['post'])
+    def restore(self, request, pk=None):
+        """Restore a soft-deleted order out of the Recycle Bin — admin only."""
+        from rest_framework.exceptions import PermissionDenied
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied("You do not have permission to restore this order.")
+
+        order = self.get_object()
+        if not order.is_deleted:
+            return Response(
+                {'success': False, 'error': 'Order is not in the recycle bin.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        order.is_deleted = False
+        order.deleted_at = None
+        order.save(update_fields=['is_deleted', 'deleted_at'])
+        return Response({
+            'success': True,
+            'message': 'Order restored successfully',
+            'order': OrderDetailSerializer(order, context={'request': request}).data,
         })
 
     @action(detail=True, methods=['get'])
@@ -601,10 +874,27 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def list(self, request):
         """
-        List all orders for the authenticated user
+        List orders.
+
+        Staff/admin: the full order table, so the response is PAGINATED
+        (PAGE_SIZE=12) — bounded work per request and it powers the admin's
+        server-side Prev/Next. The admin sort param (applied in get_queryset)
+        overrides the default order.
+
+        Customer: only their own orders — a naturally small set that the
+        storefront expects as a bare array, so it stays unpaginated.
         """
-        orders = self.get_queryset().order_by('-created_at')
-        serializer = self.get_serializer(orders, many=True)
+        queryset = self.get_queryset()
+        if not queryset.query.order_by:
+            queryset = queryset.order_by('-created_at')
+
+        if request.user.is_staff or request.user.is_superuser:
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
     def retrieve(self, request, pk=None):

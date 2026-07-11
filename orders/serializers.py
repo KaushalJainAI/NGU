@@ -99,6 +99,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "shipping_address",
             "phone_number",
             "payment_method",
+            "payment_status",
+            "tracking_number",
             "coupon_code",
             "created_at",
             "updated_at",
@@ -141,14 +143,18 @@ class OrderListSerializer(serializers.ModelSerializer):
             "shipping_address",
             "phone_number",
             "payment_method",
+            "payment_status",
+            "tracking_number",
             "created_at",
             "updated_at",
             "coupon_code",
+            "is_deleted",
+            "deleted_at",
         ]
 
     def get_order_number(self, obj):
         return f"ORD-{obj.id:06d}"
-    
+
     def get_customer_name(self, obj):
         if obj.user:
             return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.email
