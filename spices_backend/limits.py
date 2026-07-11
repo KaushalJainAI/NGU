@@ -27,6 +27,10 @@ MAX_SYNC_ITEMS = config("MAX_SYNC_ITEMS", default=100, cast=int)
 # column limit as a belt-and-suspenders guard behind MAX_ITEM_QUANTITY.
 MAX_ORDER_TOTAL = config("MAX_ORDER_TOTAL", default=9_999_999, cast=int)
 
+# Max total (in rupees) allowed for an ONLINE (Razorpay) order. UPI has a
+# per-transaction cap of ₹1,00,000; orders above this can only be paid via COD.
+MAX_ONLINE_ORDER_TOTAL = config("MAX_ONLINE_ORDER_TOTAL", default=100_000, cast=int)
+
 # --- Pricing (shipping / tax) ------------------------------------------------
 # Flat shipping fee charged below the free-shipping threshold, and the
 # post-discount subtotal (in rupees) at/above which shipping becomes free.

@@ -447,8 +447,10 @@ PAYMENT_ALERT_EMAIL = config('PAYMENT_ALERT_EMAIL', default='') or config('EMAIL
 # 15-minute TTL; rollups keep the admin Insights dashboard live.
 RECONCILE_INTERVAL_MINUTES = config('RECONCILE_INTERVAL_MINUTES', default=5, cast=int)
 ROLLUP_INTERVAL_MINUTES = config('ROLLUP_INTERVAL_MINUTES', default=5, cast=int)
-# Storefront base URL for links embedded in customer payment emails.
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+# Storefront base URL for links embedded in customer payment/order emails.
+# Defaults to the live storefront so emails never leak a localhost link when the
+# env var is unset (prod compose doesn't set it); override in local dev via .env.
+FRONTEND_URL = config('FRONTEND_URL', default='https://nidhimasala.com')
 
 # Email Configuration
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')

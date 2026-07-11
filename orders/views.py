@@ -40,7 +40,7 @@ from .serializers import OrderListSerializer, OrderDetailSerializer, OrderCreate
 from cart.models import Cart
 from admin_panel.models import Coupon
 from spices_backend.limits import (
-    MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL,
+    MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL, MAX_ONLINE_ORDER_TOTAL,
     SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
 )
 from spices_backend.abuse import flag_suspicious
@@ -495,6 +495,16 @@ class OrderViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Order total is too large. Please reduce quantities.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # UPI / online payments are capped at ₹1,00,000 per transaction by the
+        # gateway, so refuse an ONLINE order above that with a clear message
+        # (the customer can still place it as COD).
+        if (serializer.validated_data.get('payment_method') == 'ONLINE'
+                and total_amount > MAX_ONLINE_ORDER_TOTAL):
+            return Response(
+                {'error': f'Online payment is limited to ₹{MAX_ONLINE_ORDER_TOTAL:,} per order. '
+                          f'Please choose Cash on Delivery or reduce your order.'},
+                status=status.HTTP_400_BAD_REQUEST)
+
         # Create order in transaction
         try:
             with transaction.atomic():
@@ -654,7 +664,14 @@ class OrderViewSet(viewsets.ModelViewSet):
         # signal on Order (see analytics/signals.py) — no inline call needed.
 
         # Order-placed confirmation email (best-effort, background thread).
-        send_order_confirmation(order)
+        # Only send now for orders that are actually complete at placement: COD
+        # (no gateway) or already-paid (e.g. zero-total coupon orders). ONLINE
+        # orders are still 'pending' payment here — their confirmation is sent
+        # once the payment is captured (payments.services.mark_payment_captured
+        # → _on_commit_order_confirmation), so we must NOT send it before the
+        # order/payment is verified.
+        if order.payment_method == 'COD' or order.payment_status == 'paid':
+            send_order_confirmation(order)
 
         return Response({
             'message': 'Order created successfully',

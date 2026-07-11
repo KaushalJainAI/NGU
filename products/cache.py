@@ -81,10 +81,12 @@ def invalidate_by_prefix(prefix: str):
         prefix: The cache prefix to invalidate
     """
     try:
-        # For django-redis, use delete_pattern
+        # For django-redis, use delete_pattern. Pass the RAW key pattern only —
+        # django-redis prepends KEY_PREFIX and the cache version itself (e.g.
+        # 'ngu:1:'), so hard-coding 'ngu:' here would double the prefix
+        # ('ngu:1:ngu:categories:*') and match nothing.
         if hasattr(cache, 'delete_pattern'):
-            # Include KEY_PREFIX from settings
-            pattern = f'ngu:{prefix}:*'
+            pattern = f'{prefix}:*'
             deleted = cache.delete_pattern(pattern)
             logger.info(f"Cache invalidated: {pattern} ({deleted} keys)")
         else:

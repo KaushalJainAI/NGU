@@ -264,7 +264,8 @@ def invalidate_user_recommendations(user_id):
     """
     try:
         if hasattr(cache, 'delete_pattern'):
-            cache.delete_pattern(f'ngu:{CACHE_PREFIX_RECS}:{user_id}:*')
+            # Raw pattern only — django-redis prepends KEY_PREFIX + version.
+            cache.delete_pattern(f'{CACHE_PREFIX_RECS}:{user_id}:*')
         else:
             cache.delete(_cache_key(user_id, 'home', 12))
     except Exception as exc:  # pragma: no cover - defensive
