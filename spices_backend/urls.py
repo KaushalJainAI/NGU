@@ -16,6 +16,7 @@ from users.views import (
     UserRegistrationView, UserProfileView, CustomTokenObtainPairView, CustomTokenRefreshView, ChangePasswordView,
     PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin
 )
+from products.sitemaps import sitemap_xml, robots_txt
 from products.views import (
     CategoryViewSet, ProductViewSet, ComboProductViewSet, ProductImageViewSet,
     ProductVariantViewSet, ProductSectionViewSet, get_spice_forms, unified_search,
@@ -107,6 +108,11 @@ urlpatterns = [
     path('api/spice-forms/', get_spice_forms, name='spice-forms'),
     path('api/search/suggest/', search_suggest, name='search-suggest'),
     path('api/search/', unified_search, name='unified-search' ),
+
+    # SEO. Served at the site root by nginx (it proxies /sitemap.xml and
+    # /robots.txt here) so crawlers find them on the storefront domain.
+    path('sitemap.xml', sitemap_xml, name='sitemap'),
+    path('robots.txt', robots_txt, name='robots'),
 
     # Behavioral event ingest + personalized recommendations
     path('api/events/', ingest_events, name='events-ingest'),

@@ -502,10 +502,14 @@ class SpiceSearchEngine:
         # 1. Direct fuzzy search (highest priority)
         direct_results = self._fuzzy_search_all(query, top_k, score_threshold)
 
-        # 2. Recommendations only when direct matches are scarce — featured
-        # products must not pollute queries that already have good hits.
+        # 2. Recommendations top up a thin result set — but ONLY when the query
+        # actually matched something. With zero direct matches they used to be
+        # returned as `products`, so a nonsense query like "zzzzqqq" still came
+        # back with a product and the UI could never say "no results".
+        # A no-match query returns no products; the recommendations ride along
+        # under `suggestions` so the UI can offer them as an honest fallback.
         other_recs = []
-        if len(direct_results) < 3:
+        if 0 < len(direct_results) < 3:
             other_recs = self._other_recommendations(query, top_k // 2)
 
         all_results = direct_results + other_recs
@@ -514,11 +518,19 @@ class SpiceSearchEngine:
         products = [r for r in scored_results if r['type'] == 'product']
         combos = [r for r in scored_results if r['type'] == 'combo']
 
+        suggestions = []
+        if not scored_results:
+            suggestions = self._rank_and_dedupe(
+                self._other_recommendations(query, top_k // 2), top_k // 2
+            )
+
         return {
             'query': query,
             'total_results': len(scored_results),
             'products': products,
             'combos': combos,
+            # Never search results — only shown when there are none.
+            'suggestions': suggestions,
             'stats': {
                 'direct_matches': len(direct_results),
                 'other_recs': len(other_recs)
