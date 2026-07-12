@@ -584,7 +584,7 @@ class ValidateCouponAPIView(APIView):
             except Coupon.DoesNotExist:
                 return Response({
                     'valid': False,
-                    'message': f"'{code}' is not a valid coupon code."
+                    'message': f'"{code}" is not a valid coupon code.'
                 }, status=status.HTTP_200_OK)
 
             # Validate against the user's actual cart total so the minimum-order

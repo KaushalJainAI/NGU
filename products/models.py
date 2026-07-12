@@ -226,7 +226,15 @@ class Product(models.Model):
         help_text='e.g., 12 months, 24 months'
     )
     ingredients = models.TextField(blank=True)
-    
+    # How-to-use / recipe text shown in a dropdown on the product page.
+    # Translatable (see products/translation.py) like description/ingredients.
+    recipe = models.TextField(blank=True)
+    # Nutritional information table, shown in a dropdown on the product page.
+    # Stored as an ordered dict of {label: value} pairs, e.g.
+    # {"serving_size": "100g", "protein": "11.5g"}. Values are plain data (not
+    # translated); the row LABELS are localised in the frontend i18n files.
+    nutrition = models.JSONField(null=True, blank=True)
+
     # Media
     image = models.ImageField(
         upload_to='products/',
@@ -284,6 +292,17 @@ class Product(models.Model):
                 'discount_price': 'Discount price must be less than regular price.'
             })
 
+    # Slug this instance was loaded from the DB with, so save() can detect a
+    # rename without re-querying. None for never-saved instances.
+    _loaded_slug = None
+
+    @classmethod
+    def from_db(cls, db, field_names, values):
+        instance = super().from_db(db, field_names, values)
+        if 'slug' in field_names:
+            instance._loaded_slug = values[field_names.index('slug')]
+        return instance
+
     def save(self, *args, **kwargs):
         if not self.slug:
             weight_part = f"-{self.weight}" if self.weight else ""
@@ -299,6 +318,20 @@ class Product(models.Model):
             self.generate_thumbnail()
 
         super().save(*args, **kwargs)
+
+        # A slug change orphans every indexed/bookmarked URL for this product,
+        # so keep the outgoing slug resolvable. _loaded_slug is captured in
+        # from_db, so this costs no extra query on the common save path (stock
+        # decrements during checkout run inside a transaction — an extra SELECT
+        # here widens the lock window for concurrent orders).
+        previous_slug = self._loaded_slug
+        if previous_slug and previous_slug != self.slug:
+            ProductSlugAlias.objects.update_or_create(
+                slug=previous_slug, defaults={'product': self})
+            # The new slug may itself be a retired alias; a slug can be
+            # canonical or an alias, never both.
+            ProductSlugAlias.objects.filter(slug=self.slug).delete()
+        self._loaded_slug = self.slug
 
     def generate_thumbnail(self):
         """Generates a 300x300 thumbnail using Pillow"""
@@ -356,6 +389,27 @@ class Product(models.Model):
                 w = int(w)
             return f"{w}{self.unit}"
         return str(self.weight or "")
+
+
+class ProductSlugAlias(models.Model):
+    """A slug a Product used to be reachable at.
+
+    Renaming a product rewrites its slug, which 404s every link already in the
+    wild (search index, shared URL, bookmark). Product.save() records the
+    outgoing slug here and the detail endpoint falls back to it, so old links
+    keep resolving to the right product instead of dying.
+    """
+    slug = models.SlugField(max_length=220, unique=True)
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name='slug_aliases'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name_plural = 'Product slug aliases'
+
+    def __str__(self):
+        return f"{self.slug} -> {self.product.slug}"
 
 
 class ProductVariant(models.Model):

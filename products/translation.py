@@ -13,7 +13,7 @@ from .models import Product, Category, ProductCombo
 
 @register(Product)
 class ProductTranslationOptions(TranslationOptions):
-    fields = ('name', 'description', 'ingredients', 'origin_country')
+    fields = ('name', 'description', 'ingredients', 'origin_country', 'recipe')
 
 
 @register(Category)

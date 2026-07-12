@@ -35,7 +35,7 @@ MAX_ONLINE_ORDER_TOTAL = config("MAX_ONLINE_ORDER_TOTAL", default=100_000, cast=
 # Flat shipping fee charged below the free-shipping threshold, and the
 # post-discount subtotal (in rupees) at/above which shipping becomes free.
 SHIPPING_CHARGE = config("SHIPPING_CHARGE", default=Decimal("69"), cast=Decimal)
-FREE_SHIPPING_THRESHOLD = config("FREE_SHIPPING_THRESHOLD", default=Decimal("500"), cast=Decimal)
+FREE_SHIPPING_THRESHOLD = config("FREE_SHIPPING_THRESHOLD", default=Decimal("499"), cast=Decimal)
 
 # Fallback GST rate (%) used only when a product/combo has no tax_rate set.
 DEFAULT_TAX_RATE = config("DEFAULT_TAX_RATE", default=Decimal("5"), cast=Decimal)

@@ -61,6 +61,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Serve collected static files (Django admin CSS/JS, etc.) directly from
+    # gunicorn in production. Must sit immediately after SecurityMiddleware.
+    # No-op for URLs outside STATIC_URL, so S3/local media are unaffected.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     # Reject manually-banned IPs early (fail-open).
     'spices_backend.middleware.AbuseGuardMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -226,9 +230,11 @@ else:
 # defined above as a harmless fallback.
 if USE_CLOUDINARY:
     STORAGES = globals().get('STORAGES', {})
+    # WhiteNoise storage: compresses collected static and adds cache-busting
+    # hashes so gunicorn can serve admin/DRF static with far-future caching.
     STORAGES.setdefault(
         'staticfiles',
-        {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+        {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
     )
     STORAGES['default'] = {
         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',

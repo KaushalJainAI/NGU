@@ -13,7 +13,10 @@ from django.utils.translation import get_language
 from spices_backend.limits import (
     MAX_SEARCH_Q, SEARCH_TOP_K_MAX, SEARCH_THRESHOLD_MIN, SEARCH_THRESHOLD_MAX, clamp,
 )
-from .models import Category, Product, ProductCombo, ProductImage, ProductSection, ProductVariant
+from .models import (
+    Category, Product, ProductCombo, ProductImage, ProductSection,
+    ProductSlugAlias, ProductVariant,
+)
 from .serializers import (
     CategorySerializer,
     ProductListSerializer,
@@ -225,6 +228,19 @@ class ProductViewSet(viewsets.ModelViewSet):
                 if variant is not None:
                     selected_variant_id = variant.id
                     instance = qs.filter(id=variant.product_id).first()
+
+            # Finally, fall back to a retired slug. Re-slugging a product would
+            # otherwise 404 every link to it already in the wild.
+            if instance is None:
+                alias = (
+                    ProductSlugAlias.objects
+                    .filter(slug=lookup_value)
+                    .values_list('product_id', flat=True)
+                    .first()
+                )
+                if alias is not None:
+                    # Go through qs so is_active / staff visibility still apply.
+                    instance = qs.filter(id=alias).first()
 
         if instance is None:
             return Response(

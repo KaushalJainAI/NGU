@@ -53,7 +53,7 @@ COMBOS = [
         "title": "Indore Chatpata Sprinkler Combo",
         "subtitle": "Street-food finishers - sprinkle & enjoy",
         "description": (
-            "Indore's famous chatpata trio - Jeeravan, Chat Masala and Garadu "
+            "Indore's famous chatpata trio - Jeeravan, Chaat Masala and Garadu "
             "Masala. Sprinkle over chaat, fruit, fries or roasted garadu for "
             "that authentic Sarafa-bazaar tang."
         ),
@@ -132,7 +132,7 @@ COMBOS = [
         "subtitle": "5 must-have blends for everyday cooking",
         "description": (
             "Our five most-loved ready blends in one value box - Pav Bhaji, "
-            "Kitchen King, Chana, Garam and Chat Masala. From sabzi to street "
+            "Kitchen King, Chana, Garam and Chaat Masala. From sabzi to street "
             "food, you're covered all week."
         ),
         "badge": "Value Pack",

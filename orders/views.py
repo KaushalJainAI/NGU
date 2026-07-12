@@ -197,7 +197,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         try:
             coupon = Coupon.objects.get(code__iexact=coupon_code)
         except Coupon.DoesNotExist:
-            return None, {'error': f"'{coupon_code}' is not a valid coupon code."}
+            return None, {'error': f'"{coupon_code}" is not a valid coupon code.'}
 
         # Pass the user so single-user (assigned) coupons are enforced.
         reason = coupon.get_invalid_reason(order_amount=order_amount, user=user)

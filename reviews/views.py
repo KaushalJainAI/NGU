@@ -1,9 +1,31 @@
 from rest_framework import viewsets, status, serializers
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from .models import Review
 from .serializers import ReviewSerializer
 from orders.models import OrderItem
+
+# An order only counts as a purchase once it has left the pending/payment stage.
+PURCHASED_ORDER_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered', 'delivering']
+
+
+def has_purchased(user, item_type, product=None, combo=None):
+    """True if `user` has an order containing this product/combo that reached a purchased status."""
+    if item_type == 'product' and product:
+        return OrderItem.objects.filter(
+            order__user=user,
+            product=product,
+            order__status__in=PURCHASED_ORDER_STATUSES,
+        ).exists()
+    if item_type == 'combo' and combo:
+        return OrderItem.objects.filter(
+            order__user=user,
+            combo=combo,
+            order__status__in=PURCHASED_ORDER_STATUSES,
+        ).exists()
+    return False
+
 
 class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
@@ -47,29 +69,50 @@ class ReviewViewSet(viewsets.ModelViewSet):
                 raise serializers.ValidationError({"error": "You have already reviewed this combo"})
         
         # ENFORCE verified purchase - user must have a confirmed/shipped/delivered order with this item
-        has_purchased = False
-        allowed_statuses = ['confirmed', 'processing', 'shipped', 'delivered', 'delivering']
-        
-        if item_type == 'product' and product:
-            has_purchased = OrderItem.objects.filter(
-                order__user=self.request.user,
-                product=product,
-                order__status__in=allowed_statuses
-            ).exists()
-        elif item_type == 'combo' and combo:
-            has_purchased = OrderItem.objects.filter(
-                order__user=self.request.user,
-                combo=combo,
-                order__status__in=allowed_statuses
-            ).exists()
-        
-        # Reject review if user hasn't purchased the item
-        if not has_purchased:
+        if not has_purchased(self.request.user, item_type, product=product, combo=combo):
             raise serializers.ValidationError({
                 "error": "You can only review items from orders that have been confirmed or delivered"
             })
 
         serializer.save(user=self.request.user, is_verified_purchase=True)
+
+    @action(detail=False, methods=['get'], url_path='can-review',
+            permission_classes=[IsAuthenticated])
+    def can_review(self, request):
+        """Whether the current user may review a given product/combo.
+
+        Lets the storefront hide the review form instead of letting the user
+        write a review and only fail on submit. This is a UX hint only — the
+        real gate stays in perform_create.
+        """
+        product_id = request.query_params.get('product')
+        combo_id = request.query_params.get('combo')
+        if bool(product_id) == bool(combo_id):
+            return Response(
+                {"error": "Provide exactly one of 'product' or 'combo'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        item_type = 'product' if product_id else 'combo'
+        try:
+            item_id = int(product_id or combo_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": f"'{item_type}' must be a numeric id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        filters = {'user': request.user, 'item_type': item_type, f'{item_type}_id': item_id}
+
+        if Review.objects.filter(**filters).exists():
+            return Response({"can_review": False, "reason": "already_reviewed"})
+        if not has_purchased(
+            request.user,
+            item_type,
+            product=item_id if item_type == 'product' else None,
+            combo=item_id if item_type == 'combo' else None,
+        ):
+            return Response({"can_review": False, "reason": "not_purchased"})
+        return Response({"can_review": True, "reason": None})
 
     def perform_update(self, serializer):
         # A review's subject is fixed at creation. Without this, a user could
