@@ -4,7 +4,9 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, action, throttle_classes
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.conf import settings
@@ -140,13 +142,33 @@ class ProductSectionViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
 
 
+class ProductFilter(django_filters.FilterSet):
+    """`category` matches the canonical FK OR any secondary category, so a
+    product listed on several shelves (e.g. Chat Masala is both a blended
+    masala and a sprinkler) shows up under each of them."""
+    category = django_filters.CharFilter(method='filter_category')
+
+    class Meta:
+        model = Product
+        fields = ['category', 'spice_form', 'organic', 'is_featured', 'is_active']
+
+    def filter_category(self, queryset, name, value):
+        if not value:
+            return queryset
+        # The storefront passes an id; accept a slug too.
+        key = 'id' if str(value).isdigit() else 'slug'
+        return queryset.filter(
+            Q(**{f'category__{key}': value}) | Q(**{f'extra_categories__{key}': value})
+        ).distinct()
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrReadOnly]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     pagination_class = None
     lookup_field = 'slug'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['category', 'spice_form', 'organic', 'is_featured', 'is_active']
+    filterset_class = ProductFilter
     search_fields = ['name', 'description', 'ingredients']
     ordering_fields = ['price', 'created_at', 'name']
     ordering = ['-created_at']

@@ -163,9 +163,18 @@ class Product(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     category = models.ForeignKey(
-        Category, 
-        on_delete=models.CASCADE, 
+        Category,
+        on_delete=models.CASCADE,
         related_name='products'
+    )
+    # Additional categories this product should also be listed under. `category`
+    # stays the single canonical one (breadcrumb, schema.org); these are extra
+    # shelves. E.g. Chat Masala is a blended masala AND a sprinkler/seasoning.
+    extra_categories = models.ManyToManyField(
+        Category,
+        blank=True,
+        related_name='extra_products',
+        help_text='Also list this product under these categories.',
     )
     description = models.TextField()
     spice_form = models.CharField(
