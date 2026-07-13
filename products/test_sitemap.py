@@ -47,6 +47,31 @@ class TestSitemap:
 
         assert f"https://nidhimasala.com/products/{test_product.slug}" not in locs
 
+    def test_what_we_cache_is_json_serializable(self, client, test_product):
+        """Prod's Redis cache uses a JSON serializer.
+
+        The first cut used @cache_page, which stores the HttpResponse itself —
+        fine under the LocMem test cache, but 500s in prod with "Object of type
+        HttpResponse is not JSON serializable". Cache the XML string instead.
+        """
+        import json
+        from products.sitemaps import SITEMAP_CACHE_KEY
+        from django.core.cache import cache
+
+        cache.delete(SITEMAP_CACHE_KEY)
+        client.get("/sitemap.xml")
+
+        cached = cache.get(SITEMAP_CACHE_KEY)
+        assert cached is not None, "sitemap was not cached"
+        json.dumps(cached)  # must not raise
+
+    def test_second_request_is_served_from_cache(self, client, test_product):
+        first = client.get("/sitemap.xml")
+        second = client.get("/sitemap.xml")
+
+        assert second.status_code == 200
+        assert second.content == first.content
+
 
 @pytest.mark.django_db
 class TestRobots:

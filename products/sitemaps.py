@@ -4,10 +4,10 @@ Hand-rolled rather than django.contrib.sitemaps because the canonical host is
 the storefront domain, not the Django SITE_ID host, and the URLs are frontend
 routes (/products/<slug>) that Django itself never serves.
 """
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.http import http_date
-from django.views.decorators.cache import cache_page
 from xml.sax.saxutils import escape
 
 from .models import Category, Product, ProductCombo
@@ -40,8 +40,18 @@ def _url(loc, lastmod=None, changefreq="weekly", priority="0.5"):
     return f"  <url>\n{body}\n  </url>"
 
 
-@cache_page(60 * 60 * 6)  # catalog changes are not minute-to-minute
+SITEMAP_CACHE_KEY = "sitemap:xml"
+SITEMAP_CACHE_TTL = 60 * 60 * 6  # catalog changes are not minute-to-minute
+
+
 def sitemap_xml(request):
+    # Cache the rendered XML string, NOT the response: @cache_page would store
+    # the HttpResponse itself, and the Redis cache here uses a JSON serializer
+    # ("Object of type HttpResponse is not JSON serializable").
+    cached = cache.get(SITEMAP_CACHE_KEY)
+    if cached:
+        return HttpResponse(cached, content_type="application/xml")
+
     urls = [
         _url(f"{SITE_URL}{path}", changefreq=freq, priority=prio)
         for path, freq, prio in STATIC_ROUTES
@@ -84,6 +94,8 @@ def sitemap_xml(request):
         + "\n".join(urls)
         + "\n</urlset>\n"
     )
+    cache.set(SITEMAP_CACHE_KEY, xml, SITEMAP_CACHE_TTL)
+
     response = HttpResponse(xml, content_type="application/xml")
     response["Last-Modified"] = http_date(timezone.now().timestamp())
     return response
