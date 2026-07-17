@@ -60,7 +60,7 @@ class TestFinalPrice:
 
 
 # --------------------------------------------------------------------------- #
-# discount_percentage  (integer truncation)
+# discount_percentage  (rounded to nearest integer — matches frontend cards)
 # --------------------------------------------------------------------------- #
 @pytest.mark.django_db
 class TestDiscountPercentage:
@@ -68,10 +68,12 @@ class TestDiscountPercentage:
         p = _product(test_category, price=Decimal("150.00"), discount_price=Decimal("120.00"))
         assert p.discount_percentage == 20
 
-    def test_truncates_not_rounds(self, test_category):
-        # (2/3)*100 = 66.66… -> int() truncates to 66, never 67.
+    def test_rounds_to_nearest(self, test_category):
+        # (2/3)*100 = 66.66… -> round() gives 67, matching what the frontend
+        # product cards display (see commit 4ddc145: discount_percentage is
+        # intentionally rounded, not truncated).
         p = _product(test_category, price=Decimal("3.00"), discount_price=Decimal("1.00"))
-        assert p.discount_percentage == 66
+        assert p.discount_percentage == 67
 
     def test_no_discount_is_zero(self, test_category):
         p = _product(test_category, price=Decimal("100.00"), discount_price=None)

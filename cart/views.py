@@ -220,9 +220,10 @@ class CartViewSet(viewsets.ViewSet):
         except (Product.DoesNotExist, ProductCombo.DoesNotExist):
             return Response({'success': False, 'error': 'Item not found'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to add item to cart")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while adding the item. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return self._cart_response(request)
@@ -310,9 +311,10 @@ class CartViewSet(viewsets.ViewSet):
         except (CartItem.DoesNotExist, Product.DoesNotExist, ProductCombo.DoesNotExist):
             return Response({'success': False, 'error': 'Cart item not found'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to update cart item")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while updating the item. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return self._cart_response(request)
@@ -376,9 +378,10 @@ class CartViewSet(viewsets.ViewSet):
         except CartItem.DoesNotExist:
             return Response({'success': False, 'error': 'Cart item not found'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to remove cart item")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while removing the item. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return self._cart_response(request)
@@ -392,9 +395,10 @@ class CartViewSet(viewsets.ViewSet):
             with transaction.atomic():
                 cart = get_object_or_404(Cart, user=request.user)
                 cart.items.all().delete()
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to clear cart")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while clearing the cart. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'success': True, 'items': []})
@@ -527,11 +531,12 @@ class CartViewSet(viewsets.ViewSet):
                     'reason': f'invalid data: {str(e)}'
                 })
                 continue
-            except Exception as e:
+            except Exception:
+                logger.exception("Failed to validate a cart sync item")
                 skipped.append({
                     'id': str(item_data.get('product_id', item_data.get('id', 'unknown'))),
                     'type': item_data.get('item_type', 'product'),
-                    'reason': str(e)
+                    'reason': 'unexpected error'
                 })
                 continue
 
@@ -556,11 +561,11 @@ class CartViewSet(viewsets.ViewSet):
                             item_type='product', quantity=quantity,
                         )
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to sync cart")
             return Response({
                 'success': False,
-                'error': f'Failed to sync cart: {str(e)}',
+                'error': 'Failed to sync cart. Please try again.',
                 'items': [],
                 'skipped': []
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -728,9 +733,10 @@ class FavoritesViewSet(viewsets.ViewSet):
         except Product.DoesNotExist:
             return Response({'success': False, 'error': 'Product not found'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to add favorite")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while adding the favorite. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def destroy(self, request, pk=None):
@@ -742,9 +748,10 @@ class FavoritesViewSet(viewsets.ViewSet):
         except Favorite.DoesNotExist:
             return Response({'success': False, 'error': 'Favorite not found'},
                             status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to remove favorite")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Something went wrong while removing the favorite. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['post'])
@@ -768,18 +775,22 @@ class FavoritesViewSet(viewsets.ViewSet):
                         except (ValueError, TypeError):
                             continue
 
-                # Add new favorites
+                # Add new favorites in one batch. filter(is_active=True) drops
+                # inactive/nonexistent ids (matching the old per-item
+                # DoesNotExist skip); ignore_conflicts absorbs the unique
+                # (user, product) constraint the way get_or_create did.
                 to_add = incoming_ids - existing_ids
-                for product_id in to_add:
-                    try:
-                        product = Product.objects.get(id=product_id, is_active=True)
-                        Favorite.objects.get_or_create(user=request.user, product=product)
-                    except Product.DoesNotExist:
-                        continue
+                if to_add:
+                    valid_products = Product.objects.filter(id__in=to_add, is_active=True)
+                    Favorite.objects.bulk_create(
+                        [Favorite(user=request.user, product=p) for p in valid_products],
+                        ignore_conflicts=True,
+                    )
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to sync favorites")
-            return Response({'success': False, 'error': str(e)},
+            return Response({'success': False,
+                             'error': 'Failed to sync favorites. Please try again.'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Return updated favorites list via serializer

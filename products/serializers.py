@@ -348,6 +348,8 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['slug']
 
     def get_products_count(self, obj):
+        if hasattr(obj, '_products_count'):
+            return obj._products_count
         return obj.products.filter(is_active=True).count()
 
 
@@ -396,18 +398,19 @@ class ProductListSerializer(serializers.ModelSerializer):
     
     def get_average_rating(self, obj):
         """Get average rating using aggregation to avoid N+1 queries"""
-        # Check if the value was prefetched/annotated
+        # Use the annotated value when present (set by the viewset queryset),
+        # normalized to match the manual-fallback output exactly.
         if hasattr(obj, '_average_rating'):
-            return obj._average_rating
+            return round(obj._average_rating, 1) if obj._average_rating else 0
         # Fallback to manual calculation
         avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
         return round(avg, 1) if avg else 0
-    
+
     def get_reviews_count(self, obj):
         """Get reviews count using aggregation to avoid N+1 queries"""
-        # Check if the value was prefetched/annotated
+        # Use the annotated value when present (set by the viewset queryset).
         if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count
+            return obj._reviews_count or 0
         # Fallback to manual count
         return obj.reviews.count()
 
@@ -456,14 +459,14 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     def get_average_rating(self, obj):
         """Get average rating using aggregation"""
         if hasattr(obj, '_average_rating'):
-            return obj._average_rating
+            return round(obj._average_rating, 1) if obj._average_rating else 0
         avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
         return round(avg, 1) if avg else 0
-    
+
     def get_reviews_count(self, obj):
         """Get reviews count using aggregation"""
         if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count
+            return obj._reviews_count or 0
         return obj.reviews.count()
     
     def validate(self, data):

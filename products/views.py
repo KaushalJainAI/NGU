@@ -6,7 +6,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import django_filters
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, Avg, Count
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.conf import settings
@@ -73,7 +73,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        qs = Category.objects.all()
+        # Annotate the active-product count so the serializer doesn't run a
+        # COUNT(*) per category. distinct=True guards against row multiplication.
+        qs = Category.objects.annotate(
+            _products_count=Count('products', filter=Q(products__is_active=True), distinct=True)
+        )
         user = self.request.user
         if not (user and user.is_staff):
             qs = qs.filter(is_active=True)
@@ -174,27 +178,31 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-        """Optimized queryset with conditional field selection"""
+        """Optimized queryset with review annotations and related prefetching."""
         user = self.request.user
         is_staff = user and user.is_staff
-        
-        # Base queryset with select_related for category
-        qs = Product.objects.select_related('category')
-        
+
+        # Annotate rating/review aggregates so the serializer's
+        # `_average_rating` / `_reviews_count` fast-path is actually hit instead
+        # of running two review queries per product. distinct=True guards the
+        # count against row multiplication if another join is ever added.
+        qs = Product.objects.select_related('category').annotate(
+            _average_rating=Avg('reviews__rating'),
+            _reviews_count=Count('reviews', distinct=True),
+        )
+
         # Filter for non-staff users
         if not is_staff:
             qs = qs.filter(is_active=True)
-        
-        # For list action, use only() to fetch minimal fields
+
+        # No .only() on list: it deferred fields the serializer emits
+        # (tax_rate, unit, thumbnail) causing per-instance queries, and deferred
+        # modeltranslation's per-language columns so translated names fell back
+        # to English. sections is prefetched because the list serializer emits
+        # both `sections` and `section_names`.
         if self.action == 'list':
-            qs = qs.only(
-                'id', 'name', 'slug', 'image', 'price', 'discount_price',
-                'weight', 'badge', 'is_featured', 'stock', 'organic',
-                'spice_form', 'category__id', 'category__name', 'category__slug',
-                'created_at', 'is_active'
-            ).prefetch_related('variants')
+            qs = qs.prefetch_related('variants', 'sections')
         else:
-            # For detail views, prefetch related data
             qs = qs.prefetch_related('images', 'sections', 'variants')
         return qs
 
@@ -322,27 +330,24 @@ class ComboProductViewSet(viewsets.ModelViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
-        """Optimized queryset with conditional field selection"""
+        """Queryset with related prefetching for the combo serializer."""
         user = self.request.user
         is_staff = user and user.is_staff
-        
+
         # Base queryset
         qs = ProductCombo.objects.all()
-        
+
         # Filter for non-staff users
         if not is_staff:
             qs = qs.filter(is_active=True)
-        
-        # For list action, use only() to fetch minimal fields
-        if self.action == 'list':
-            qs = qs.only(
-                'id', 'name', 'slug', 'title', 'image', 'price', 'discount_price',
-                'badge', 'is_featured', 'is_active', 'created_at'
-            )
-        else:
-            # For detail views, prefetch related data
-            qs = qs.prefetch_related('productcomboitem_set__product', 'sections')
-        
+
+        # No .only() on list: ProductComboSerializer serializes many fields
+        # outside the old minimal set (description, title, subtitle, tax_rate,
+        # weight, unit, thumbnail, sections) and to_representation always
+        # serializes productcomboitem_set — both were N+1 on list. Prefetch the
+        # items and sections that the serializer walks.
+        qs = qs.prefetch_related('productcomboitem_set__product', 'sections')
+
         return qs
 
     def list(self, request, *args, **kwargs):
