@@ -381,7 +381,7 @@ class Product(models.Model):
     def discount_percentage(self):
         """Calculate discount percentage"""
         if self.discount_price and self.discount_price < self.price:
-            return int(((self.price - self.discount_price) / self.price) * 100)
+            return round(((self.price - self.discount_price) / self.price) * 100)
         return 0
 
     @property
@@ -513,7 +513,7 @@ class ProductVariant(models.Model):
     @property
     def discount_percentage(self):
         if self.discount_price and self.discount_price < self.price:
-            return int(((self.price - self.discount_price) / self.price) * 100)
+            return round(((self.price - self.discount_price) / self.price) * 100)
         return 0
 
     @property
@@ -724,7 +724,7 @@ class ProductCombo(models.Model):
     def discount_percentage(self):
         """Calculate discount percentage"""
         if self.discount_price and self.discount_price < self.price:
-            return int(((self.price - self.discount_price) / self.price) * 100)
+            return round(((self.price - self.discount_price) / self.price) * 100)
         return 0
 
     @property
