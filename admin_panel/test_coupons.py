@@ -1,10 +1,5 @@
 """
-Unit matrix for Coupon.is_valid() — the gate every discount passes through.
-
-Covers each rejection reason independently plus the boundary values that bite
-in production: expiry exactly at `now`, usage_count == max_usage, order_amount
-exactly == minimum, and the "unset means unlimited" semantics of the nullable
-fields.
+Tests for coupons: is_valid() unit matrix and /api/coupons/validate/ endpoint.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -14,6 +9,10 @@ from django.utils import timezone
 
 from admin_panel.models import Coupon
 
+URL = "/api/coupons/validate/"
+
+
+# --- From test_coupon_validity.py ---
 
 def _coupon(**kw):
     kw.setdefault("code", "C" + str(abs(hash(frozenset(kw.items()))) % 100000))
@@ -107,3 +106,68 @@ class TestCouponIsValid:
         # flip the one failing condition at a time
         c.is_active = False
         assert c.is_valid(order_amount=Decimal("250.00")) is False
+
+
+# --- From test_coupon_validate.py ---
+
+@pytest.mark.django_db
+class TestCouponValidateEndpoint:
+    def test_valid_coupon(self, admin_client):
+        Coupon.objects.create(code="SAVE20", discount_percent=20, is_active=True)
+        resp = admin_client.post(URL, {"code": "SAVE20"}, format="json")
+        assert resp.status_code == 200
+        assert resp.data["valid"] is True
+        assert resp.data["reason"] is None
+        assert resp.data["coupon"]["code"] == "SAVE20"
+
+    def test_case_insensitive_lookup(self, admin_client):
+        Coupon.objects.create(code="SAVE20", discount_percent=20, is_active=True)
+        resp = admin_client.post(URL, {"code": "save20"}, format="json")
+        assert resp.status_code == 200
+        assert resp.data["valid"] is True
+
+    def test_inactive_coupon(self, admin_client):
+        Coupon.objects.create(code="OFF", discount_percent=10, is_active=False)
+        resp = admin_client.post(URL, {"code": "OFF"}, format="json")
+        assert resp.status_code == 200
+        assert resp.data["valid"] is False
+        assert "inactive" in resp.data["reason"]
+
+    def test_expired_coupon(self, admin_client):
+        Coupon.objects.create(
+            code="OLD", discount_percent=10, is_active=True,
+            valid_until=timezone.now() - timedelta(days=1),
+        )
+        resp = admin_client.post(URL, {"code": "OLD"}, format="json")
+        assert resp.status_code == 200
+        assert resp.data["valid"] is False
+        assert "expired" in resp.data["reason"]
+
+    def test_usage_limit_reached(self, admin_client):
+        Coupon.objects.create(
+            code="MAXED", discount_percent=10, is_active=True,
+            max_usage=5, usage_count=5,
+        )
+        resp = admin_client.post(URL, {"code": "MAXED"}, format="json")
+        assert resp.data["valid"] is False
+        assert "usage limit" in resp.data["reason"]
+
+    def test_missing_code_is_400(self, admin_client):
+        resp = admin_client.post(URL, {"code": "  "}, format="json")
+        assert resp.status_code == 400
+        assert resp.data["valid"] is False
+
+    def test_nonexistent_code_is_404(self, admin_client):
+        resp = admin_client.post(URL, {"code": "NOPE"}, format="json")
+        assert resp.status_code == 404
+        assert resp.data["valid"] is False
+        assert "error" in resp.data
+
+    def test_requires_admin(self, authenticated_client):
+        Coupon.objects.create(code="SAVE20", discount_percent=20, is_active=True)
+        resp = authenticated_client.post(URL, {"code": "SAVE20"}, format="json")
+        assert resp.status_code == 403
+
+    def test_requires_authentication(self, api_client):
+        resp = api_client.post(URL, {"code": "SAVE20"}, format="json")
+        assert resp.status_code in (401, 403)

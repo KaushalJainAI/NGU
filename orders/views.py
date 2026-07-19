@@ -12,10 +12,16 @@ Order Creation Flow:
 3. Calculate totals: subtotal, discount, env-configured shipping, per-line tax
 4. Create Order + OrderItems in atomic transaction
 5. Reduce product stock within transaction
-6. Clear cart AFTER successful transaction (prevents rollback issues)
+6. Clear cart depending on completion (see Key Design Decision 1)
 
 Key Design Decisions:
-1. Cart cleared OUTSIDE transaction - if cart deletion fails, order still succeeds
+1. Cart clearing is tied to order COMPLETION, not creation. COD and already-paid
+   (zero-total coupon) orders are complete at placement and clear the cart inside
+   the transaction. A 'pending' ONLINE order keeps the cart until its payment is
+   captured (payments.services.mark_payment_captured clears it) so an abandoned
+   payment never strands the customer with an empty cart. A fresh checkout first
+   supersedes (cancels + restocks) any earlier pending ONLINE order so reserved
+   stock never leaks across retries.
 2. Proportional discount - each item gets discount proportional to its share of subtotal
 3. Stock validation before order creation - prevents overselling
 4. Combos have default stock of 999 (effectively unlimited)
@@ -518,14 +524,46 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Create order in transaction
         try:
             with transaction.atomic():
-                # Double-submit guard (§7.7): lock the Cart row FIRST and re-check
-                # items under the lock. Two concurrent creates from the same user
-                # serialise here; the loser finds an empty cart (the winner deleted
-                # the items inside its txn) and gets a clean "Cart is empty" 400
-                # instead of a duplicate order / double stock decrement.
+                # Concurrency gate (§7.7): lock the Cart row FIRST and re-check
+                # items under the lock so two concurrent creates from the same
+                # user serialise here rather than both minting an order.
+                #   • COD / zero-total orders are complete at placement and still
+                #     empty the cart inside this txn (below), so the loser of a
+                #     double-submit finds an empty cart and gets a clean 400.
+                #   • ONLINE orders are only 'pending' here and DELIBERATELY keep
+                #     the cart until payment is captured, so an abandoned payment
+                #     doesn't strand the customer with an empty cart. The
+                #     supersede step below is what makes that safe: it guarantees
+                #     one open ONLINE order per user, so the double-submit loser
+                #     cancels the winner's fresh order and replaces it — no
+                #     duplicate order, no double stock reservation.
                 locked_cart = Cart.objects.select_for_update().get(pk=cart.pk)
                 if not locked_cart.items.exists():
                     raise ValueError('Cart is empty')
+
+                # Supersede any earlier unpaid ONLINE order from this user. Because
+                # ONLINE checkout no longer empties the cart, a customer who
+                # abandoned a payment keeps their items and can check out again —
+                # but their previous pending order is still holding reserved stock.
+                # Cancel + restock it here (mirrors reconcile._cancel_abandoned and
+                # the user/admin cancel paths via restore_order_stock), under the
+                # canonical Order→Payment lock, before we reserve stock for the new
+                # order. Runs regardless of the new order's method so a stale ONLINE
+                # reservation is released even when the customer switches to COD.
+                from payments.models import Payment
+                stale_orders = (Order.objects
+                                .select_for_update()
+                                .filter(user=request.user, payment_method='ONLINE',
+                                        payment_status='pending', status='pending',
+                                        is_deleted=False))
+                for stale in stale_orders:
+                    Payment.objects.select_for_update().filter(order=stale).first()
+                    restore_order_stock(stale)
+                    stale.status = 'cancelled'
+                    stale.payment_status = 'rejected'
+                    stale.cancelled_at = timezone.now()
+                    stale.save(update_fields=['status', 'payment_status',
+                                              'cancelled_at', 'updated_at'])
 
                 # A zero-total (full-coupon) order needs no gateway — place it
                 # straight as confirmed + paid. Everything else starts pending.
@@ -649,8 +687,15 @@ class OrderViewSet(viewsets.ModelViewSet):
                     locked_coupon.usage_count = models.F('usage_count') + 1
                     locked_coupon.save(update_fields=['usage_count'])
 
-                # Clear cart items securely inside the transaction to prevent desynchronization
-                locked_cart.items.all().delete()
+                # Empty the cart ONLY for orders that are complete at placement:
+                # COD (no gateway) and already-paid zero-total coupon orders. A
+                # 'pending' ONLINE order intentionally KEEPS the cart until its
+                # payment is captured (payments.services.mark_payment_captured
+                # clears it then), so an abandoned/failed payment leaves the
+                # customer's cart intact to retry — the supersede step above stops
+                # the reserved stock from leaking across retries.
+                if order.payment_method == 'COD' or order.payment_status == 'paid':
+                    locked_cart.items.all().delete()
 
                 # Transaction complete - prepare response data
                 order_data = OrderDetailSerializer(order).data

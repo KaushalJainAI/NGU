@@ -45,3 +45,23 @@ exclude = ["migrations", "venv", "\\.venv", "tests"]
 
 [tool.django-stubs]
 django_settings_module = "spices_backend.test_settings"
+
+# ---------------------------------------------------------------------------
+# Pyright / Pylance (the IDE's checker). Unlike mypy above, Pyright does NOT run
+# the mypy_django_plugin, so it cannot resolve Django's dynamically-added members
+# and emits false positives on ordinary, correct Django code:
+#   • FK "<field>_id" shadow attributes        (variant.product_id)
+#   • reverse related_name accessors           (cart.items, order.items)
+#   • AbstractUser fields                       (user.is_staff / is_superuser)
+#   • Model.id / .pk on every model
+#   • Optional narrowing across our own validate helpers (coupon.code after
+#     _validate_coupon), and DRF's list() override return type.
+# mypy (with the Django stubs) remains the source of truth for real type errors;
+# these switches only silence the noise Pyright cannot understand.
+[tool.pyright]
+# Keep Pyright's default excludes (**/node_modules, **/__pycache__, **/.*) and
+# add our generated/vendored dirs.
+exclude = ["**/node_modules", "**/__pycache__", "**/.*", "**/migrations", "venv", ".venv"]
+reportAttributeAccessIssue = "none"
+reportOptionalMemberAccess = "none"
+reportIncompatibleMethodOverride = "none"

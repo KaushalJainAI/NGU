@@ -146,12 +146,25 @@ answer is `3`.
 
 #### 4e. Cart clearing
 
+The cart is cleared when the order is **complete**, not merely created:
+
 ```python
-cart.items.all().delete()
+if order.payment_method == 'COD' or order.payment_status == 'paid':
+    cart.items.all().delete()
 ```
 
-The cart is cleared **inside** the transaction. If the transaction rolls back (e.g. stock
-ran out mid-flight), the cart is preserved. The customer's items are not lost.
+- **COD** and **zero-total** (fully-couponed, `payment_status='paid'`) orders are complete at
+  placement, so the cart is cleared **inside** the transaction. If the transaction rolls back
+  (e.g. stock ran out mid-flight), the cart is preserved — the customer's items are not lost.
+- A **pending ONLINE** order deliberately **keeps** the cart until its payment is captured
+  (`payments.services.mark_payment_captured` clears it then). This means an abandoned or failed
+  payment never strands the customer with an empty cart — "Proceed to checkout" still works.
+
+To stop reserved stock leaking across retries, a fresh checkout first **supersedes** any earlier
+pending ONLINE order from the same user: it cancels that order (`payment_status='rejected'`) and
+restocks it under the cart lock before reserving stock for the new order. This guarantees exactly
+one open ONLINE order per user and subsumes the old double-submit guard (which previously relied on
+the cart being emptied at creation).
 
 ### 5. Post-transaction (best-effort)
 

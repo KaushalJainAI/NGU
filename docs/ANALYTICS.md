@@ -152,7 +152,7 @@ no separate cookie banner.
 
 ## Tests
 
-`analytics/test_analytics_insights.py` covers: anon dimension building + bot
+`analytics/tests.py` covers: anon dimension building + bot
 bucketing, counter accumulation (bounded-row property), the rollup command
 (sales/funnel/search, new-vs-returning, idempotency), insights aggregation
 (PoP deltas, funnel/macro-funnel), and API admin-only permissions.

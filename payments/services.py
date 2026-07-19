@@ -199,6 +199,15 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
         order.status = 'confirmed'
         order.save(update_fields=['payment_status', 'status', 'updated_at'])
 
+        # Cart is emptied HERE, at capture — an ONLINE order keeps the customer's
+        # cart while payment is pending (orders.views.create) so an abandoned
+        # payment never strands them with an empty cart. Now that the payment is
+        # captured the order is complete, so clear the cart. Idempotent: the
+        # terminal-status guard above makes repeated captures (verify + webhook +
+        # reconcile) a no-op, so this runs at most once per order.
+        from cart.models import CartItem
+        CartItem.objects.filter(cart__user=order.user).delete()
+
         log_payment_event(payment, event_type='captured', source=source,
                           from_status=from_status, to_status='completed',
                           message=f"Payment {razorpay_payment_id} captured.",
