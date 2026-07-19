@@ -15,9 +15,10 @@ from django.utils.translation import get_language
 from spices_backend.limits import (
     MAX_SEARCH_Q, SEARCH_TOP_K_MAX, SEARCH_THRESHOLD_MIN, SEARCH_THRESHOLD_MAX, clamp,
 )
+from django.db import transaction
 from .models import (
     Category, Product, ProductCombo, ProductImage, ProductSection,
-    ProductSlugAlias, ProductVariant,
+    ProductSectionPlacement, ProductSlugAlias, ProductVariant,
 )
 from .serializers import (
     CategorySerializer,
@@ -131,19 +132,74 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ProductSectionViewSet(viewsets.ReadOnlyModelViewSet):
-    """Flat list of homepage sections (id, name, section_type, …).
+class ProductSectionViewSet(viewsets.ModelViewSet):
+    """Homepage sections: flat list for everyone, full CRUD for staff.
 
-    Powers the section multi-select on the admin product/combo edit forms. Kept
-    read-only: sections are authored in the Django admin, and the storefront's
-    rich nested payload lives at /products/sections/. Public read is harmless
-    (section names aren't sensitive); writes stay admin-only via the shared
-    IsAdminOrReadOnly base, though no write verbs are exposed here.
+    Powers the section multi-select on the admin product/combo edit forms AND
+    the admin panel's Sections page (create/edit/hide sections + order the
+    products inside each one without touching the Django admin). The
+    storefront's rich nested payload still lives at /products/sections/.
+    Public read is harmless (section names aren't sensitive); writes are
+    admin-only via IsAdminOrReadOnly.
     """
     queryset = ProductSection.objects.all().order_by('display_order', 'name')
     serializer_class = ProductSectionSerializer
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = None
+
+    def destroy(self, request, *args, **kwargs):
+        # Soft-hide, mirroring CategoryViewSet: placements survive so the
+        # section can be switched back on without rebuilding it.
+        instance = self.get_object()
+        instance.is_active = False
+        instance.save(update_fields=['is_active'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get', 'put'])
+    def products(self, request, pk=None):
+        """The ordered products of one section.
+
+        GET → [{id, name, image, position}] in display order.
+        PUT {"product_ids": [3, 1, 7]} → replace the section's product list
+        with exactly these products, positioned in the given order.
+        """
+        section = self.get_object()
+
+        if request.method == 'PUT':
+            ids = request.data.get('product_ids')
+            if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
+                return Response(
+                    {'error': 'Send {"product_ids": [<product id>, …]} in display order.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            valid_ids = set(Product.objects.filter(id__in=ids).values_list('id', flat=True))
+            unknown = [i for i in ids if i not in valid_ids]
+            if unknown:
+                return Response(
+                    {'error': f'Unknown product ids: {unknown}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            with transaction.atomic():
+                ProductSectionPlacement.objects.filter(section=section).delete()
+                ProductSectionPlacement.objects.bulk_create([
+                    ProductSectionPlacement(section=section, product_id=pid, position=pos)
+                    for pos, pid in enumerate(ids)
+                ])
+
+        placements = (
+            ProductSectionPlacement.objects.filter(section=section)
+            .select_related('product').order_by('position')
+        )
+        return Response([
+            {
+                'id': p.product.id,
+                'name': p.product.name,
+                'image': (p.product.image.url if getattr(p.product, 'image', None) else None),
+                'position': p.position,
+                'is_active': p.product.is_active,
+            }
+            for p in placements
+        ])
 
 
 class ProductFilter(django_filters.FilterSet):
@@ -187,8 +243,8 @@ class ProductViewSet(viewsets.ModelViewSet):
         # of running two review queries per product. distinct=True guards the
         # count against row multiplication if another join is ever added.
         qs = Product.objects.select_related('category').annotate(
-            _average_rating=Avg('reviews__rating'),
-            _reviews_count=Count('reviews', distinct=True),
+            _average_rating=Avg('reviews__rating', filter=Q(reviews__is_hidden=False)),
+            _reviews_count=Count('reviews', filter=Q(reviews__is_hidden=False), distinct=True),
         )
 
         # Filter for non-staff users

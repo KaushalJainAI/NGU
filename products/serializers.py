@@ -379,7 +379,8 @@ class ProductListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'category', 'category_name', 'spice_form',
             'price', 'discount_price', 'final_price', 'discount_percentage', 'tax_rate',
-            'stock', 'in_stock', 'weight', 'unit', 'organic', 'image', 'thumbnail', 'is_featured',
+            'stock', 'in_stock', 'low_stock_threshold', 'weight', 'unit', 'organic',
+            'image', 'thumbnail', 'is_featured',
             'average_rating', 'reviews_count', 'created_at', 'badge', 'is_active',
             'sections', 'section_names', 'variants', 'variant_count'
         ]
@@ -436,7 +437,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'category', 'category_name', 'description',
             'spice_form', 'price', 'discount_price', 'final_price',
-            'discount_percentage', 'tax_rate', 'stock', 'in_stock', 'weight', 'unit',
+            'discount_percentage', 'tax_rate', 'stock', 'in_stock', 'low_stock_threshold',
+            'weight', 'unit',
             'origin_country', 'organic', 'shelf_life', 'ingredients',
             'recipe', 'nutrition',
             'image', 'thumbnail', 'images', 'is_featured', 'average_rating',

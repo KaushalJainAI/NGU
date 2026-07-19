@@ -30,9 +30,11 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.db import transaction, models
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from decimal import Decimal, InvalidOperation
 import logging
 from .models import Order, OrderItem
@@ -44,7 +46,7 @@ from spices_backend.limits import (
     SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
 )
 from spices_backend.abuse import flag_suspicious
-from .emails import send_order_confirmation, send_order_status_email
+from .emails import send_order_confirmation, send_order_status_email, send_new_order_admin_alert
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +166,15 @@ class OrderViewSet(viewsets.ModelViewSet):
                 except (InvalidOperation, ValueError):
                     pass  # ignore an unparseable amount rather than 500
 
+        # Date range on the order's creation date (inclusive). Dates arrive as
+        # ISO YYYY-MM-DD from the admin panel's date inputs.
+        for key, lookup in (('date_from', 'created_at__date__gte'), ('date_to', 'created_at__date__lte')):
+            raw = (params.get(key) or '').strip()
+            if raw:
+                parsed = parse_date(raw)
+                if parsed:
+                    qs = qs.filter(**{lookup: parsed})
+
         search = (params.get('search') or '').strip()
         if search:
             cond = Q(user__email__icontains=search) | \
@@ -171,12 +182,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                 Q(user__last_name__icontains=search) | \
                 Q(shipping_address__icontains=search)
             # Order numbers are ORD-000123 → let a numeric search hit the id too.
+            # Cap at 9 digits: anything longer can't be a real order id and
+            # would overflow Postgres's integer type (DataError → 500).
             digits = ''.join(ch for ch in search if ch.isdigit())
-            if digits:
-                try:
-                    cond |= Q(id=int(digits))
-                except (ValueError, OverflowError):
-                    pass
+            if digits and len(digits) <= 9:
+                cond |= Q(id=int(digits))
             qs = qs.filter(cond)
 
         ordering = self._ADMIN_ORDERING.get((params.get('ordering') or '').strip())
@@ -672,6 +682,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         # order/payment is verified.
         if order.payment_method == 'COD' or order.payment_status == 'paid':
             send_order_confirmation(order)
+            send_new_order_admin_alert(order)
 
         return Response({
             'message': 'Order created successfully',
@@ -889,6 +900,201 @@ class OrderViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
+    @action(detail=True, methods=['get'], url_path='packing-slip')
+    def packing_slip(self, request, pk=None):
+        """Staff-only printable packing slip (address + items + COD amount —
+        no prices). Used when packing parcels; distinct from the tax invoice."""
+        from django.http import HttpResponse
+        from rest_framework.exceptions import PermissionDenied
+
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied("Only staff can download packing slips.")
+
+        order = self.get_object()
+        try:
+            from .invoice import generate_packing_slip_pdf
+            pdf_bytes = generate_packing_slip_pdf(order)
+        except ImportError:
+            logger.error("reportlab is not installed; cannot generate packing slip PDF")
+            return Response(
+                {'error': 'Packing slip generation is not available on the server.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as e:
+            logger.error(f"Packing slip generation failed for order {order.id}: {e}")
+            return Response(
+                {'error': 'Failed to generate packing slip'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        filename = f"packing-slip-ORD-{order.id:06d}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    # Delivery bill: types the admin is allowed to upload, mapped to the
+    # extension used when streaming it back. Images (a photo of the courier
+    # receipt) and PDFs cover every real case.
+    DELIVERY_BILL_TYPES = {
+        'application/pdf': 'pdf',
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+    }
+    MAX_DELIVERY_BILL_BYTES = 10 * 1024 * 1024  # 10 MB
+
+    @staticmethod
+    def _delivery_bill_bytes_match(content_type, head):
+        """True if the file's leading bytes match the declared content-type.
+        The declared type picks the extension AND the type we serve the file
+        back with, so don't trust the client's header alone — a payload lying
+        about its type (e.g. HTML labelled image/png) must be rejected."""
+        if content_type == 'application/pdf':
+            return head.startswith(b'%PDF')
+        if content_type == 'image/jpeg':
+            return head.startswith(b'\xff\xd8\xff')
+        if content_type == 'image/png':
+            return head.startswith(b'\x89PNG\r\n\x1a\n')
+        if content_type == 'image/webp':
+            return head[:4] == b'RIFF' and head[8:12] == b'WEBP'
+        return False
+
+    @action(detail=True, methods=['get', 'post', 'delete'],
+            parser_classes=[MultiPartParser, FormParser])
+    def delivery_bill(self, request, pk=None):
+        """Admin-only delivery-bill store for an order.
+
+        GET    — stream the uploaded bill inline (never a public storage URL).
+        POST   — upload/replace the bill (multipart field ``file``).
+        DELETE — remove the stored bill.
+
+        Strictly staff/superuser only: the delivery bill is the admin's private
+        record and must never be reachable by the order's customer.
+        """
+        from rest_framework.exceptions import PermissionDenied
+        from django.http import FileResponse
+
+        if not (request.user.is_staff or request.user.is_superuser):
+            raise PermissionDenied("Only staff can access delivery bills.")
+
+        order = self.get_object()
+
+        if request.method == 'GET':
+            if not order.delivery_bill:
+                return Response({'error': 'No delivery bill uploaded for this order.'},
+                                status=status.HTTP_404_NOT_FOUND)
+            try:
+                fh = order.delivery_bill.open('rb')
+            except Exception as e:
+                logger.error(f"Failed to open delivery bill for order {order.id}: {e}")
+                return Response({'error': 'Could not read the stored delivery bill.'},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            ext = order.delivery_bill.name.rsplit('.', 1)[-1].lower()
+            content_type = next(
+                (ct for ct, e in self.DELIVERY_BILL_TYPES.items() if e == ext),
+                'application/octet-stream',
+            )
+            resp = FileResponse(fh, content_type=content_type)
+            resp['Content-Disposition'] = (
+                f'inline; filename="delivery-bill-ORD-{order.id:06d}.{ext}"'
+            )
+            return resp
+
+        if request.method == 'DELETE':
+            if order.delivery_bill:
+                order.delivery_bill.delete(save=False)
+            order.delivery_bill = None
+            order.delivery_bill_uploaded_at = None
+            order.save(update_fields=['delivery_bill', 'delivery_bill_uploaded_at'])
+            return Response({'success': True, 'message': 'Delivery bill removed.'})
+
+        # POST — upload / replace
+        upload = request.FILES.get('file')
+        if not upload:
+            return Response({'error': 'No file provided (expected multipart field "file").'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if upload.content_type not in self.DELIVERY_BILL_TYPES:
+            return Response(
+                {'error': 'Unsupported file type. Upload a PDF, JPG, PNG or WebP.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if upload.size > self.MAX_DELIVERY_BILL_BYTES:
+            return Response({'error': 'File too large (max 10 MB).'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify the magic bytes actually match the declared type.
+        head = upload.read(12)
+        upload.seek(0)
+        if not self._delivery_bill_bytes_match(upload.content_type, head):
+            return Response(
+                {'error': 'The file does not look like a valid PDF, JPG, PNG or WebP.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Replace any existing bill so we don't orphan the old object.
+        if order.delivery_bill:
+            order.delivery_bill.delete(save=False)
+        # Normalise the extension from the trusted content-type, not the filename.
+        ext = self.DELIVERY_BILL_TYPES[upload.content_type]
+        upload.name = f"bill.{ext}"
+        order.delivery_bill = upload
+        order.delivery_bill_uploaded_at = timezone.now()
+        order.save(update_fields=['delivery_bill', 'delivery_bill_uploaded_at'])
+        return Response({
+            'success': True,
+            'message': 'Delivery bill uploaded.',
+            'has_delivery_bill': True,
+            'delivery_bill_uploaded_at': order.delivery_bill_uploaded_at,
+        }, status=status.HTTP_201_CREATED)
+
+    def _export_orders_csv(self, queryset):
+        """Render the given order queryset as a downloadable CSV.
+
+        Accountant-friendly columns including the GST/tax split. One row per
+        order (line-item detail lives on the invoice PDF)."""
+        from admin_panel.utils import csv_response
+
+        header = [
+            'Order Number', 'Date', 'Customer Name', 'Customer Email', 'Phone',
+            'Status', 'Payment Method', 'Payment Status',
+            'Subtotal', 'Discount', 'Coupon', 'Taxable Amount', 'GST', 'Shipping',
+            'Total', 'Items', 'Shipping Address',
+        ]
+
+        def rows():
+            # Plain iteration (not .iterator()) so get_queryset's
+            # prefetch_related('items…') is honoured — .iterator() would drop it.
+            for o in queryset:
+                user = o.user
+                name = (getattr(user, 'name', '') or
+                        f"{user.first_name} {user.last_name}".strip() or
+                        getattr(user, 'email', '')) if user else 'Guest'
+                # Taxable amount = discounted subtotal (tax is charged on it).
+                taxable = (o.subtotal or 0) - (o.discount_amount or 0)
+                items = '; '.join(
+                    f"{i.product_name} x{i.quantity}" for i in o.items.all()
+                )
+                yield [
+                    f"ORD-{o.id:06d}",
+                    o.created_at.strftime('%Y-%m-%d %H:%M'),
+                    name,
+                    getattr(user, 'email', '') if user else '',
+                    o.phone_number or '',
+                    o.status,
+                    o.payment_method or '',
+                    o.payment_status or '',
+                    o.subtotal, o.discount_amount, (o.coupon_code or ''),
+                    taxable, o.tax, o.shipping_charge, o.total_amount,
+                    items,
+                    (o.shipping_address or '').replace('\n', ', '),
+                ]
+
+        from django.utils import timezone
+        filename = f"orders-{timezone.now().strftime('%Y%m%d')}.csv"
+        # get_queryset already prefetches items/product, so the per-row items
+        # join doesn't N+1.
+        return csv_response(filename, header, rows())
+
     def list(self, request):
         """
         List orders.
@@ -904,6 +1110,13 @@ class OrderViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset()
         if not queryset.query.order_by:
             queryset = queryset.order_by('-created_at')
+
+        # CSV export (staff only): stream EVERY filtered row, ignoring pagination,
+        # so the admin's accountant gets the whole selection in one file. The
+        # active filters (status/date/search/…) already applied in get_queryset.
+        if (request.user.is_staff or request.user.is_superuser) and \
+                request.query_params.get('export') == 'csv':
+            return self._export_orders_csv(queryset)
 
         if request.user.is_staff or request.user.is_superuser:
             page = self.paginate_queryset(queryset)

@@ -167,6 +167,52 @@ class AssistantChatView(APIView):
 
 
 # ---------------------------------------------------------------------------
+# Admin assistant chat (store-manager Q&A over business data)
+# ---------------------------------------------------------------------------
+
+class AdminAssistantChatView(APIView):
+    """Plain-English Q&A over the store's own data for staff.
+
+    Stateless by design: the admin panel holds the short conversation in the
+    browser and posts the recent history each turn, so these admin chats never
+    land in the customer support inbox (AssistantConversation) and no migration
+    is needed. The agent runs with persona='admin' — read-only reporting tools
+    that read across all customers/orders. Gated by IsAdminUser AND the persona,
+    so a customer path can never reach these tools.
+    """
+    permission_classes = [IsAdminUser]
+    throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
+
+    MAX_HISTORY = 20  # recent turns the client may send back
+
+    def post(self, request):
+        message = (request.data.get('message') or '').strip()
+        if not message:
+            return Response({'error': 'Empty message'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Sanitise the client-provided history to the small shape the agent wants.
+        raw_history = request.data.get('history') or []
+        history = []
+        if isinstance(raw_history, list):
+            for h in raw_history[-self.MAX_HISTORY:]:
+                if not isinstance(h, dict):
+                    continue
+                role = h.get('role')
+                content = h.get('content')
+                if role in ('user', 'assistant') and isinstance(content, str):
+                    history.append({'role': role, 'content': content[:2000]})
+
+        completion = getattr(request, '_assistant_completion', None)
+        agent = Agent(request.user, completion=completion, persona='admin')
+        result = agent.run(message, history=history, language='en')
+
+        return Response({
+            'reply': result.get('reply', ''),
+            'sources': result.get('sources', []),
+        })
+
+
+# ---------------------------------------------------------------------------
 # Voice transcription (self-hosted whisper.cpp)
 # ---------------------------------------------------------------------------
 

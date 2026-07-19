@@ -33,16 +33,28 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        is_staff = user.is_authenticated and user.is_staff
         queryset = Review.objects.all().select_related('user', 'product', 'combo')
-        
+
+        # Moderation: hidden reviews vanish from public listings but stay
+        # visible to staff (to moderate) and to their own author.
+        if not is_staff:
+            if user.is_authenticated:
+                from django.db.models import Q
+                queryset = queryset.filter(Q(is_hidden=False) | Q(user=user))
+            else:
+                queryset = queryset.filter(is_hidden=False)
+
         # Filter by product or combo
         product_id = self.request.query_params.get('product')
         combo_id = self.request.query_params.get('combo')
-        
+
         if product_id:
             queryset = queryset.filter(product_id=product_id, item_type='product')
         elif combo_id:
             queryset = queryset.filter(combo_id=combo_id, item_type='combo')
+        elif is_staff and self.action == 'list' and self.request.query_params.get('all') in ('1', 'true', 'True'):
+            pass  # admin moderation view: every review, all products
         elif user.is_authenticated and self.action == 'list':
             queryset = queryset.filter(user=user)
 
@@ -113,6 +125,22 @@ class ReviewViewSet(viewsets.ModelViewSet):
         ):
             return Response({"can_review": False, "reason": "not_purchased"})
         return Response({"can_review": True, "reason": None})
+
+    @action(detail=True, methods=['post'], url_path='set-hidden')
+    def set_hidden(self, request, pk=None):
+        """Staff-only moderation switch: POST {"hidden": true|false}."""
+        user = request.user
+        if not (user.is_authenticated and user.is_staff):
+            return Response({"error": "Only staff can moderate reviews."},
+                            status=status.HTTP_403_FORBIDDEN)
+        review = self.get_object()
+        hidden = request.data.get('hidden')
+        if not isinstance(hidden, bool):
+            return Response({"error": 'Send {"hidden": true} or {"hidden": false}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        review.is_hidden = hidden
+        review.save(update_fields=['is_hidden'])
+        return Response({"id": review.id, "is_hidden": review.is_hidden})
 
     def perform_update(self, serializer):
         # A review's subject is fixed at creation. Without this, a user could

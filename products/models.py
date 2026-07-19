@@ -211,6 +211,10 @@ class Product(models.Model):
         default=0,
         validators=[MinValueValidator(0)]
     )
+    low_stock_threshold = models.PositiveIntegerField(
+        default=5,
+        help_text='Warn the admin (dashboard + daily digest) when stock falls to or below this.'
+    )
     weight = models.DecimalField(
         max_digits=10,
         decimal_places=2,

@@ -22,14 +22,21 @@ from products.views import (
     ProductVariantViewSet, ProductSectionViewSet, get_spice_forms, unified_search,
     search_suggest
 )
+from products.bulk_views import (
+    bulk_products, bulk_products_apply, bulk_products_import, export_products_csv,
+)
 from cart.views import CartViewSet, ValidateCouponAPIView, FavoritesViewSet
 from orders.views import OrderViewSet
 from reviews.views import ReviewViewSet
 from payments.views import PaymentMethodViewSet
-from admin_panel.views import ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PaymentAccountView
+from admin_panel.views import (
+    ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PaymentAccountView,
+    GlobalAdminSearchView, AdminCustomerViewSet,
+)
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
     AssistantChatView,
+    AdminAssistantChatView,
     AssistantTranscribeView,
     ConversationListCreateView,
     ConversationMessagesView,
@@ -67,6 +74,8 @@ router.register(r'coupons', CouponViewSet, basename='coupon')
 # pages directly. The Policy model/viewset remain in the codebase but are not
 # routed. Re-register here to bring the endpoint back if needed.
 router.register(r'dashboard', DashboardViewSet, basename='dashboard')
+# Admin panel: customer directory (read-only) — /api/admin-customers/
+router.register(r'admin-customers', AdminCustomerViewSet, basename='admin-customers')
 
 # Support endpoints
 router.register(r'contact', ContactSubmissionViewSet, basename='contact')
@@ -105,6 +114,15 @@ urlpatterns = [
     # Payment account for checkout (authenticated users)
     path('api/payment-account/', PaymentAccountView.as_view(), name='payment-account'),
 
+    # Admin panel global search (orders/products/customers/coupons in one box)
+    path('api/admin-search/', GlobalAdminSearchView.as_view(), name='admin-search'),
+
+    # Admin panel bulk product tools (edit grid + CSV import/export)
+    path('api/admin/bulk-products/', bulk_products, name='bulk-products'),
+    path('api/admin/bulk-products/apply/', bulk_products_apply, name='bulk-products-apply'),
+    path('api/admin/bulk-products/import/', bulk_products_import, name='bulk-products-import'),
+    path('api/admin/products-export/', export_products_csv, name='products-export'),
+
     path('api/spice-forms/', get_spice_forms, name='spice-forms'),
     path('api/search/suggest/', search_suggest, name='search-suggest'),
     path('api/search/', unified_search, name='unified-search' ),
@@ -135,6 +153,7 @@ urlpatterns = [
     # NOTE: the static `admin/` route is declared before the `<uuid>` routes so
     # it is matched first and never shadowed.
     path('api/assistant/chat/', AssistantChatView.as_view(), name='assistant-chat'),
+    path('api/assistant/admin-chat/', AdminAssistantChatView.as_view(), name='assistant-admin-chat'),
     path('api/assistant/transcribe/', AssistantTranscribeView.as_view(), name='assistant-transcribe'),
     path('api/assistant/conversations/admin/', AdminConversationListView.as_view(), name='assistant-admin-list'),
     path('api/assistant/conversations/', ConversationListCreateView.as_view(), name='assistant-conversations'),

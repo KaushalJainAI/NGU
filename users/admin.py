@@ -11,7 +11,7 @@ class UserAdmin(BaseUserAdmin):
     search_fields = ['email', 'username', 'phone']
     ordering = ['-created_at']
     
-    fieldsets = BaseUserAdmin.fieldsets + (
+    fieldsets = tuple(BaseUserAdmin.fieldsets or ()) + (
         ('Additional Info', {
             'fields': ('phone', 'address', 'city', 'state', 'pincode', 'profile_picture')
         }),

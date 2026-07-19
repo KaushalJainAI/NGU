@@ -24,6 +24,12 @@ Schedule (all intervals overridable via env):
         Redis counters into the DB, so the Insights dashboard stays live.
   * rollup_analytics --days 3   nightly at 00:20
         A wider catch-up pass so a few missed ticks self-heal.
+  * send_daily_digest    daily at 08:00
+        Plain-language store-owner email (yesterday's sales + what needs
+        attention) to ADMIN_ALERT_EMAIL.
+  * send_weekly_summary  Mondays at 08:30
+        Weekly business summary (revenue vs last week, best sellers, zero-result
+        searches, low stock) to ADMIN_ALERT_EMAIL.
 
 Each job is wrapped so one failure is logged and never kills the scheduler.
 """
@@ -80,6 +86,15 @@ class Command(BaseCommand):
             _run, CronTrigger(hour=0, minute=20),
             kwargs={'days': 3}, args=['rollup_analytics_nightly', 'rollup_analytics'],
             id='rollup_analytics_nightly', coalesce=True, max_instances=1)
+        # Store-owner emails: daily digest every morning, weekly summary Mondays.
+        scheduler.add_job(
+            _run, CronTrigger(hour=8, minute=0),
+            args=['send_daily_digest', 'send_daily_digest'],
+            id='send_daily_digest', coalesce=True, max_instances=1)
+        scheduler.add_job(
+            _run, CronTrigger(day_of_week='mon', hour=8, minute=30),
+            args=['send_weekly_summary', 'send_weekly_summary'],
+            id='send_weekly_summary', coalesce=True, max_instances=1)
 
         # Fire both interval jobs once at startup so a fresh deploy reconciles and
         # refreshes insights immediately instead of waiting a full interval.

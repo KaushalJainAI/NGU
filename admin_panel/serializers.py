@@ -79,3 +79,37 @@ class PolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = Policy
         fields = ['type', 'content']
+
+
+# ---------------------------------------------------------------------------
+# Admin customer directory (read-only)
+# ---------------------------------------------------------------------------
+
+class AdminCustomerListSerializer(serializers.Serializer):
+    """Row in the admin Customers list. Built from an annotated User queryset
+    (order_count / total_spent annotations), hence a plain Serializer."""
+    id = serializers.IntegerField()
+    name = serializers.SerializerMethodField()
+    email = serializers.EmailField()
+    phone = serializers.CharField(allow_blank=True, allow_null=True)
+    city = serializers.CharField(allow_blank=True, allow_null=True)
+    state = serializers.CharField(allow_blank=True, allow_null=True)
+    created_at = serializers.DateTimeField()
+    order_count = serializers.IntegerField()
+    total_spent = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    def get_name(self, obj):
+        return (getattr(obj, 'name', '') or f"{obj.first_name} {obj.last_name}".strip()
+                or obj.email.split('@')[0])
+
+
+class AdminCustomerOrderSerializer(serializers.ModelSerializer):
+    order_number = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = ['id', 'order_number', 'status', 'payment_method',
+                  'total_amount', 'created_at']
+
+    def get_order_number(self, obj):
+        return f"ORD-{obj.id:06d}"

@@ -15,6 +15,7 @@ db.sqlite3
 
 # Media files (uploaded media)
 /media/
+/private_media/
 # If media is stored outside project folder, add its path explicitly
 
 # Static files

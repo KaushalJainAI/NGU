@@ -234,11 +234,37 @@ Backend/
 
 ## Running Tests
 
+The project uses `pytest` for all unit, integration, and E2E tests.
+
+### 1. Run unit and integration tests (SQLite in-memory)
+By default, tests run against an in-memory SQLite database. This is fast and requires no external services:
 ```bash
-python manage.py test
-# or with pytest:
 pytest
 ```
+*Note: SQLite does not support true concurrency row-level locking. The test `orders/test_concurrency.py::test_G5_single_use_coupon_not_over_redeemed` will fail under SQLite due to database table locks.*
+
+### 2. Run tests against PostgreSQL (Recommended)
+To run the full test suite, including database concurrency checks under realistic production-style conditions:
+1. Start the PostgreSQL test database container:
+   ```bash
+   docker compose up -d db
+   ```
+2. Run pytest with the `TEST_DB` env variable set to `postgres`:
+   ```bash
+   # On macOS/Linux:
+   TEST_DB=postgres pytest
+   
+   # On Windows PowerShell:
+   $env:TEST_DB="postgres"; pytest
+   ```
+
+### 3. Run the complete E2E & Security Audit
+The project includes a test pyramid orchestrator that migrates a temporary DB, seeds a test catalog, launches a local server, and runs both unit and E2E/security test suites:
+```bash
+# From the repository root
+Backend/venv/Scripts/python testing/tools/run_full_audit.py
+```
+This generates a consolidated test run transcript at `testing/reports/session_transcript.txt`.
 
 ---
 

@@ -1,8 +1,33 @@
 from django.db import models
 from django.conf import settings
+from django.core.files.storage import FileSystemStorage
 from products.models import Product, ProductVariant
 from admin_panel.models import Coupon  # Add this import
 import uuid
+
+
+def delivery_bill_storage():
+    """LOCAL filesystem storage for the admin-only delivery bill.
+
+    Returned as a callable so migrations reference this function (not a baked-in
+    absolute path). It forces local disk regardless of the Cloudinary/S3 default
+    media backend, into `PRIVATE_MEDIA_ROOT` — a directory that is NOT served
+    over any URL. The bill is therefore only ever reachable by streaming through
+    the staff-gated `delivery_bill` endpoint, never via a public CDN URL, and
+    arbitrary types (PDF included) are stored verbatim.
+    """
+    return FileSystemStorage(location=settings.PRIVATE_MEDIA_ROOT, base_url=None)
+
+
+def delivery_bill_upload_path(instance, filename):
+    """Obscured, per-order path for the admin-only delivery bill.
+
+    The file is never served from its storage URL — only streamed through the
+    admin-gated `delivery_bill` endpoint — but a UUID filename keeps the object
+    key unguessable as defence in depth.
+    """
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'bin'
+    return f"delivery_bills/order_{instance.id or 'new'}/{uuid.uuid4().hex}.{ext}"
 
 
 class Order(models.Model):
@@ -64,6 +89,17 @@ class Order(models.Model):
     # Shipment tracking (set by admin once the parcel is dispatched). Adding a
     # value triggers a "your order is on its way" email to the customer.
     tracking_number = models.CharField(max_length=100, blank=True, default='')
+
+    # Delivery bill (admin-only). A scan/photo/PDF of the courier or delivery
+    # receipt the admin uploads for their own records. Deliberately NOT exposed
+    # in any customer-facing serializer or storage URL — it is streamed only
+    # through the staff-gated `delivery_bill` endpoint.
+    delivery_bill = models.FileField(
+        upload_to=delivery_bill_upload_path, storage=delivery_bill_storage,
+        blank=True, null=True,
+        help_text="Admin-only courier/delivery receipt. Never shown to customers.",
+    )
+    delivery_bill_uploaded_at = models.DateTimeField(blank=True, null=True)
 
     # Soft delete (Recycle Bin). A deleted order is hidden from the normal admin
     # list but retained so it can be restored. Distinct from 'cancelled' status:

@@ -377,3 +377,173 @@ def generate_invoice_pdf(order) -> bytes:
 
     doc.build(el)
     return buf.getvalue()
+
+
+def generate_packing_slip_pdf(order) -> bytes:
+    """Render a print-friendly packing slip for the given Order.
+
+    Unlike the tax invoice this is a warehouse/courier document: big shipping
+    address (readable when stuck on a parcel), the item list with quantities,
+    and — for COD — the amount to collect. No unit prices or tax breakdown.
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (
+        SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    )
+
+    BRAND = colors.HexColor("#B91C1C")
+    DARK = colors.HexColor("#1F2937")
+    MUTED = colors.HexColor("#6B7280")
+    LIGHT = colors.HexColor("#F7F3F2")
+    LINE = colors.HexColor("#E5E7EB")
+
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle("BrandW", fontName="Helvetica-Bold", fontSize=20,
+                              textColor=colors.white, leading=23))
+    styles.add(ParagraphStyle("TitleW", fontName="Helvetica-Bold", fontSize=15,
+                              textColor=colors.white, alignment=2, leading=18))
+    styles.add(ParagraphStyle("SectionLabel", fontName="Helvetica-Bold", fontSize=8,
+                              textColor=BRAND, leading=11))
+    styles.add(ParagraphStyle("AddrName", fontName="Helvetica-Bold", fontSize=14,
+                              textColor=DARK, leading=18))
+    styles.add(ParagraphStyle("AddrBig", fontName="Helvetica", fontSize=12,
+                              textColor=DARK, leading=17))
+    styles.add(ParagraphStyle("N", fontName="Helvetica", fontSize=10,
+                              textColor=DARK, leading=14))
+    styles.add(ParagraphStyle("Nm", fontName="Helvetica", fontSize=8.5,
+                              textColor=MUTED, leading=12))
+    styles.add(ParagraphStyle("CodW", fontName="Helvetica-Bold", fontSize=13,
+                              textColor=colors.white, leading=16))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=16 * mm, rightMargin=16 * mm,
+                            topMargin=14 * mm, bottomMargin=14 * mm,
+                            title=f"Packing Slip {_order_number(order)}")
+    el = []
+
+    header = Table([[
+        Paragraph(SELLER_NAME, styles["BrandW"]),
+        Paragraph("PACKING SLIP", styles["TitleW"]),
+    ]], colWidths=[108 * mm, 70 * mm])
+    header.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), BRAND),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 14),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 14),
+        ("TOPPADDING", (0, 0), (-1, -1), 11),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 11),
+    ]))
+    el.append(header)
+
+    meta = Table([[
+        Paragraph(f"<b>Order:</b> {_order_number(order)}", styles["N"]),
+        Paragraph(f"<b>Date:</b> {order.created_at.strftime('%d %b %Y')}", styles["N"]),
+        Paragraph(f"<b>Items:</b> {sum(i.quantity for i in order.items.all())}", styles["N"]),
+    ]], colWidths=[59 * mm, 59 * mm, 60 * mm])
+    meta.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    el.append(meta)
+    el.append(Spacer(1, 12))
+
+    # ---- SHIP TO — deliberately large so it can be cut out / photographed ----
+    ship_addr = (order.shipping_address or "").replace("\n", "<br/>")
+    ship_block = [
+        Paragraph("SHIP TO", styles["SectionLabel"]),
+        Spacer(1, 4),
+        Paragraph(_customer_name(order.user), styles["AddrName"]),
+        Paragraph(ship_addr or "-", styles["AddrBig"]),
+        Spacer(1, 4),
+        Paragraph(f"Phone: {order.phone_number or '-'}", styles["AddrName"]),
+    ]
+    from_block = [
+        Paragraph("FROM", styles["SectionLabel"]),
+        Spacer(1, 4),
+        Paragraph(SELLER_NAME, styles["N"]),
+        Paragraph(SELLER_ADDRESS, styles["Nm"]),
+        Paragraph(f"{SELLER_PHONE}", styles["Nm"]),
+    ]
+    party = Table([[ship_block, from_block]], colWidths=[110 * mm, 68 * mm])
+    party.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("BOX", (0, 0), (0, 0), 1.2, DARK),
+        ("BOX", (1, 0), (1, 0), 0.6, LINE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+    el.append(party)
+    el.append(Spacer(1, 12))
+
+    # ---- COD box: the one number the courier must collect ----
+    is_cod = (order.payment_method or "").upper() == "COD"
+    is_paid = (order.payment_status or "").lower() == "paid"
+    if is_cod and not is_paid:
+        cod = Table([[Paragraph(
+            f"CASH ON DELIVERY — COLLECT {_money(order.total_amount)}",
+            styles["CodW"])]], colWidths=[178 * mm])
+        cod.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#B45309")),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+    else:
+        cod = Table([[Paragraph(
+            "PREPAID — DO NOT COLLECT ANY MONEY", styles["CodW"])]],
+            colWidths=[178 * mm])
+        cod.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#047857")),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ]))
+    el.append(cod)
+    el.append(Spacer(1, 12))
+
+    # ---- Items to pack (checklist, no prices) ----
+    rows = [["#", "Item", "Pack", "Qty", "Packed?"]]
+    for i, item in enumerate(order.items.all(), 1):
+        rows.append([
+            str(i),
+            Paragraph(item.product_name, styles["N"]),
+            item.product_weight or "-",
+            str(item.quantity),
+            "[   ]",
+        ])
+    tbl = Table(rows, colWidths=[10 * mm, 96 * mm, 26 * mm, 20 * mm, 26 * mm],
+                repeatRows=1)
+    tbl.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE", (0, 1), (-1, -1), 10),
+        ("ALIGN", (2, 0), (-1, -1), "CENTER"),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT]),
+        ("LINEBELOW", (0, 1), (-1, -1), 0.4, LINE),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    el.append(tbl)
+    el.append(Spacer(1, 14))
+
+    el.append(HRFlowable(width="100%", thickness=0.5, color=LINE))
+    el.append(Spacer(1, 6))
+    el.append(Paragraph(
+        "Packing slip — not an invoice. Prices are on the tax invoice.",
+        styles["Nm"]))
+
+    doc.build(el)
+    return buf.getvalue()

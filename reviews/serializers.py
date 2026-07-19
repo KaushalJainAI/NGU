@@ -12,8 +12,10 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'item_type', 'product', 'combo', 'user', 'user_name', 'item_name',
-                  'rating', 'title', 'comment', 'is_verified_purchase', 'created_at']
-        read_only_fields = ['user', 'is_verified_purchase', 'item_name']
+                  'rating', 'title', 'comment', 'is_verified_purchase', 'is_hidden', 'created_at']
+        # is_hidden is moderation state: changed only via the staff-only
+        # hide/unhide action, never through a normal review create/update.
+        read_only_fields = ['user', 'is_verified_purchase', 'item_name', 'is_hidden']
     
     def validate(self, data):
         # Be partial-update aware: on a PATCH that only edits rating/comment the

@@ -240,6 +240,13 @@ if USE_CLOUDINARY:
         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
     }
 
+# Private media root: LOCAL filesystem storage for admin-only files (e.g. order
+# delivery bills) that must never be reachable by customers. Deliberately NOT
+# under STATIC_ROOT/MEDIA_ROOT and not exposed via any URL — files here are only
+# ever streamed through a staff-gated endpoint. In containers this should be a
+# mounted volume so the files survive redeploys.
+PRIVATE_MEDIA_ROOT = config('PRIVATE_MEDIA_ROOT', default=str(BASE_DIR / 'private_media'))
+
 # File Upload Configuration.
 # DATA_UPLOAD_MAX_MEMORY_SIZE caps non-file request bodies (JSON/form fields) held
 # in memory — kept small (10MB) so a malicious oversized JSON payload can't exhaust
@@ -447,6 +454,9 @@ RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
 PAYMENT_STUCK_TTL_MINUTES = config('PAYMENT_STUCK_TTL_MINUTES', default=15, cast=int)
 # Address that receives payment exception alerts; falls back to EMAIL_HOST_USER.
 PAYMENT_ALERT_EMAIL = config('PAYMENT_ALERT_EMAIL', default='') or config('EMAIL_HOST_USER', default='')
+# Address that receives store-owner notifications (new orders, daily low-stock
+# digest, weekly summary); falls back to EMAIL_HOST_USER like PAYMENT_ALERT_EMAIL.
+ADMIN_ALERT_EMAIL = config('ADMIN_ALERT_EMAIL', default='') or config('EMAIL_HOST_USER', default='')
 
 # Background scheduler cadence (see `manage.py run_scheduler`). Reconcile runs
 # often enough that an abandoned checkout is cancelled within one interval of the

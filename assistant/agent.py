@@ -16,8 +16,9 @@ import os
 
 from dotenv import load_dotenv
 
-from .prompts import SYSTEM_PROMPT, FALLBACK_REPLY, language_directive
+from .prompts import SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT, FALLBACK_REPLY, language_directive
 from . import tools as toolkit
+from . import admin_tools
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -117,13 +118,31 @@ def _spotlight(label, data):
 
 
 class Agent:
-    def __init__(self, user, completion=None):
+    def __init__(self, user, completion=None, persona='customer'):
         """`user` is the authenticated user (or AnonymousUser/None).
         `completion` is an optional callable(messages)->str for tests; if not
-        given, the real LLM is used."""
+        given, the real LLM is used.
+        `persona` selects the toolset + system prompt: 'customer' (default) uses
+        the public/user-scoped tools; 'admin' uses the read-only reporting tools
+        (admin_tools) and MUST only be constructed from an IsAdminUser endpoint —
+        those tools read across all customers/orders."""
         self.user = user if (user is not None and getattr(user, 'is_authenticated', False)) else None
         self._completion = completion
         self._llm = None if completion else _build_llm()
+
+        self.persona = persona
+        if persona == 'admin':
+            self._system_prompt = ADMIN_SYSTEM_PROMPT
+            self._read_tools = admin_tools.ADMIN_READ_TOOLS
+            self._run_read_tool = admin_tools.run_admin_read_tool
+            self._action_builders = {}          # admin assistant is read-only
+            self._build_action = None
+        else:
+            self._system_prompt = SYSTEM_PROMPT
+            self._read_tools = toolkit.READ_TOOLS
+            self._run_read_tool = toolkit.run_read_tool
+            self._action_builders = toolkit.ACTION_BUILDERS
+            self._build_action = toolkit.build_action
 
     @property
     def llm_available(self):
@@ -149,7 +168,7 @@ class Agent:
                     'sources': sources, 'escalate': True, 'llm_used': False}
 
         # Build the message list: system + language directive + history + new turn.
-        system_text = SYSTEM_PROMPT + '\n\n' + language_directive(language)
+        system_text = self._system_prompt + '\n\n' + language_directive(language)
         messages = [('system', system_text)]
 
         # Token-budgeted history: keep as many of the most recent turns as fit
@@ -200,15 +219,15 @@ class Agent:
             args = env.get('args') if isinstance(env.get('args'), dict) else {}
 
             # READ tool requested -> execute, feed observation back as DATA.
-            if tool and tool in toolkit.READ_TOOLS:
-                observation = toolkit.run_read_tool(tool, self.user, args)
+            if tool and tool in self._read_tools:
+                observation = self._run_read_tool(tool, self.user, args)
                 sources.append({'tool': tool, 'args': args})
                 messages.append(('assistant', json.dumps(env, ensure_ascii=False)))
                 messages.append(('user', _spotlight(tool, observation)))
                 continue
 
             # Unknown/invalid tool name -> tell the model, don't execute.
-            if tool and tool not in toolkit.READ_TOOLS:
+            if tool and tool not in self._read_tools:
                 messages.append((
                     'user',
                     f'"{tool}" is not a valid read tool. Use only the listed tools '
@@ -261,9 +280,9 @@ class Agent:
         if not isinstance(proposed, dict):
             return None, False
         name = proposed.get('tool')
-        if name not in toolkit.ACTION_BUILDERS:
+        if name not in self._action_builders or self._build_action is None:
             return None, False
-        action, _err = toolkit.build_action(name, self.user, proposed.get('args') or {})
+        action, _err = self._build_action(name, self.user, proposed.get('args') or {})
         if action is None:
             return None, False
         escalate = action.get('type') == 'escalate_to_human'

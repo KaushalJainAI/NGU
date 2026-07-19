@@ -20,6 +20,9 @@ class Review(models.Model):
     title = models.CharField(max_length=200)
     comment = models.TextField(blank=True, default='')
     is_verified_purchase = models.BooleanField(default=False)
+    # Admin moderation: hidden reviews stay in the DB (and the customer can
+    # still see their own) but are excluded from public product pages.
+    is_hidden = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

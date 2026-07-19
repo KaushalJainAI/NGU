@@ -82,10 +82,11 @@ def _on_commit_customer_email(kind, order_id):
 def _on_commit_order_confirmation(order_id):
     def _fire():
         try:
-            from orders.emails import send_order_confirmation
+            from orders.emails import send_order_confirmation, send_new_order_admin_alert
             order = Order.objects.filter(pk=order_id).first()
             if order:
                 send_order_confirmation(order)
+                send_new_order_admin_alert(order)
         except Exception:  # noqa: BLE001
             logger.exception("Failed to send order confirmation for order %s", order_id)
     transaction.on_commit(_fire)

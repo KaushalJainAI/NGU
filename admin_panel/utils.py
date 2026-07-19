@@ -1,6 +1,57 @@
 import qrcode
 from io import BytesIO
 import base64
+import csv
+
+from django.http import StreamingHttpResponse
+
+
+# Leading characters that spreadsheet apps (Excel/LibreOffice) treat as the
+# start of a formula. Customer-controlled text (names, addresses, phone) ends up
+# in these exports, so a value like `=HYPERLINK(...)` or `@SUM(...)` would run
+# when the admin opens the file. We neutralise it by prefixing a single quote.
+_CSV_FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _csv_safe(value):
+    """Neutralise CSV formula-injection: escape any cell that a spreadsheet
+    would evaluate as a formula. Non-string values pass through as text."""
+    s = '' if value is None else str(value)
+    if s and s[0] in _CSV_FORMULA_PREFIXES:
+        return "'" + s
+    return s
+
+
+class _EchoWriter:
+    """File-like object whose write() just returns the value — lets csv.writer
+    produce one encoded line at a time for StreamingHttpResponse."""
+    def write(self, value):
+        return value
+
+
+def csv_response(filename, header, rows):
+    """Build a downloadable CSV as a streaming response.
+
+    `header` is a list of column titles; `rows` is an iterable of lists/tuples
+    already matching the header order. A UTF-8 BOM is streamed first so Excel on
+    Windows opens Indian text and the ₹ symbol correctly (without it Excel
+    mis-decodes UTF-8). Every cell is passed through `_csv_safe` to prevent
+    formula injection from user-controlled data. Used by the admin export
+    buttons (orders/products/customers) — never paginated: whatever queryset is
+    passed is fully written, streamed row by row so a large table doesn't buffer
+    the whole file in memory.
+    """
+    writer = csv.writer(_EchoWriter())
+
+    def stream():
+        yield '﻿'  # BOM for Excel
+        yield writer.writerow([_csv_safe(h) for h in header])
+        for row in rows:
+            yield writer.writerow([_csv_safe(cell) for cell in row])
+
+    response = StreamingHttpResponse(stream(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
 
 def generate_upi_qr_code(account, amount=None, transaction_note="Payment"):
     """
@@ -46,4 +97,4 @@ def generate_upi_qr_code(account, amount=None, transaction_note="Payment"):
     # Encode image to base64 to embed or send over APIs
     qr_base64 = base64.b64encode(buffer.read()).decode("utf-8")
     
-    return qr_base64, upi_uri
+    return qr_base64, upi_url

@@ -1,7 +1,8 @@
 """
 Order notification emails.
 
-Two customer-facing emails live here:
+Three order emails live here (two customer-facing, one for the store owner —
+`send_new_order_admin_alert`):
 
 1. `send_order_confirmation(order)` — fired the moment an order is successfully
    placed. Gives the customer their order number and a summary so they can find
@@ -134,6 +135,41 @@ def send_order_confirmation(order):
 
     _send_async(
         subject=f"Order Confirmed — {number} | Nidhi Masala",
+        message=message,
+        recipient=recipient,
+    )
+
+
+def send_new_order_admin_alert(order):
+    """Tell the store owner a new order just arrived (sent to ADMIN_ALERT_EMAIL).
+
+    Written for a non-technical reader: what was ordered, who by, how they're
+    paying, and where to act on it — nothing else.
+    """
+    recipient = getattr(settings, 'ADMIN_ALERT_EMAIL', '') or None
+    if not recipient:
+        return
+
+    number = _order_number(order)
+    summary = _items_summary(order)
+    user = getattr(order, 'user', None)
+    customer = getattr(user, 'name', '') or getattr(user, 'email', '') or 'Customer'
+    phone = (getattr(order, 'phone_number', '') or '').strip()
+    payment = 'Cash on Delivery' if order.payment_method == 'COD' else 'Paid online'
+
+    message = (
+        f"You have a new order!\n\n"
+        f"Order: {number}\n"
+        f"Customer: {customer}" + (f" ({phone})" if phone else "") + "\n"
+        f"Payment: {payment}\n"
+        f"Total: Rs. {order.total_amount}\n\n"
+        f"Items:\n{summary}\n\n"
+        f"Deliver to:\n{order.shipping_address}\n\n"
+        f"Open the admin panel to confirm this order.\n"
+    )
+
+    _send_async(
+        subject=f"New order {number} — Rs. {order.total_amount}",
         message=message,
         recipient=recipient,
     )

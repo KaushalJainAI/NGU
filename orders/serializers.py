@@ -84,6 +84,10 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, source="total_amount"
     )
+    # Admin-only metadata: whether a delivery bill has been uploaded and when.
+    # Only a boolean + timestamp are exposed — never the storage URL — so this is
+    # harmless even on a customer's own order response.
+    has_delivery_bill = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -102,12 +106,17 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "payment_status",
             "tracking_number",
             "coupon_code",
+            "has_delivery_bill",
+            "delivery_bill_uploaded_at",
             "created_at",
             "updated_at",
         ]
 
     def get_order_number(self, obj):
         return f"ORD-{obj.id:06d}"
+
+    def get_has_delivery_bill(self, obj):
+        return bool(obj.delivery_bill)
 
 
 # ----- List serializer (richer, matches frontend Order interface) -----
@@ -126,6 +135,10 @@ class OrderListSerializer(serializers.ModelSerializer):
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, source="total_amount"
     )
+    # Admin-only: the staff order list is the admin dashboard, so surface whether
+    # a delivery bill exists (boolean + timestamp only, never the URL) to drive
+    # the "View bill" vs "Upload bill" state in the admin UI.
+    has_delivery_bill = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -145,12 +158,17 @@ class OrderListSerializer(serializers.ModelSerializer):
             "payment_method",
             "payment_status",
             "tracking_number",
+            "has_delivery_bill",
+            "delivery_bill_uploaded_at",
             "created_at",
             "updated_at",
             "coupon_code",
             "is_deleted",
             "deleted_at",
         ]
+
+    def get_has_delivery_bill(self, obj):
+        return bool(obj.delivery_bill)
 
     def get_order_number(self, obj):
         return f"ORD-{obj.id:06d}"
