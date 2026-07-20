@@ -78,7 +78,8 @@ class Command(BaseCommand):
                         razorpay_order_id=payment.payment_id,
                         razorpay_payment_id=captured['id'],
                         source='reconcile', amount=captured.get('amount'),
-                        raw_payload={'reconcile': True, 'payment': captured})
+                        raw_payload={'reconcile': True, 'payment': captured},
+                        payment_entity=captured)
                     services.log_payment_event(
                         Payment.objects.filter(pk=payment.pk).first(),
                         event_type='recovered_paid', source='reconcile',

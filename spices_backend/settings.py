@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import timedelta
 import os
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -443,12 +444,64 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
 
 # Payment Gateway Settings
-RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
-RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
-# HMAC secret used to verify inbound Razorpay webhook signatures (raw body).
-# Blank until a webhook is registered in the dashboard; the handler rejects all
-# deliveries with 400 while blank (fail-closed).
-RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+#
+# Both key pairs live in the environment at once; RAZORPAY_TEST_MODE picks which
+# pair is active. Flipping that one flag and restarting is the whole switch — no
+# other module reads the TEST_/LIVE_ variables, they all consume the resolved
+# RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET below.
+#
+# The webhook secret is per-mode: test and live webhooks are separate endpoints
+# in the Razorpay dashboard with different signing secrets. It switches with the
+# keys here so a mode flip can't leave the handler verifying against the wrong
+# secret (which would fail-closed and silently reject every delivery).
+RAZORPAY_TEST_MODE = config('RAZORPAY_TEST_MODE', default=True, cast=bool)
+
+RAZORPAY_TEST_KEY_ID = config('RAZORPAY_TEST_KEY_ID', default='')
+RAZORPAY_TEST_KEY_SECRET = config('RAZORPAY_TEST_KEY_SECRET', default='')
+RAZORPAY_TEST_WEBHOOK_SECRET = config('RAZORPAY_TEST_WEBHOOK_SECRET', default='')
+
+RAZORPAY_LIVE_KEY_ID = config('RAZORPAY_LIVE_KEY_ID', default='')
+RAZORPAY_LIVE_KEY_SECRET = config('RAZORPAY_LIVE_KEY_SECRET', default='')
+RAZORPAY_LIVE_WEBHOOK_SECRET = config('RAZORPAY_LIVE_WEBHOOK_SECRET', default='')
+
+if RAZORPAY_TEST_MODE:
+    RAZORPAY_KEY_ID = RAZORPAY_TEST_KEY_ID
+    RAZORPAY_KEY_SECRET = RAZORPAY_TEST_KEY_SECRET
+    RAZORPAY_WEBHOOK_SECRET = RAZORPAY_TEST_WEBHOOK_SECRET
+else:
+    RAZORPAY_KEY_ID = RAZORPAY_LIVE_KEY_ID
+    RAZORPAY_KEY_SECRET = RAZORPAY_LIVE_KEY_SECRET
+    RAZORPAY_WEBHOOK_SECRET = RAZORPAY_LIVE_WEBHOOK_SECRET
+
+# Fall back to the flat pre-toggle names so an environment that hasn't been
+# migrated to TEST_/LIVE_ yet keeps working instead of booting with no gateway.
+if not RAZORPAY_KEY_ID:
+    RAZORPAY_KEY_ID = config('RAZORPAY_KEY_ID', default='')
+    RAZORPAY_KEY_SECRET = config('RAZORPAY_KEY_SECRET', default='')
+    RAZORPAY_WEBHOOK_SECRET = config('RAZORPAY_WEBHOOK_SECRET', default='')
+
+# Guardrail: the flag and the credential must agree. A `rzp_live_` key selected
+# while RAZORPAY_TEST_MODE=True means real cards get charged by a build that
+# believes it is in test mode, so refuse to boot rather than find out at checkout.
+if RAZORPAY_KEY_ID:
+    _is_live_key = RAZORPAY_KEY_ID.startswith('rzp_live_')
+    if RAZORPAY_TEST_MODE and _is_live_key:
+        raise ImproperlyConfigured(
+            "RAZORPAY_TEST_MODE=True but the active key is a live key "
+            f"({RAZORPAY_KEY_ID[:12]}...). Put test keys in RAZORPAY_TEST_KEY_ID "
+            "/ RAZORPAY_TEST_KEY_SECRET, or set RAZORPAY_TEST_MODE=False."
+        )
+    if not RAZORPAY_TEST_MODE and not _is_live_key:
+        raise ImproperlyConfigured(
+            "RAZORPAY_TEST_MODE=False but the active key is not a live key "
+            f"({RAZORPAY_KEY_ID[:12]}...). Set RAZORPAY_LIVE_KEY_ID to the "
+            "rzp_live_ key from the Razorpay dashboard."
+        )
+    if not RAZORPAY_TEST_MODE and DEBUG:
+        raise ImproperlyConfigured(
+            "Refusing to run live Razorpay keys with DEBUG=True — this would "
+            "charge real cards from a development server."
+        )
 # L3 reconciliation: an ONLINE order left unpaid longer than this is considered
 # abandoned and auto-cancelled (stock released) unless Razorpay shows it captured.
 PAYMENT_STUCK_TTL_MINUTES = config('PAYMENT_STUCK_TTL_MINUTES', default=15, cast=int)

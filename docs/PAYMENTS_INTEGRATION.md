@@ -43,10 +43,43 @@ A direct bank transfer flow — no gateway:
 7. On valid signature: `Order.payment_status` → `completed`; `Payment` record created
 
 **Configuration:**
+
+Both key pairs sit in the environment at once; `RAZORPAY_TEST_MODE` selects which
+one is live. Switching modes is a one-flag change plus a backend restart — no code
+or image rebuild.
+
 ```env
-RAZORPAY_KEY_ID=rzp_live_...
-RAZORPAY_KEY_SECRET=...
+RAZORPAY_TEST_MODE=True          # True = test keys, False = live keys
+
+RAZORPAY_TEST_KEY_ID=rzp_test_...
+RAZORPAY_TEST_KEY_SECRET=...
+RAZORPAY_TEST_WEBHOOK_SECRET=...
+
+RAZORPAY_LIVE_KEY_ID=rzp_live_...
+RAZORPAY_LIVE_KEY_SECRET=...
+RAZORPAY_LIVE_WEBHOOK_SECRET=...
 ```
+
+`settings.py` resolves the selected pair into `RAZORPAY_KEY_ID` /
+`RAZORPAY_KEY_SECRET` / `RAZORPAY_WEBHOOK_SECRET`, which is all the rest of the
+codebase reads. The flat names still work as a fallback for un-migrated
+environments.
+
+**The webhook secret switches with the mode.** Test and live webhooks are separate
+dashboard entries with different signing secrets. Because the handler is
+fail-closed, a mode flip that left the wrong secret in place would silently reject
+every delivery — pairing them here prevents that.
+
+**Boot guards** (all raise `ImproperlyConfigured` at startup, never at checkout):
+
+| Condition | Why it's blocked |
+|---|---|
+| `TEST_MODE=True` + `rzp_live_` key | Real cards charged by a build that thinks it's in test mode |
+| `TEST_MODE=False` + non-live key | Live checkout silently running on test credentials |
+| `TEST_MODE=False` + `DEBUG=True` | Live keys on a development server |
+
+Note the prefix check validates the *shape* of the key, not that the credential is
+real — a well-formed but wrong `rzp_live_` key still boots.
 
 ---
 

@@ -132,7 +132,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Admin/superusers can see all orders
         if user.is_staff or user.is_superuser:
             qs = Order.objects.all().prefetch_related(
-                'items__product', 'items__combo', 'items__variant').select_related('user')
+                'items__product', 'items__combo', 'items__variant'
+            ).select_related('user', 'payment')
             # Recycle Bin: only the `list` action honours the ?deleted flag, so
             # detail actions (restore/retrieve/update) can still reach a
             # soft-deleted order. Default list hides deleted orders; ?deleted=true

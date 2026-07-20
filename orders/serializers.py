@@ -70,6 +70,40 @@ class OrderItemListSerializer(serializers.ModelSerializer):
         return obj.price * obj.quantity
 
 
+# ----- Shared admin-only payment detail -----
+
+def _admin_payment_detail(order, request):
+    """Return the Razorpay payment detail for an order — but ONLY for staff.
+
+    Customers keep seeing just `payment_method`/`payment_status`; this nested
+    object (transaction id + instrument + failure reason) is admin-panel only.
+    Returns None for non-staff requests and for orders with no Payment row
+    (e.g. COD). The instrument fields are populated from the webhook — see
+    payments.services._extract_instrument_details.
+    """
+    if not (request and request.user and
+            (request.user.is_staff or request.user.is_superuser)):
+        return None
+    pay = getattr(order, 'payment', None)  # OneToOne reverse; may not exist
+    if pay is None:
+        return None
+    details = pay.transaction_details or {}
+    return {
+        'gateway': pay.payment_gateway,
+        'status': pay.status,
+        'razorpay_payment_id': pay.razorpay_payment_id,
+        'method': details.get('method'),
+        'vpa': details.get('vpa'),
+        'card_last4': details.get('card_last4'),
+        'card_network': details.get('card_network'),
+        'card_type': details.get('card_type'),
+        'bank': details.get('bank'),
+        'wallet': details.get('wallet'),
+        'failure_code': pay.failure_code,
+        'failure_reason': pay.failure_reason,
+    }
+
+
 # ----- Detail serializer (full) -----
 
 class OrderDetailSerializer(serializers.ModelSerializer):
@@ -88,6 +122,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     # Only a boolean + timestamp are exposed — never the storage URL — so this is
     # harmless even on a customer's own order response.
     has_delivery_bill = serializers.SerializerMethodField()
+    # Admin-only nested Razorpay payment detail (None for customers / COD).
+    payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -104,6 +140,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "phone_number",
             "payment_method",
             "payment_status",
+            "payment",
             "tracking_number",
             "coupon_code",
             "has_delivery_bill",
@@ -117,6 +154,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
     def get_has_delivery_bill(self, obj):
         return bool(obj.delivery_bill)
+
+    def get_payment(self, obj):
+        return _admin_payment_detail(obj, self.context.get('request'))
 
 
 # ----- List serializer (richer, matches frontend Order interface) -----
@@ -139,6 +179,10 @@ class OrderListSerializer(serializers.ModelSerializer):
     # a delivery bill exists (boolean + timestamp only, never the URL) to drive
     # the "View bill" vs "Upload bill" state in the admin UI.
     has_delivery_bill = serializers.SerializerMethodField()
+    # Admin-only nested Razorpay payment detail (None for customers / COD). The
+    # admin panel renders its order-detail dialog from the list response, so the
+    # detail must be present here.
+    payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -157,6 +201,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             "phone_number",
             "payment_method",
             "payment_status",
+            "payment",
             "tracking_number",
             "has_delivery_bill",
             "delivery_bill_uploaded_at",
@@ -169,6 +214,9 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_has_delivery_bill(self, obj):
         return bool(obj.delivery_bill)
+
+    def get_payment(self, obj):
+        return _admin_payment_detail(obj, self.context.get('request'))
 
     def get_order_number(self, obj):
         return f"ORD-{obj.id:06d}"

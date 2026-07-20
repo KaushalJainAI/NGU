@@ -420,14 +420,15 @@ def _dispatch_webhook_event(event_type, payload, event_id):
             razorpay_order_id=pay.get('order_id'),
             razorpay_payment_id=pay.get('id'),
             event_id=event_id, source='webhook',
-            amount=pay.get('amount'), raw_payload=payload)
+            amount=pay.get('amount'), raw_payload=payload,
+            payment_entity=pay)
     elif event_type == 'payment.failed':
         pay = entity.get('payment', {}).get('entity', {})
         err = pay.get('error_code') or pay.get('error_reason')
         services.mark_payment_failed(
             razorpay_order_id=pay.get('order_id'), event_id=event_id, source='webhook',
             error_code=err, error_description=pay.get('error_description'),
-            raw_payload=payload)
+            raw_payload=payload, payment_entity=pay)
     elif event_type == 'refund.processed':
         refund = entity.get('refund', {}).get('entity', {})
         services.mark_payment_refunded(

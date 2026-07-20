@@ -128,19 +128,61 @@ def _lock_order_and_payment(razorpay_order_id=None, payment_pk=None,
     return order, payment
 
 
+def _extract_instrument_details(entity):
+    """Whitelist the display-safe instrument fields from a Razorpay payment
+    entity (webhook `payment.entity` or a reconcile-fetched payment dict).
+
+    Deliberately excludes contact/email (PII) and fee/tax — the admin only needs
+    to see *how* the customer paid. Returns {} when there's nothing usable so
+    callers can cheaply skip a write.
+    """
+    if not entity:
+        return {}
+    method = entity.get('method')
+    details = {'method': method}
+    if method == 'upi':
+        details['vpa'] = entity.get('vpa')
+    elif method == 'card':
+        card = entity.get('card') or {}
+        details['card_last4'] = card.get('last4')
+        details['card_network'] = card.get('network')
+        details['card_type'] = card.get('type')  # credit / debit
+    elif method == 'netbanking':
+        details['bank'] = entity.get('bank')
+    elif method == 'wallet':
+        details['wallet'] = entity.get('wallet')
+    return {k: v for k, v in details.items() if v is not None}
+
+
 def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
                           event_id=None, source='webhook', amount=None,
-                          raw_payload=None):
+                          raw_payload=None, payment_entity=None):
     """Idempotently record a captured payment and confirm its order.
 
     Returns the Payment. Safe to call any number of times from verify, webhook
     (incl. redeliveries), and the reconciliation job.
+
+    `payment_entity` is the raw Razorpay payment dict when the caller has it (the
+    webhook and reconcile do; the client `/verify/` callback does not). Its
+    instrument fields (method / vpa / card / bank / wallet) are merged into
+    `transaction_details` on EVERY path — including the terminal-status early
+    return — so a webhook that lands after `/verify/` already completed the
+    payment still backfills the "how they paid" detail.
     """
     with transaction.atomic():
         order, payment = _lock_order_and_payment(razorpay_order_id=razorpay_order_id)
+        details_update = _extract_instrument_details(payment_entity)
 
-        # Idempotency guard — a terminal payment is a no-op.
+        # Idempotency guard — a terminal payment is a no-op for state, but we
+        # still merge any newly-arrived instrument details (see docstring).
         if payment.status in ('completed', 'refunded'):
+            if details_update and any(
+                (payment.transaction_details or {}).get(k) != v
+                for k, v in details_update.items()
+            ):
+                payment.transaction_details = {**(payment.transaction_details or {}),
+                                               **details_update}
+                payment.save(update_fields=['transaction_details', 'updated_at'])
             _record_processed_event(event_id, 'payment.captured')
             log_payment_event(payment, event_type='duplicate_ignored', source=source,
                               message=f"Capture ignored; status already {payment.status}.",
@@ -174,7 +216,8 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
             payment.status = 'completed'
             payment.razorpay_payment_id = razorpay_payment_id
             payment.transaction_details = {**(payment.transaction_details or {}),
-                                           'razorpay_payment_id': razorpay_payment_id}
+                                           'razorpay_payment_id': razorpay_payment_id,
+                                           **details_update}
             payment.save(update_fields=['status', 'razorpay_payment_id',
                                         'transaction_details', 'updated_at'])
             log_payment_event(
@@ -191,7 +234,8 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
         payment.status = 'completed'
         payment.razorpay_payment_id = razorpay_payment_id
         payment.transaction_details = {**(payment.transaction_details or {}),
-                                       'razorpay_payment_id': razorpay_payment_id}
+                                       'razorpay_payment_id': razorpay_payment_id,
+                                       **details_update}
         payment.save(update_fields=['status', 'razorpay_payment_id',
                                     'transaction_details', 'updated_at'])
 
@@ -221,9 +265,13 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
 
 
 def mark_payment_failed(razorpay_order_id, event_id=None, source='webhook',
-                        error_code=None, error_description=None, raw_payload=None):
+                        error_code=None, error_description=None, raw_payload=None,
+                        payment_entity=None):
     """Record a failed payment. Out-of-order safe: only applies when the payment
-    is still `pending` — never downgrades a completed/refunded payment."""
+    is still `pending` — never downgrades a completed/refunded payment.
+
+    Instrument details (which method the customer tried) are merged in too, so
+    the admin can see e.g. "tried UPI and it failed"."""
     with transaction.atomic():
         order, payment = _lock_order_and_payment(razorpay_order_id=razorpay_order_id)
 
@@ -238,10 +286,15 @@ def mark_payment_failed(razorpay_order_id, event_id=None, source='webhook',
             _record_processed_event(event_id, 'payment.failed')
             return payment
 
+        details_update = _extract_instrument_details(payment_entity)
         payment.status = 'failed'
         payment.failure_code = (error_code or '')[:64] or None
         payment.failure_reason = (error_description or '')[:255] or None
-        payment.save(update_fields=['status', 'failure_code', 'failure_reason', 'updated_at'])
+        if details_update:
+            payment.transaction_details = {**(payment.transaction_details or {}),
+                                           **details_update}
+        payment.save(update_fields=['status', 'failure_code', 'failure_reason',
+                                    'transaction_details', 'updated_at'])
 
         order.payment_status = 'failed'
         order.save(update_fields=['payment_status', 'updated_at'])

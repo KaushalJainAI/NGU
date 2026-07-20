@@ -439,6 +439,149 @@ class TestCancelPaidOrder:
         assert order.status == 'confirmed'  # not cancelled
 
 
+# --------------------------------------------------------------------------- #
+# Instrument details (how the customer paid) + admin-only exposure
+# --------------------------------------------------------------------------- #
+
+def _entity(order_id='order_RZP123', pay_id='pay_WH', amount=23600, **extra):
+    return {'id': pay_id, 'order_id': order_id, 'amount': amount,
+            'status': 'captured', **extra}
+
+
+@pytest.mark.django_db
+class TestInstrumentDetails:
+    """The webhook carries method/vpa/card/bank/wallet; we persist a whitelisted
+    subset into Payment.transaction_details for the admin panel."""
+
+    def test_upi_details_stored(self, order, pending_payment):
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_WH', event_id='ei1', source='webhook',
+            payment_entity=_entity(method='upi', vpa='cust@okhdfcbank'))
+        pending_payment.refresh_from_db()
+        assert pending_payment.transaction_details['method'] == 'upi'
+        assert pending_payment.transaction_details['vpa'] == 'cust@okhdfcbank'
+
+    def test_card_details_stored(self, order, pending_payment):
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_WH', event_id='ei2', source='webhook',
+            payment_entity=_entity(
+                method='card',
+                card={'last4': '4242', 'network': 'Visa', 'type': 'credit'}))
+        pending_payment.refresh_from_db()
+        d = pending_payment.transaction_details
+        assert d['method'] == 'card' and d['card_last4'] == '4242'
+        assert d['card_network'] == 'Visa' and d['card_type'] == 'credit'
+
+    def test_netbanking_and_wallet(self, test_user):
+        for method, key, value, oid in (('netbanking', 'bank', 'HDFC', 'order_NB'),
+                                        ('wallet', 'wallet', 'paytm', 'order_WL')):
+            o = _make_order(test_user)
+            p = Payment.objects.create(order=o, payment_id=oid,
+                                       payment_gateway='razorpay',
+                                       amount=o.total_amount, status='pending')
+            services.mark_payment_captured(
+                oid, f'pay_{method}', source='webhook',
+                payment_entity=_entity(order_id=oid, method=method, **{key: value}))
+            p.refresh_from_db()
+            assert p.transaction_details[key] == value
+
+    def test_no_entity_leaves_details_minimal(self, order, pending_payment):
+        """The client /verify/ path has no entity — nothing to merge, no crash."""
+        services.mark_payment_captured('order_RZP123', 'pay_ABC', source='client')
+        pending_payment.refresh_from_db()
+        assert pending_payment.transaction_details == {'razorpay_payment_id': 'pay_ABC'}
+
+    def test_webhook_backfills_details_after_verify_completed(self, order, pending_payment):
+        """THE ordering case: /verify/ (no entity) completes the payment first, so
+        the later webhook hits the terminal-status guard — it must STILL merge the
+        instrument details it carries, or the admin never learns how they paid."""
+        services.mark_payment_captured('order_RZP123', 'pay_ABC', source='client')
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_ABC', event_id='ei3', source='webhook',
+            payment_entity=_entity(pay_id='pay_ABC', method='upi', vpa='late@okaxis'))
+        pending_payment.refresh_from_db()
+        assert pending_payment.status == 'completed'
+        assert pending_payment.transaction_details['method'] == 'upi'
+        assert pending_payment.transaction_details['vpa'] == 'late@okaxis'
+        # Still exactly one real capture — the backfill must not double-confirm.
+        assert PaymentEvent.objects.filter(
+            payment=pending_payment, event_type='captured').count() == 1
+
+    def test_failed_payment_records_attempted_method(self, order, pending_payment):
+        services.mark_payment_failed(
+            'order_RZP123', event_id='eif', source='webhook',
+            error_code='BAD_REQUEST_ERROR', error_description='UPI timeout',
+            payment_entity=_entity(method='upi', vpa='oops@okicici'))
+        pending_payment.refresh_from_db()
+        assert pending_payment.status == 'failed'
+        assert pending_payment.failure_reason == 'UPI timeout'
+        assert pending_payment.transaction_details['method'] == 'upi'
+
+    def test_webhook_end_to_end_populates_details(
+            self, settings, api_client, order, pending_payment):
+        settings.RAZORPAY_WEBHOOK_SECRET = 'whsec'
+        body = json.dumps({'event': 'payment.captured', 'payload': {'payment': {
+            'entity': _entity(method='upi', vpa='e2e@okhdfcbank')}}})
+        with patch('payments.views.get_razorpay_client', return_value=_mock_client(True)):
+            resp = api_client.post(self.url_webhook, body,
+                                   content_type='application/json',
+                                   HTTP_X_RAZORPAY_SIGNATURE='s',
+                                   HTTP_X_RAZORPAY_EVENT_ID='ei_e2e')
+        assert resp.status_code == 200
+        pending_payment.refresh_from_db()
+        assert pending_payment.transaction_details['vpa'] == 'e2e@okhdfcbank'
+
+    url_webhook = '/api/payments/webhook/'
+
+
+@pytest.mark.django_db
+class TestPaymentDetailVisibility:
+    """The nested `payment` object is admin-only."""
+
+    def test_admin_sees_payment_detail(self, admin_client, order, pending_payment):
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_WH', source='webhook',
+            payment_entity=_entity(method='upi', vpa='cust@okhdfcbank'))
+        resp = admin_client.get(f'/api/orders/{order.id}/')
+        assert resp.status_code == 200
+        pay = resp.data['payment']
+        assert pay is not None
+        assert pay['razorpay_payment_id'] == 'pay_WH'
+        assert pay['status'] == 'completed'
+        assert pay['method'] == 'upi' and pay['vpa'] == 'cust@okhdfcbank'
+
+    def test_customer_does_not_see_payment_detail(
+            self, authenticated_client, order, pending_payment):
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_WH', source='webhook',
+            payment_entity=_entity(method='upi', vpa='cust@okhdfcbank'))
+        resp = authenticated_client.get(f'/api/orders/{order.id}/')
+        assert resp.status_code == 200
+        assert resp.data['payment'] is None
+        # The coarse fields they always had are unaffected.
+        assert resp.data['payment_status'] == 'paid'
+
+    def test_admin_list_includes_payment_detail(self, admin_client, order, pending_payment):
+        services.mark_payment_captured(
+            'order_RZP123', 'pay_WH', source='webhook',
+            payment_entity=_entity(method='card',
+                                   card={'last4': '4242', 'network': 'Visa'}))
+        resp = admin_client.get('/api/orders/')
+        assert resp.status_code == 200
+        results = resp.data['results'] if 'results' in resp.data else resp.data
+        row = next(r for r in results if r['id'] == order.id)
+        assert row['payment']['card_last4'] == '4242'
+
+    def test_cod_order_has_null_payment(self, admin_client, test_user):
+        cod = Order.objects.create(
+            user=test_user, shipping_address='1 St', phone_number='9999999999',
+            payment_method='COD', payment_status='pending', status='pending',
+            subtotal=Decimal('200'), total_amount=Decimal('236'))
+        resp = admin_client.get(f'/api/orders/{cod.id}/')
+        assert resp.status_code == 200
+        assert resp.data['payment'] is None
+
+
 @pytest.mark.django_db
 class TestReconcileCommand:
     def _mock_client_with_capture(self, captured):
