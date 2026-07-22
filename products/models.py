@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from django.db.models import Sum, Avg, Count
 from django.core.files.base import ContentFile
-from spices_backend.validators import validate_file_size, validate_image_extension
+from spices_backend.validators import validate_file_size, validate_image_extension, validate_image_content
 from PIL import Image
 import io
 import os
@@ -114,7 +114,7 @@ class Category(models.Model):
         upload_to='categories/', 
         blank=True, 
         null=True,
-        validators=[validate_file_size, validate_image_extension]
+        validators=[validate_file_size, validate_image_extension, validate_image_content]
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -251,7 +251,7 @@ class Product(models.Model):
     # Media
     image = models.ImageField(
         upload_to='products/',
-        validators=[validate_file_size, validate_image_extension]
+        validators=[validate_file_size, validate_image_extension, validate_image_content]
     )
     thumbnail = models.ImageField(
         upload_to='products/thumbnails/',
@@ -566,7 +566,7 @@ class ProductImage(models.Model):
     )
     image = models.ImageField(
         upload_to='products/gallery/',
-        validators=[validate_file_size, validate_image_extension]
+        validators=[validate_file_size, validate_image_extension, validate_image_content]
     )
     alt_text = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -625,7 +625,7 @@ class ProductCombo(models.Model):
         upload_to='combos/',
         blank=True, 
         null=True,
-        validators=[validate_file_size, validate_image_extension]
+        validators=[validate_file_size, validate_image_extension, validate_image_content]
     )
     thumbnail = models.ImageField(
         upload_to='combos/thumbnails/',

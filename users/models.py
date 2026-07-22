@@ -1,6 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from spices_backend.validators import validate_file_size, validate_image_extension
+from spices_backend.validators import validate_file_size, validate_image_extension, validate_image_content
 
 
 class User(AbstractUser):
@@ -18,7 +18,7 @@ class User(AbstractUser):
         upload_to='profiles/', 
         blank=True, 
         null=True,
-        validators=[validate_file_size, validate_image_extension]
+        validators=[validate_file_size, validate_image_extension, validate_image_content]
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
