@@ -32,7 +32,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import ProtectedError
 from django.utils import timezone
 
-from orders.models import Order
+from orders.models import Order, OrderItem
 from products.models import Product, ProductCombo
 
 
@@ -87,8 +87,18 @@ class Command(BaseCommand):
         cutoff, skipping any protected by a historical order reference."""
         qs = model.objects.filter(
             is_active=False, deactivated_at__isnull=False, deactivated_at__lt=cutoff)
+        # OrderItem.product / .combo are on_delete=PROTECT, so an item referenced
+        # by any order can never be hard-deleted. Which relation depends on the
+        # model; check it up front so the dry-run reports the same count the real
+        # run would actually purge.
+        ref_field = 'product' if model is Product else 'combo'
         purged = 0
         for obj in qs.iterator():
+            if OrderItem.objects.filter(**{ref_field: obj}).exists():
+                self.stdout.write(
+                    f"  {'would skip' if dry_run else 'skipped'} {label} #{obj.pk} "
+                    f"'{obj.name}' — referenced by an order.")
+                continue
             if dry_run:
                 purged += 1
                 continue
@@ -96,8 +106,8 @@ class Command(BaseCommand):
                 obj.delete()
                 purged += 1
             except ProtectedError:
-                # Referenced by a historical order (OrderItem FK is PROTECT) — it
-                # can never be hard-deleted, so leave it in the bin.
+                # Belt-and-braces: a reference created between the check and the
+                # delete still can't be hard-deleted — leave it in the bin.
                 self.stdout.write(
                     f"  skipped {label} #{obj.pk} '{obj.name}' — referenced by an order.")
         return purged
