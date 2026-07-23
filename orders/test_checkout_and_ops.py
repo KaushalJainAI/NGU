@@ -994,3 +994,90 @@ class TestOrderRecycleBinPermissions:
         assert resp.status_code in (403, 404)
         order.refresh_from_db()
         assert order.is_deleted is True
+
+
+# --- Recycle Bin purge (purge_recycle_bin management command) ---
+
+from django.core.management import call_command
+
+
+def _aged(delta_days):
+    """A timestamp delta_days in the past (positive = older)."""
+    return timezone.now() - timedelta(days=delta_days)
+
+
+@pytest.mark.django_db
+class TestRecycleBinPurge:
+    def test_old_deleted_order_is_purged(self, test_user):
+        old = _order(test_user, is_deleted=True)
+        Order.objects.filter(pk=old.pk).update(deleted_at=_aged(31))
+        recent = _order(test_user, is_deleted=True)
+        Order.objects.filter(pk=recent.pk).update(deleted_at=_aged(5))
+        live = _order(test_user)  # not deleted at all
+        call_command("purge_recycle_bin")
+        assert not Order.objects.filter(pk=old.pk).exists()
+        assert Order.objects.filter(pk=recent.pk).exists()
+        assert Order.objects.filter(pk=live.pk).exists()
+
+    def test_old_deactivated_product_and_combo_purged(self, test_category):
+        prod = _product(test_category, "100.00", name="OldDelisted")
+        Product.objects.filter(pk=prod.pk).update(is_active=False, deactivated_at=_aged(40))
+        combo = ProductCombo.objects.create(name="OldCombo", price=Decimal("300.00"))
+        ProductCombo.objects.filter(pk=combo.pk).update(is_active=False, deactivated_at=_aged(40))
+        call_command("purge_recycle_bin")
+        assert not Product.objects.filter(pk=prod.pk).exists()
+        assert not ProductCombo.objects.filter(pk=combo.pk).exists()
+
+    def test_active_and_recent_items_untouched(self, test_category, test_user):
+        active = _product(test_category, "100.00", name="StillActive")
+        recent = _product(test_category, "100.00", name="RecentlyDelisted")
+        Product.objects.filter(pk=recent.pk).update(is_active=False, deactivated_at=_aged(5))
+        # Inactive but with NO timestamp (unknown deletion date) is never purged.
+        untimed = _product(test_category, "100.00", name="Untimed")
+        Product.objects.filter(pk=untimed.pk).update(is_active=False, deactivated_at=None)
+        call_command("purge_recycle_bin")
+        assert Product.objects.filter(pk=active.pk).exists()
+        assert Product.objects.filter(pk=recent.pk).exists()
+        assert Product.objects.filter(pk=untimed.pk).exists()
+
+    def test_product_referenced_by_order_is_skipped(self, test_category, test_user):
+        prod = _product(test_category, "100.00", name="Ordered")
+        order = _order(test_user)
+        OrderItem.objects.create(
+            order=order, product=prod, item_type="product",
+            quantity=1, price=Decimal("100.00"))
+        Product.objects.filter(pk=prod.pk).update(is_active=False, deactivated_at=_aged(40))
+        call_command("purge_recycle_bin")
+        # PROTECT keeps it alive; the job skips rather than crashes.
+        assert Product.objects.filter(pk=prod.pk).exists()
+
+    def test_days_zero_disables_purge(self, test_user):
+        old = _order(test_user, is_deleted=True)
+        Order.objects.filter(pk=old.pk).update(deleted_at=_aged(999))
+        call_command("purge_recycle_bin", days=0)
+        assert Order.objects.filter(pk=old.pk).exists()
+
+    def test_dry_run_deletes_nothing(self, test_user):
+        old = _order(test_user, is_deleted=True)
+        Order.objects.filter(pk=old.pk).update(deleted_at=_aged(40))
+        call_command("purge_recycle_bin", dry_run=True)
+        assert Order.objects.filter(pk=old.pk).exists()
+
+
+@pytest.mark.django_db
+class TestDeactivatedAtLifecycle:
+    """The soft-delete timestamp that drives the purge is stamped on delete and
+    cleared on restore, through the real product API."""
+
+    def test_delete_stamps_and_restore_clears(self, admin_client, test_category):
+        prod = _product(test_category, "100.00", name="Lifecycle")
+        admin_client.delete(f"/api/products/{prod.slug}/")
+        prod.refresh_from_db()
+        assert prod.is_active is False
+        assert prod.deactivated_at is not None
+        # Restore via the same PATCH the Recycle Bin UI uses.
+        admin_client.patch(
+            f"/api/products/{prod.slug}/", {"is_active": True}, format="json")
+        prod.refresh_from_db()
+        assert prod.is_active is True
+        assert prod.deactivated_at is None

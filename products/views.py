@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.conf import settings
 from django.utils.translation import get_language
+from django.utils import timezone
 
 from spices_backend.limits import (
     MAX_SEARCH_Q, SEARCH_TOP_K_MAX, SEARCH_THRESHOLD_MIN, SEARCH_THRESHOLD_MAX, clamp,
@@ -342,9 +343,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(data)
 
     def destroy(self, request, *args, **kwargs):
+        # Soft-delete into the Recycle Bin: deactivate and stamp the deletion
+        # time so the purge job can age it out. Restoring (is_active=True) clears
+        # the stamp in Product.save().
         instance = self.get_object()
         instance.is_active = False
-        instance.save(update_fields=['is_active'])
+        instance.deactivated_at = timezone.now()
+        instance.save(update_fields=['is_active', 'deactivated_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['get'])
@@ -445,14 +450,16 @@ class ComboProductViewSet(viewsets.ModelViewSet):
                 {"detail": "No ProductCombo matches the given query."},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
     def destroy(self, request, *args, **kwargs):
+        # Soft-delete into the Recycle Bin (see ProductViewSet.destroy).
         instance = self.get_object()
         instance.is_active = False
-        instance.save(update_fields=['is_active'])
+        instance.deactivated_at = timezone.now()
+        instance.save(update_fields=['is_active', 'deactivated_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

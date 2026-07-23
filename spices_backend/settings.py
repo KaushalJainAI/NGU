@@ -548,6 +548,10 @@ COUPON_USAGE_ALERT_PERCENT = config('COUPON_USAGE_ALERT_PERCENT', default=90, ca
 # 15-minute TTL; rollups keep the admin Insights dashboard live.
 RECONCILE_INTERVAL_MINUTES = config('RECONCILE_INTERVAL_MINUTES', default=5, cast=int)
 ROLLUP_INTERVAL_MINUTES = config('ROLLUP_INTERVAL_MINUTES', default=5, cast=int)
+# Admin Recycle Bin retention: a soft-deleted order/product/combo is permanently
+# purged this many days after it was deleted (rolling per-item). The scheduler
+# runs purge_recycle_bin nightly. 0 disables the purge entirely.
+RECYCLE_BIN_RETENTION_DAYS = config('RECYCLE_BIN_RETENTION_DAYS', default=30, cast=int)
 # Storefront base URL for links embedded in customer payment/order emails.
 # Defaults to the live storefront so emails never leak a localhost link when the
 # env var is unset (prod compose doesn't set it); override in local dev via .env.

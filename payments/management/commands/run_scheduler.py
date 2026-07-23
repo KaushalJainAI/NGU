@@ -30,6 +30,10 @@ Schedule (all intervals overridable via env):
   * send_weekly_summary  Mondays at 08:30
         Weekly business summary (revenue vs last week, best sellers, zero-result
         searches, low stock) to ADMIN_ALERT_EMAIL.
+  * purge_recycle_bin    daily at 03:30
+        Permanently deletes admin Recycle Bin items (orders, products, combos)
+        that have sat there longer than RECYCLE_BIN_RETENTION_DAYS (default 30) —
+        a rolling per-item window measured from when each was deleted.
 
 Each job is wrapped so one failure is logged and never kills the scheduler.
 """
@@ -95,6 +99,11 @@ class Command(BaseCommand):
             _run, CronTrigger(day_of_week='mon', hour=8, minute=30),
             args=['send_weekly_summary', 'send_weekly_summary'],
             id='send_weekly_summary', coalesce=True, max_instances=1)
+        # Nightly Recycle Bin purge (rolling RECYCLE_BIN_RETENTION_DAYS window).
+        scheduler.add_job(
+            _run, CronTrigger(hour=3, minute=30),
+            args=['purge_recycle_bin', 'purge_recycle_bin'],
+            id='purge_recycle_bin', coalesce=True, max_instances=1)
 
         # Fire both interval jobs once at startup so a fresh deploy reconciles and
         # refreshes insights immediately instead of waiting a full interval.

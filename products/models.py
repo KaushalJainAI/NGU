@@ -10,6 +10,23 @@ import io
 import os
 
 
+def _clear_deactivated_at_if_active(instance, save_kwargs):
+    """Keep ``deactivated_at`` consistent with ``is_active`` on every save.
+
+    An active row must never carry a deactivation stamp, or the Recycle Bin
+    purge job would delete a product/combo that the admin has restored. Call
+    this from ``save()`` just before ``super().save()``: when the instance is
+    active it nulls ``deactivated_at`` and, if the caller passed a limited
+    ``update_fields`` (e.g. the restore PATCH), extends it so the cleared value
+    is actually written. Soft-deletion sets the stamp explicitly in the viewset.
+    """
+    if instance.is_active and instance.deactivated_at is not None:
+        instance.deactivated_at = None
+        update_fields = save_kwargs.get('update_fields')
+        if update_fields is not None and 'deactivated_at' not in update_fields:
+            save_kwargs['update_fields'] = list(update_fields) + ['deactivated_at']
+
+
 def _generate_unique_slug(model_cls, base_slug, *, fallback, current_pk=None):
     """Return a slug unique within ``model_cls`` using bounded ``exists()`` queries.
 
@@ -279,6 +296,11 @@ class Product(models.Model):
     # Metadata
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # When this product was soft-deleted (moved to the admin Recycle Bin, i.e.
+    # is_active flipped to False). NULL while active. Stamped on soft-delete and
+    # cleared on restore; the recycle-bin purge job deletes rows whose
+    # deactivated_at is older than the retention window. See purge_recycle_bin.
+    deactivated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
@@ -290,6 +312,7 @@ class Product(models.Model):
             models.Index(fields=['is_active', 'stock']),
             models.Index(fields=['is_active', '-created_at']),
             models.Index(fields=['spice_form', 'is_active']),
+            models.Index(fields=['is_active', 'deactivated_at']),
         ]
         constraints = [
             models.CheckConstraint(condition=models.Q(stock__gte=0), name='stock_non_negative'),
@@ -329,6 +352,11 @@ class Product(models.Model):
         # Generate thumbnail if image exists
         if self.image:
             self.generate_thumbnail()
+
+        # A restored (re-activated) product must not carry a stale deactivation
+        # stamp, or the purge job would delete it. Clearing it here covers every
+        # reactivation path (admin edit form PATCH, restore action, Django admin).
+        _clear_deactivated_at_if_active(self, kwargs)
 
         super().save(*args, **kwargs)
 
@@ -673,6 +701,9 @@ class ProductCombo(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # See Product.deactivated_at — soft-delete timestamp driving the Recycle Bin
+    # purge. NULL while active; stamped on soft-delete, cleared on restore.
+    deactivated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
@@ -681,6 +712,7 @@ class ProductCombo(models.Model):
             models.Index(fields=['is_featured', '-created_at']),
             models.Index(fields=['is_active']),
             models.Index(fields=['is_active', '-created_at']),
+            models.Index(fields=['is_active', 'deactivated_at']),
         ]
 
     def __str__(self):
@@ -704,6 +736,9 @@ class ProductCombo(models.Model):
         # Generate thumbnail if image exists
         if self.image:
             self.generate_thumbnail()
+
+        # Restored combos must shed their deactivation stamp (see Product.save).
+        _clear_deactivated_at_if_active(self, kwargs)
 
         super().save(*args, **kwargs)
 
