@@ -207,11 +207,23 @@ def send_low_stock_alert(items):
         lines.append("")
     lines += ["Restock these in the admin panel when you can.", "", "— Your Nidhi Masala store"]
 
-    # Subject leads with the most urgent fact.
-    if out:
-        subject = f"Stock alert — {len(out)} product{'s' if len(out) != 1 else ''} now out of stock"
+    # Subject NAMES the product(s) so the owner sees what's low without opening
+    # the email — out-of-stock leads (most urgent). One product → its name; more
+    # than one → the first name + a count of the rest.
+    lead = (out or low)[0]
+    total = len(items)
+    if total == 1:
+        if out:
+            subject = f"Stock alert — {lead['name']} is out of stock"
+        else:
+            subject = f"Stock alert — {lead['name']} running low ({lead['stock']} left)"
     else:
-        subject = f"Stock alert — {len(low)} product{'s' if len(low) != 1 else ''} running low"
+        rest = total - 1
+        tail = f" and {rest} other product{'s' if rest != 1 else ''}"
+        if out:
+            subject = f"Stock alert — {lead['name']} is out of stock{tail}"
+        else:
+            subject = f"Stock alert — {lead['name']} running low{tail}"
 
     _send_async(subject=subject, message="\n".join(lines), recipient=recipient)
 

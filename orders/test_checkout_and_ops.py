@@ -263,6 +263,27 @@ class TestLowStockAlertOnCheckout:
         # crosses combo threshold 5. Components A(14) & B(98) stay above 5.
         assert items == [{"name": "Spice Box (combo)", "stock": 4, "threshold": 5}]
 
+    def test_subject_names_the_single_low_product(self, settings):
+        settings.ADMIN_ALERT_EMAIL = "owner@test.com"
+        from orders.emails import send_low_stock_alert
+        with patch("orders.emails._send_async") as m:
+            send_low_stock_alert([{"name": "Turmeric 100g", "stock": 2, "threshold": 5}])
+        subject = m.call_args.kwargs["subject"]
+        assert "Turmeric 100g" in subject and "running low" in subject
+        assert "Turmeric 100g" in m.call_args.kwargs["message"]
+
+    def test_subject_names_first_product_and_counts_rest(self, settings):
+        settings.ADMIN_ALERT_EMAIL = "owner@test.com"
+        from orders.emails import send_low_stock_alert
+        with patch("orders.emails._send_async") as m:
+            send_low_stock_alert([
+                {"name": "Chili 200g", "stock": 0, "threshold": 5},
+                {"name": "Cumin 100g", "stock": 3, "threshold": 5},
+            ])
+        subject = m.call_args.kwargs["subject"]
+        assert "Chili 200g" in subject and "out of stock" in subject
+        assert "1 other product" in subject  # the remaining low item
+
     def test_coupon_usage_alert_on_crossing_limit(
             self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
         p = _product(test_category, "300.00", stock=100)
