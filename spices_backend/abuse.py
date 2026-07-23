@@ -16,6 +16,7 @@ traffic, and removing it leaves the app fully functional.
 """
 import logging
 
+from django.conf import settings
 from django.core.cache import cache
 
 from .limits import ABUSE_STRIKE_WINDOW, ABUSE_STRIKE_ALERT
@@ -26,12 +27,34 @@ _STRIKE_KEY = "abuse:strikes:{ip}"
 _BLOCK_KEY = "abuse:blocked:{ip}"
 
 
+def _num_proxies() -> int:
+    """How many trusted reverse proxies sit in front of Django. Mirrors DRF's
+    REST_FRAMEWORK['NUM_PROXIES'] so this module and the throttles agree on which
+    X-Forwarded-For entry is the real client. Defaults to 2 (host nginx +
+    frontend-container nginx)."""
+    try:
+        n = (settings.REST_FRAMEWORK or {}).get("NUM_PROXIES")
+        return int(n) if n is not None else 2
+    except Exception:
+        return 2
+
+
 def get_client_ip(request) -> str:
-    """Best-effort client IP. Behind nginx the real client is the first hop of
-    X-Forwarded-For; otherwise REMOTE_ADDR."""
+    """Best-effort client IP, honouring the trusted proxy chain.
+
+    Behind our nginx layers the socket peer (REMOTE_ADDR) is always a proxy and
+    the real client is the Nth-from-last entry of X-Forwarded-For, where N is the
+    number of trusted proxies. Counting from the RIGHT is what makes this
+    un-spoofable: a client can prepend fake values to XFF, but it can never touch
+    the entries our own proxies append. (This must match DRF's throttle identity
+    logic — see settings.REST_FRAMEWORK['NUM_PROXIES'] — so a banned/abusive IP is
+    tracked by the same address the throttles rate-limit.)"""
     xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
+    num_proxies = _num_proxies()
+    if xff and num_proxies > 0:
+        addrs = [a.strip() for a in xff.split(",") if a.strip()]
+        if addrs:
+            return addrs[-min(num_proxies, len(addrs))]
     return request.META.get("REMOTE_ADDR", "") or "unknown"
 
 

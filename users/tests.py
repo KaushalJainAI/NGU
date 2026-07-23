@@ -175,9 +175,13 @@ class TestUserLogin:
         }
         response = api_client.post(self.url, data, format='json')
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
-        assert 'refresh' in response.data
-    
+        # Tokens are delivered as HttpOnly cookies, NOT in the JSON body (so page
+        # JS / any XSS can't read them). The body carries no secret token.
+        assert 'access_token' in response.cookies
+        assert 'refresh_token' in response.cookies
+        assert 'access' not in response.data
+        assert 'refresh' not in response.data
+
     def test_login_invalid_password(self, api_client, test_user):
         """Test login fails with wrong password."""
         data = {
@@ -355,7 +359,9 @@ class TestTokenRefresh:
         data = {'refresh': str(refresh)}
         response = api_client.post(self.url, data, format='json')
         assert response.status_code == status.HTTP_200_OK
-        assert 'access' in response.data
+        # Refreshed access token is delivered via the HttpOnly cookie, not the body.
+        assert 'access_token' in response.cookies
+        assert 'access' not in response.data
     
     def test_refresh_invalid_token(self, api_client):
         """Test token refresh with invalid token fails."""

@@ -75,10 +75,13 @@ class PasswordResetOTP(models.Model):
         self.otp_code = make_password(raw_otp)
 
     def check_otp(self, raw_otp):
+        import hmac
         from django.contrib.auth.hashers import check_password
-        # Support fallback to plaintext if old record
+        # Support fallback to plaintext if old record. Use a constant-time
+        # comparison so the legacy path can't leak the code via response timing
+        # (check_password is already constant-time for hashed records).
         if len(self.otp_code) == 6 or '$' not in self.otp_code:
-            return self.otp_code == raw_otp
+            return hmac.compare_digest(str(self.otp_code), str(raw_otp))
         return check_password(raw_otp, self.otp_code)
     
     @property

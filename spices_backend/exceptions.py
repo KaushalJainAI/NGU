@@ -53,7 +53,9 @@ def custom_exception_handler(exc, context):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ValueError / TypeError — bad input data
+    # ValueError / TypeError — bad input data. The exception message can contain
+    # internal detail (values, variable names), so log it server-side but return a
+    # generic message to the client — never echo str(exc) into the response.
     if isinstance(exc, (ValueError, TypeError)):
         logger.warning(
             "Bad request data in %s: %s",
@@ -61,11 +63,12 @@ def custom_exception_handler(exc, context):
             str(exc),
         )
         return Response(
-            {'success': False, 'error': f'Invalid input: {str(exc)}'},
+            {'success': False, 'error': 'Invalid input.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # KeyError — missing expected data
+    # KeyError — missing expected data. Same rule: the missing key name is an
+    # internal implementation detail; log it, don't return it.
     if isinstance(exc, KeyError):
         logger.warning(
             "Missing key in %s: %s",
@@ -73,7 +76,7 @@ def custom_exception_handler(exc, context):
             str(exc),
         )
         return Response(
-            {'success': False, 'error': f'Missing required field: {str(exc)}'},
+            {'success': False, 'error': 'A required field is missing or malformed.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

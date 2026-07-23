@@ -290,6 +290,18 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     # Custom exception handler: returns JSON 400/500 instead of HTML errors
     'EXCEPTION_HANDLER': 'spices_backend.exceptions.custom_exception_handler',
+    # SECURITY: number of trusted reverse proxies in front of Django. With this
+    # set, DRF derives the throttle identity from the Nth-from-last entry of
+    # X-Forwarded-For (counting from the right) instead of concatenating the whole
+    # header — so a client-supplied XFF prefix can no longer mint a fresh throttle
+    # bucket per request and bypass the login/OTP/order rate limits.
+    #   client -> host nginx -> frontend-container nginx -> backend  == 2 hops.
+    # Both nginx layers append via `$proxy_add_x_forwarded_for`, so the real
+    # client IP is always the 2nd-from-last entry. Override via env ONLY if the
+    # proxy topology changes; too low re-opens the spoof, too high reads past our
+    # own proxies into client-controlled data. (Requires the backend port to stay
+    # bound to loopback so no one can reach Django on a shorter chain.)
+    'NUM_PROXIES': config('NUM_PROXIES', default=2, cast=int),
     # Rate Limiting / Throttling
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',

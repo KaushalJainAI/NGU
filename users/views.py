@@ -121,6 +121,10 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 samesite=settings.AUTH_COOKIE_SAMESITE,
                 max_age=3600 * 24 * 7 # 7 days
             )
+            # The tokens now live ONLY in the HttpOnly cookies above — don't also
+            # return them in the JSON body, where page JavaScript (and thus any
+            # XSS) could read them. The SPA relies on the cookie, not the body.
+            response.data = {'success': True}
         return response
 
 
@@ -156,6 +160,9 @@ class CustomTokenRefreshView(TokenRefreshView):
                     samesite=settings.AUTH_COOKIE_SAMESITE,
                     max_age=3600 * 24 * 7
                 )
+            # Deliver the refreshed token via the HttpOnly cookie only, never the
+            # JSON body (see CustomTokenObtainPairView).
+            response.data = {'success': True}
         return response
 
 
@@ -407,9 +414,11 @@ class GoogleLogin(APIView):
             refresh = CustomTokenObtainPairSerializer.get_token(user)
             access = refresh.access_token
             
+            # Tokens are delivered via the HttpOnly cookies set below only — not
+            # in the JSON body, where JS/XSS could read them. Return just the
+            # (non-secret) user profile; the SPA authenticates via the cookie.
             response = Response({
-                'access': str(access),
-                'refresh': str(refresh),
+                'success': True,
                 'user': UserSerializer(user).data
             }, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
             
