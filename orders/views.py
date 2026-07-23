@@ -896,11 +896,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.save()
 
         # Side-effect notifications, outside the transaction.
+        # Product decision: routine status changes (confirmed → processing →
+        # delivered …) must NOT email the customer. The ONLY status update that
+        # notifies them is a newly-added tracking number (their parcel shipped).
+        # Cancellation is handled separately by the `cancel` action below.
         new_tracking = (order.tracking_number or '').strip()
-        status_changed = new_status != old_status
         tracking_added = bool(new_tracking) and new_tracking != old_tracking
-        send_order_status_email(order, status_changed=status_changed,
-                                tracking_added=tracking_added)
+        if tracking_added:
+            send_order_status_email(order, status_changed=False, tracking_added=True)
 
         return Response(OrderDetailSerializer(order, context={'request': request}).data)
 

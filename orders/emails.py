@@ -8,9 +8,13 @@ Three order emails live here (two customer-facing, one for the store owner —
    placed. Gives the customer their order number and a summary so they can find
    the order later (the UI tells them to look for it here).
 
-2. `send_order_status_email(order, ...)` — fired when an admin advances the
-   order (status change) and/or enters a shipment tracking number. This is how
-   the customer learns their order is being processed / on its way / delivered.
+2. `send_order_status_email(order, ...)` — the customer's shipment/cancellation
+   notice. By product decision it is NOT fired on routine status progression
+   (confirmed → processing → delivered …); the order-edit path calls it ONLY
+   when a tracking number is newly added (parcel shipped). The `cancel` action
+   still calls it to tell the customer their order was cancelled. The function
+   itself remains generic (it will render a status message if asked), but the
+   callers gate it to just these two events.
 
 Both are best-effort: sent on a background thread and never allowed to break the
 request that triggered them (an SMTP hiccup must not fail an order placement or a
