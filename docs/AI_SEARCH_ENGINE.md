@@ -66,6 +66,26 @@ HTTP response, generation runs in a **native Python daemon thread**
 6. Synonyms are stored in `ProductSearchKB`; the thread calls
    `django.db.close_old_connections()` to prevent connection-pool exhaustion.
 
+## No-Results vs. Suggestions
+
+`unified_search` distinguishes an honest empty state from a padded one:
+
+- When a query has **some** direct matches but fewer than 3, it tops the list up
+  with related recommendations (`0 < len(direct_results) < 3`) so a thin page still
+  feels full.
+- When a query matches **nothing** (`zzzzqqq`), it returns **no** products/combos.
+  The recommendations instead ride along under a separate `suggestions` key — never
+  counted in `total_results` — so the UI can render a real "no results, but you might
+  like…" state instead of passing featured products off as hits.
+
+## SEO: sitemap & robots
+
+`products/sitemaps.py` serves `GET /sitemap.xml` (catalog-driven: active products,
+combos, categories, and static routes) and `GET /robots.txt` (points crawlers at the
+sitemap; keeps cart/billing/profile out of the index). Both are wired at the **site
+root** in `spices_backend/urls.py` and proxied there by nginx — previously the SPA
+catch-all swallowed `/sitemap.xml` and served `index.html`.
+
 ## Multilingual Support
 
 The backend stores and returns translated content for Products and Categories via

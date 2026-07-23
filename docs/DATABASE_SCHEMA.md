@@ -21,7 +21,7 @@ standard `created_at`/`updated_at` timestamps are omitted unless notable.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | **Category** | Organizational folder for spices | `name`, `slug`, `image`, `is_active` |
-| **Product** | Individual spice item | `category` (FK), `spice_form`, `price`, `discount_price`, `stock`, `weight`, `unit`, `origin_country`, `organic`, `shelf_life`, `ingredients`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `sections` (M2M via `ProductSectionPlacement`) |
+| **Product** | Individual spice item | `category` (FK, primary shelf), `extra_categories` (M2M — also list under these shelves), `spice_form`, `price`, `discount_price`, `stock`, `low_stock_threshold` (default 5 — warns admin dashboard + daily digest), `weight`, `unit`, `origin_country`, `organic`, `shelf_life`, `ingredients`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `sections` (M2M via `ProductSectionPlacement`) |
 | **ProductVariant** | A specific packaging/size of a Product (e.g. 100g, 500g, 1kg) | `product` (FK), `weight`, `unit`, `price`, `discount_price`, `stock`, `sku`, `slug`, `is_default`, `is_active`, `display_order` |
 | **ProductImage** | Gallery images for a product | `product` (FK), `image`, `alt_text` |
 | **ProductCombo** | Bundle of multiple products | `name`, `slug`, `title`, `subtitle`, `price`, `discount_price`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `weight`, `unit`, `sections` (M2M) |
@@ -72,7 +72,7 @@ quantity ≥ 1, and no duplicate (cart, variant) or (cart, combo) pairs.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| **Order** | Full invoice | `order_id` (UUIDField, auto-generated), `user` (FK), `status` (pending/confirmed/processing/shipped/delivered/cancelled/delivering), `payment_method` (COD/ONLINE/razorpay), `payment_status`, `subtotal`, `discount_amount`, `shipping_charge`, `tax`, `total_amount`, `coupon` (FK, nullable) |
+| **Order** | Full invoice | `order_id` (UUIDField, auto-generated), `user` (FK), `status` (pending/confirmed/processing/shipped/delivered/cancelled/delivering), `payment_method` (COD/ONLINE/razorpay), `payment_status`, `subtotal`, `discount_amount`, `shipping_charge`, `tax`, `total_amount`, `coupon` (FK, nullable), `delivery_bill` (FileField, **private storage** — admin-only courier receipt, never a public CDN URL), `delivery_bill_uploaded_at` |
 | **OrderItem** | Line item in an order | `order` (FK), `product` (FK, PROTECT, nullable), `variant` (FK to `ProductVariant`, PROTECT, nullable), `combo` (FK, PROTECT, nullable), `item_type`, `product_name`, `product_weight` (snapshot), `quantity`, `price`, `discounted_price`, `discount_amount`, `tax_amount`, `final_price` |
 
 `Order.order_id` is a full UUID (`uuid.uuid4()`), stored as a `UUIDField`.
@@ -96,10 +96,10 @@ to power `GET /api/recommendations/`.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| **AssistantConversation** | A chat thread (AI + admin) | `conversation_id` (UUID), `user` (FK, nullable), `anon_session` (for guests), `title`, `status` (active/resolved/archived), `needs_human`, `assigned_to` (FK to User, nullable) |
+| **AssistantConversation** | A chat thread (AI + admin) | `conversation_id` (UUID), `user` (FK, nullable in schema but always set — chat is login-only), `anon_session` (vestigial, unused), `title`, `status` (active/resolved/archived), `needs_human`, `assigned_to` (FK to User, nullable) |
 | **AssistantMessage** | One turn in a conversation | `conversation` (FK), `role` (user/assistant/tool/system/admin), `content`, `sender_name`, `meta` (JSON audit), `created_at` |
 
-Conversations are scoped to a user or anonymous session ID — the agent cannot read another user's thread. Human admins participate directly via the `admin` role. This is the single conversation system (the old `support.ChatSession` chat was removed).
+Conversations are scoped to the authenticated user (chat is login-only) — the agent cannot read another user's thread. Human admins participate directly via the `admin` role. This is the single conversation system (the old `support.ChatSession` chat was removed).
 
 ---
 
@@ -114,7 +114,20 @@ conversations now live in the `assistant` app (see section 7).
 
 ---
 
-## 9. Admin Panel App
+## 9. Reviews App
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| **Review** | Verified-purchase rating for a product or combo | `item_type` (product/combo), `product` (FK, nullable), `combo` (FK, nullable), `user` (FK), `rating` (1–5), `title`, `comment`, `is_verified_purchase`, `is_hidden` (admin moderation — hidden reviews are excluded from public listings), `created_at` |
+
+One review per `(user, product)` and per `(user, combo)`, enforced by partial
+`UniqueConstraint`s. `is_verified_purchase` is set when the reviewer has a delivered
+order containing the item; `is_hidden` is toggled by admins via `POST
+/api/reviews/{id}/set-hidden/`.
+
+---
+
+## 10. Admin Panel App
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
@@ -137,3 +150,5 @@ conversations now live in the `assistant` app (see section 7).
 6. **Soft delete for catalog items** — `Product` and `Category` destroy endpoints set `is_active=False` rather than hard-deleting. Only active items are shown to non-staff. This preserves historical review and order data.
 7. **Variant slug fallback** — product detail lookup by slug checks `Product.slug` first, then `ProductVariant.slug`. If a variant slug matches, the parent product is returned with a `selected_variant_id` hint so the frontend can pre-select the right size.
 8. **Multilingual columns** — `django-modeltranslation` adds per-language columns for `Product` and `Category` translatable fields. Empty translations fall back to English automatically.
+9. **Validated `ImageField`s** — every image column (category, product, product-gallery, combo, user profile picture) shares one validator chain from `spices_backend/validators.py`: size cap, extension allow-list (no `.svg`), and a Pillow content-verify on fresh uploads. See `docs/ARCHITECTURE.md` §Security. Wired in by validator-only migrations `products/0034` and `users/0009`.
+10. **Product on multiple shelves** — `Product.category` is the canonical shelf; `Product.extra_categories` (M2M to `Category`) lists the same product under additional shelves without duplicating the row.

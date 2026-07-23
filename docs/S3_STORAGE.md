@@ -43,6 +43,10 @@ CLOUDINARY_API_SECRET=your-api-secret
   media when Cloudinary is active.
 - Static files (CSS/JS) are **not** served through Cloudinary; they use S3 or
   WhiteNoise depending on `USE_S3`.
+- Every image upload is validated **before** it reaches any backend (size cap,
+  extension allow-list without `.svg`, and a Pillow content-verify on fresh uploads);
+  already-stored `FieldFile`s are skipped so re-saves don't refetch remote bytes. See
+  `docs/ARCHITECTURE.md` §Security Considerations.
 
 ### Migrating existing S3 media to Cloudinary
 

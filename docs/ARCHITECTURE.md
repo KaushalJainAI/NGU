@@ -111,6 +111,25 @@ class ProductImage(models.Model):
     image = models.ImageField()  # Gallery images
 ```
 
+All five `ImageField`s (category, product, product-gallery, combo, user profile
+picture) run the same upload validator chain — see **Security Considerations §7**.
+
+### 3b. Product on Multiple Category Shelves
+
+A product has one primary `category` (FK) plus an optional `extra_categories`
+ManyToMany so it can appear on several category shelves at once (e.g. "Chat Masala"
+under both *Blended Spices* and *Chaat & Snacks*):
+
+```python
+class Product(models.Model):
+    category = models.ForeignKey(Category, ...)              # primary shelf
+    extra_categories = models.ManyToManyField(Category, ...)  # also list here
+```
+
+Category-listing queries union `category` and `extra_categories` so the product
+surfaces on every shelf it belongs to, while `category` stays the canonical one
+for breadcrumbs/SEO.
+
 ### 4. Combo Pricing
 
 Combos store `price` (the combo price) and `discount_price` (optional discounted price).
@@ -163,10 +182,14 @@ customer can ask about anything in one place. See `docs/ASSISTANT.md`.
 ### 7. AI Shopping Assistant
 
 The `assistant` app provides a tool-calling AI agent at `POST /api/assistant/chat/`.
-It is open to anonymous users for product Q&A; cart/order tools require authentication
-(enforced in `tools.py`). The view is the trust boundary that supplies the
-authenticated user to the agent. Conversations are persisted in `AssistantConversation`
-and `AssistantMessage` models, scoped by user or anonymous session ID.
+The chat view is **login-only** (`IsAuthenticated`) — the whole assistant (shopping
+Q&A, voice, human-admin support) is gated behind login by design. The view is the
+trust boundary that supplies the authenticated user to the agent. Conversations are
+persisted in `AssistantConversation` and `AssistantMessage`, scoped by user.
+
+> The `anon_session` field and its guest-lookup branch are a **vestigial leftover**
+> from an earlier anonymous-chat design; the view never admits unauthenticated
+> traffic, so that path is dead. Don't "fix" the endpoint to `AllowAny`.
 
 ### 8. Behavioral Analytics + Recommendations
 
@@ -193,11 +216,11 @@ to English automatically.
 | `cart` | Shopping cart with stock validation, favorites |
 | `orders` | Order creation, status, history, coupon redemption |
 | `payments` | Payment processing (Razorpay), saved payment methods |
-| `reviews` | Verified-purchase product ratings and reviews |
-| `admin_panel` | Dashboard stats, coupons, policies, receivable accounts |
+| `reviews` | Verified-purchase product ratings and reviews; admin `is_hidden` moderation |
+| `admin_panel` | Dashboard stats, coupons, policies, receivable accounts, global admin search, bulk product ops + CSV import/export |
 | `support` | Contact form submissions (order-scoped live chat was removed — all conversations are now in `assistant`) |
-| `assistant` | AI shopping assistant (tool-calling agent, multilingual) |
-| `analytics` | Behavioral event ingest; source data for recommendations |
+| `assistant` | AI shopping assistant (tool-calling agent, multilingual) + a separate read-only **admin business-data** persona (`/admin-chat/`) |
+| `analytics` | Behavioral event ingest; source data for recommendations; scheduled owner email digests (daily/weekly) |
 
 ---
 
@@ -220,8 +243,9 @@ User ──┬── Cart ──── CartItem ──┬── Product ── P
        └── UserEvent ──┬── Product (optional)
                        └── ProductCombo (optional)
 
-Category ── Product ──┬── ProductVariant (unit of sale)
-                      └── ProductImage (gallery)
+Category ─┬─ Product ──┬── ProductVariant (unit of sale)
+          │            └── ProductImage (gallery)
+          └─ (Product.extra_categories M2M — same product on extra shelves)
 ```
 
 ---
@@ -233,7 +257,13 @@ Category ── Product ──┬── ProductVariant (unit of sale)
 3. **Owner Check**: Users can only access their own carts, orders, profiles
 4. **Admin Check**: Dashboard/coupons require `is_staff=True`
 5. **Payment Verification**: Razorpay signatures verified server-side
-6. **Assistant Isolation**: Conversation threads are scoped to a user or anon session; the agent cannot read another user's data
+6. **Assistant Isolation**: Conversation threads are scoped to the authenticated user (chat is login-only); the agent cannot read another user's data
+7. **Image Upload Hardening** (`spices_backend/validators.py`, wired into all five `ImageField`s): every fresh upload passes
+   - `validate_file_size` — reject > 500 MB;
+   - `validate_image_extension` — allow-list `.jpg/.jpeg/.png/.webp/.gif`; **`.svg` is deliberately excluded** (SVG is XML and can carry inline `<script>` → stored-XSS, and can't be raster-verified);
+   - `validate_image_content` — Pillow `Image.verify()` confirms the bytes are a real decodable raster image, defeating the "rename `evil.html` → `evil.png`" masquerade.
+
+   All three run **only on fresh `UploadedFile`s**; already-stored Cloudinary/S3 `FieldFile`s (no in-name extension / remote bytes) are skipped so re-saves don't trigger needless network fetches or false rejects. The content check **fails open** if Pillow is unavailable (the extension allow-list still applies). Wired in by validator-only migrations `products/0034` and `users/0009`.
 
 ---
 

@@ -226,6 +226,20 @@ File name: `invoice-ORD-{order_id:06d}.pdf`.
 
 ---
 
+## Fulfilment Documents (admin-only)
+
+Two documents support order fulfilment, both gated to staff:
+
+- **Packing slip** — `GET /api/orders/{id}/packing-slip/` renders a picking/packing
+  sheet PDF (`orders/invoice.py`).
+- **Delivery bill** — `GET/POST/DELETE /api/orders/{id}/delivery-bill/` manages the
+  courier/delivery receipt. Stored on **private FileSystemStorage** (`Order.delivery_bill`,
+  `PRIVATE_MEDIA_ROOT`) with a UUID filename — it is served **only** through this staff-gated
+  endpoint, never a public CDN URL, and is never shown to customers. Uploads are magic-byte
+  sniffed (`_delivery_bill_bytes_match`) and `delivery_bill_uploaded_at` records the time.
+
+---
+
 ## Coupon Rules
 
 | Check | Detail |

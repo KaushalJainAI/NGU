@@ -56,8 +56,8 @@ One thread per customer session. A customer can have many threads and switch bet
 | Field | Type | Notes |
 |-------|------|-------|
 | `conversation_id` | UUID | Public identifier sent to clients |
-| `user` | FK (nullable) | Null for anonymous sessions |
-| `anon_session` | CharField | Opaque client-generated id for guests |
+| `user` | FK (nullable) | Nullable in schema, but always set — chat is login-only |
+| `anon_session` | CharField | **Vestigial** — leftover from a removed anonymous-chat design; unused |
 | `title` | CharField(80) | Auto-set from LLM on first turn; editable |
 | `status` | CharField | `active` / `resolved` / `archived` |
 | `needs_human` | BooleanField | True when AI escalates or admin flags it |
@@ -86,7 +86,7 @@ One row per turn. Roles: `user` / `assistant` / `tool` / `system` / `admin`.
 
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
-| `POST` | `/api/assistant/chat/` | Optional | Send a message; AI responds |
+| `POST` | `/api/assistant/chat/` | **Required** (login-only) | Send a message; AI responds |
 | `GET` | `/api/assistant/conversations/` | Required | List the authenticated user's threads |
 | `POST` | `/api/assistant/conversations/` | Required | Create a new empty thread |
 | `GET` | `/api/assistant/conversations/{id}/messages/` | Required | Full message history for one thread |
@@ -98,6 +98,28 @@ One row per turn. Roles: `user` / `assistant` / `tool` / `system` / `admin`.
 | `GET` | `/api/assistant/conversations/admin/` | All threads; filter by `needs_human`, `status`, `user`, date |
 | `POST` | `/api/assistant/conversations/{id}/admin-reply/` | Insert an admin message; clears `needs_human` |
 | `PATCH` | `/api/assistant/conversations/{id}/` | Update `status`, `assigned_to` |
+| `POST` | `/api/assistant/admin-chat/` | **Admin business-data assistant** — a separate store-manager persona (see below) |
+
+#### Admin business assistant (`POST /api/assistant/admin-chat/`)
+
+A distinct assistant persona for the store owner/admin, separate from the customer
+chat. It is **stateless by design**: the admin panel keeps the short conversation in
+the browser and posts the recent history each turn, so these chats are never persisted
+as `AssistantConversation`s. `Agent(request.user, persona='admin')` runs with a
+**read-only** reporting toolset (`assistant/admin_tools.py → ADMIN_READ_TOOLS`) that
+aggregates across all customers and orders — it has no action/cart tools. Gated by
+`IsAdminUser` **and** the persona.
+
+| Admin tool | Reports |
+|------------|---------|
+| `sales_summary` | Revenue / orders / units / AOV for a period |
+| `count_orders` | Order counts by status/period |
+| `list_recent_orders` | Latest orders with customer + status |
+| `low_stock_products` | Products at/under their `low_stock_threshold` |
+| `top_products` | Best sellers by revenue for a period |
+| `product_stock` | Stock level for a named product |
+| `find_customer` | Look up a customer (orders, total spent) |
+| `search_report` | Top search terms + zero-result ("not found") searches |
 
 #### `POST /api/assistant/chat/` Request / Response
 
@@ -252,15 +274,19 @@ part of the thread history the customer sees and the LLM reads.
 
 ---
 
-## Anonymous Sessions
+## Authentication (login-only)
 
-Unauthenticated users can use the chat widget. For guest sessions:
-- `AssistantConversation.user` is `null`
-- `AssistantConversation.anon_session` holds a client-generated opaque string (UUID stored
-  in `localStorage("assistant_conversation_id")` on the frontend)
-- The view scopes thread lookup to `anon_session` — a guest can only resume their own thread
-- Cart and order tools return a "please log in" message for anonymous users (enforced
-  per-tool, not at the view level — the view does not block anonymous traffic)
+The chat endpoint is **login-only** — `ChatView.permission_classes = [IsAuthenticated]`.
+The entire assistant (shopping Q&A, voice, human-admin support) is gated behind login
+by design; there is no anonymous chat.
+
+> **Vestigial `anon_session`.** `AssistantConversation.user` is nullable and an
+> `anon_session` CharField plus a guest-lookup branch still exist in the code — a
+> leftover from an earlier anonymous-chat design. Because the view never admits
+> unauthenticated requests, `user` is always set and that guest path is dead. Don't
+> "fix" the endpoint to `AllowAny`; the login gate is intentional. (Cart/order tools
+> also carry their own per-tool auth guard as defence-in-depth, but it never fires
+> for anonymous callers since none reach the agent.)
 
 ## Human Escalation (`needs_human`)
 

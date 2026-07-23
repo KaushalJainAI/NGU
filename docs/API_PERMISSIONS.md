@@ -33,7 +33,6 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/spice-forms/` | GET | Spice form options |
 | `/api/search/` | GET | Full-text product/combo search |
 | `/api/search/suggest/` | GET | Search autocomplete suggestions |
-| `/api/assistant/chat/` | POST | AI shopping assistant (anon = Q&A only) |
 | `/api/auth/register/` | POST | User registration |
 | `/api/auth/login/` | POST | User login (JWT) |
 | `/api/auth/token/refresh/` | POST | Refresh JWT token |
@@ -43,6 +42,8 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/auth/password-reset-confirm/` | POST | Confirm new password |
 | `/api/contact/` | POST | Submit contact form |
 | `/api/health/` | GET | Service health check |
+| `/sitemap.xml` | GET | SEO sitemap (site root, nginx-proxied) — product/combo/category/static URLs |
+| `/robots.txt` | GET | SEO robots policy (site root, nginx-proxied) |
 
 ---
 
@@ -72,7 +73,7 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/reviews/` | POST | Create review* |
 | `/api/payment-account/` | GET | Get payment account for checkout |
 | `/api/payment-methods/` | GET/POST | List/add saved payment methods |
-| `/api/assistant/chat/` | POST | AI assistant (with cart/order tools) |
+| `/api/assistant/chat/` | POST | AI assistant (login-only; cart/order tools) |
 | `/api/assistant/transcribe/` | POST | Voice → text (self-hosted whisper.cpp); audio upload |
 | `/api/assistant/conversations/` | GET/POST | List / create chat threads |
 | `/api/assistant/conversations/{id}/messages/` | GET | Thread message history |
@@ -102,8 +103,17 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/assistant/conversations/admin/` | GET | List all chat threads |
 | `/api/assistant/conversations/{id}/admin-reply/` | POST | Reply into a thread as admin |
 | `/api/assistant/conversations/{id}/` | PATCH | Update thread status / assignment |
+| `/api/assistant/admin-chat/` | POST | Admin business-data assistant (persona=`admin`, stateless, read-only reporting tools) |
+| `/api/admin-search/` | GET | Global admin search across catalog/orders/customers |
+| `/api/admin/bulk-products/` | GET | Bulk-edit grid data |
+| `/api/admin/bulk-products/apply/` | POST | Apply bulk product edits |
+| `/api/admin/bulk-products/import/` | POST | CSV product import |
+| `/api/admin/products-export/` | GET | Export products to CSV |
+| `/api/reviews/{id}/set-hidden/` | POST | Moderate: hide/unhide a review (`is_hidden`) |
 | `/api/orders/` | GET (all) | View all orders |
 | `/api/orders/{id}/` | PUT/PATCH | Update order status |
+| `/api/orders/{id}/packing-slip/` | GET | Packing slip PDF |
+| `/api/orders/{id}/delivery-bill/` | GET/POST/DELETE | Admin-only courier receipt (private media; never shown to customers) |
 
 ---
 
@@ -128,7 +138,7 @@ Users can only access their own:
 - **Orders** — Only their own orders
 - **Favorites** — Their saved products
 - **Profile** — Their own profile only
-- **Assistant Conversations** — Scoped to user ID or anonymous session ID
+- **Assistant Conversations** — Scoped to user ID (chat is login-only)
 
 Admins (`is_staff=True`) can access all data.
 
@@ -145,8 +155,8 @@ Admins (`is_staff=True`) can access all data.
 - Admins: All orders (for management)
 
 ### AI Assistant
-- Anonymous users: product Q&A and navigation only; cart/order tools return a login-required message
-- Authenticated users: full access to cart-query and order-status tools
+- The chat endpoint is **login-only** (`IsAuthenticated`) — the whole assistant is gated behind login by design; there is no anonymous chat.
+- Authenticated users: full access to product Q&A, navigation, and cart-query / order-status tools.
 
 ---
 

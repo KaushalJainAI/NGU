@@ -116,6 +116,20 @@ Redis-cached for `CACHE_TTL_INSIGHTS` (5 min). Read the rollups.
 The **anonymous funnel is "macro"** — ratios of aggregate stage counts, not a
 per-visitor path (we keep no identity). Directional, not exact conversion.
 
+## Owner email digests
+
+Two store-owner emails are pushed on a schedule by the `scheduler` container
+(`manage.py run_scheduler`, using APScheduler cron triggers), so the owner gets a
+summary without opening the dashboard:
+
+| Command | Schedule | Contents |
+|---------|----------|----------|
+| `send_daily_digest` | daily 08:00 | Yesterday's orders + revenue, orders waiting to ship, and products at/under `low_stock_threshold` |
+| `send_weekly_summary` | Mondays 08:30 | Revenue vs. last week, best sellers, and zero-result ("not found") searches |
+
+Both reuse `orders.emails._send_async` (best-effort; a mail failure never breaks the
+scheduler). They can also be run manually: `python manage.py send_daily_digest`.
+
 ## Decoupled server-side capture (`analytics/signals.py`)
 
 Purchase events are captured via a `post_save` receiver on `Order` (registered
