@@ -37,6 +37,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.conf import settings
 from django.db import transaction, models
 from django.db.models import Q
 from django.utils import timezone
@@ -52,7 +53,10 @@ from spices_backend.limits import (
     SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
 )
 from spices_backend.abuse import flag_suspicious
-from .emails import send_order_confirmation, send_order_status_email, send_new_order_admin_alert
+from .emails import (
+    send_order_confirmation, send_order_status_email, send_new_order_admin_alert,
+    send_low_stock_alert, send_coupon_usage_alert,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -647,15 +651,29 @@ class OrderViewSet(viewsets.ModelViewSet):
                 from products.models import Product, ProductVariant
 
                 # Batch reduce stock for variants (+ mirror default to product)
+                low_stock_alerts = []
                 if variant_updates:
                     variants = list(ProductVariant.objects.select_for_update().filter(pk__in=variant_updates.keys()))
                     for variant in variants:
                         reduce_by = variant_updates[variant.pk]
                         if variant.stock < reduce_by:
                             raise ValueError(f'Insufficient stock for {variant.product.name}. Available: {variant.stock}')
+                        before = variant.stock
                         variant.stock -= reduce_by
                         if variant.is_default:
                             mirror_updates[variant.product_id] = mirror_updates.get(variant.product_id, 0) + reduce_by
+                        # Alert on a per-size threshold crossing. For a default
+                        # variant the Product mirror below carries the same signal,
+                        # so only alert here for NON-default sizes to avoid a
+                        # duplicate email for the same physical stock.
+                        threshold = variant.low_stock_threshold
+                        if (not variant.is_default and before > threshold
+                                and variant.stock <= threshold):
+                            low_stock_alerts.append({
+                                'name': f"{variant.product.name} ({variant.formatted_weight})",
+                                'stock': variant.stock,
+                                'threshold': threshold,
+                            })
                     ProductVariant.objects.bulk_update(variants, ['stock'])
 
                 # Batch reduce Product.stock under a row lock. Hard decrements
@@ -663,9 +681,14 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # LOCKED row, so two concurrent checkouts for the last unit can
                 # never both succeed (G4). Mirror decrements clamp at 0.
                 affected = set(hard_updates) | set(mirror_updates)
+                # Per-product stock before/after this order — used to detect
+                # threshold crossings for both products and (below) combos.
+                stock_before = {}
+                stock_after = {}
                 if affected:
                     products = list(Product.objects.select_for_update().filter(pk__in=affected))
                     for product in products:
+                        before = product.stock
                         hard = hard_updates.get(product.pk, 0)
                         if hard and product.stock < hard:
                             raise ValueError(
@@ -675,7 +698,56 @@ class OrderViewSet(viewsets.ModelViewSet):
                         mirror = mirror_updates.get(product.pk, 0)
                         if mirror:
                             product.stock = max(0, product.stock - mirror)
+                        stock_before[product.pk] = before
+                        stock_after[product.pk] = product.stock
+                        # Alert the owner only when THIS order crossed the
+                        # threshold (was above it before, at/below it now) — so an
+                        # already-low product doesn't re-email on every order.
+                        threshold = product.low_stock_threshold
+                        if before > threshold and product.stock <= threshold:
+                            low_stock_alerts.append({
+                                'name': product.name,
+                                'stock': product.stock,
+                                'threshold': threshold,
+                            })
                     Product.objects.bulk_update(products, ['stock'])
+
+                # Combo low-stock: a combo has no stock of its own, so we alert on
+                # its *buildable count* (min over components of stock // per-combo
+                # qty) crossing the combo's threshold. Only combos in THIS order can
+                # have moved, and their components were all just locked above.
+                for item_data in cart_items_data:
+                    if item_data['item_type'] != 'combo':
+                        continue
+                    combo = item_data['item']
+                    line_qty = item_data['quantity'] or 1
+                    components = item_data.get('components', [])
+                    if not components:
+                        continue
+
+                    def _buildable(stock_map):
+                        counts = []
+                        for pid, units in components:
+                            per_combo = (units // line_qty) or 1  # units is line total
+                            counts.append(stock_map.get(pid, 0) // per_combo)
+                        return min(counts) if counts else 0
+
+                    threshold = combo.low_stock_threshold
+                    avail_before = _buildable(stock_before)
+                    avail_after = _buildable(stock_after)
+                    if avail_before > threshold and avail_after <= threshold:
+                        low_stock_alerts.append({
+                            'name': f"{combo.name} (combo)",
+                            'stock': avail_after,
+                            'threshold': threshold,
+                        })
+
+                # Fire the low-stock alert only after the order transaction
+                # actually commits, so a rolled-back order never emails.
+                if low_stock_alerts:
+                    transaction.on_commit(
+                        lambda items=low_stock_alerts: send_low_stock_alert(items)
+                    )
 
                 # G5: increment coupon usage under a row lock and re-validate
                 # against the LOCKED row, so a max_usage / single-use coupon can
@@ -685,8 +757,25 @@ class OrderViewSet(viewsets.ModelViewSet):
                     reason = locked_coupon.get_invalid_reason(order_amount=subtotal, user=request.user)
                     if reason:
                         raise ValueError(reason)
+                    prev_usage = locked_coupon.usage_count
                     locked_coupon.usage_count = models.F('usage_count') + 1
                     locked_coupon.save(update_fields=['usage_count'])
+
+                    # Warn the owner as a capped coupon nears/hits its usage limit.
+                    # This redemption raised the count by exactly 1, so comparing
+                    # prev vs new against each boundary fires the email once, on the
+                    # crossing — never on every remaining redemption.
+                    if locked_coupon.max_usage:
+                        import math
+                        new_usage = prev_usage + 1
+                        pct = getattr(settings, 'COUPON_USAGE_ALERT_PERCENT', 90)
+                        alert_level = math.ceil(locked_coupon.max_usage * pct / 100)
+                        crossed_warn = prev_usage < alert_level <= new_usage
+                        crossed_full = prev_usage < locked_coupon.max_usage <= new_usage
+                        if crossed_warn or crossed_full:
+                            locked_coupon.usage_count = new_usage  # concrete value for the email
+                            transaction.on_commit(
+                                lambda c=locked_coupon: send_coupon_usage_alert(c))
 
                 # Empty the cart ONLY for orders that are complete at placement:
                 # COD (no gateway) and already-paid zero-total coupon orders. A

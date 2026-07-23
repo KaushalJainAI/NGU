@@ -459,6 +459,10 @@ class ProductVariant(models.Model):
         validators=[MinValueValidator(0)]
     )
     stock = models.IntegerField(default=0, validators=[MinValueValidator(0)])
+    low_stock_threshold = models.PositiveIntegerField(
+        default=5,
+        help_text='Alert the admin when this size falls to or below this stock level.'
+    )
 
     sku = models.CharField(max_length=64, blank=True)
     slug = models.SlugField(max_length=220, unique=True, blank=True)
@@ -636,6 +640,14 @@ class ProductCombo(models.Model):
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     badge = models.CharField(max_length=20, blank=True)
+    # A combo has no stock of its own — how many can still be sold is limited by
+    # its scarcest component. Alert the admin when that buildable count falls to
+    # or below this.
+    low_stock_threshold = models.PositiveIntegerField(
+        default=5,
+        help_text='Alert the admin when the number of combos that can still be '
+                  'built (limited by the scarcest component) falls to or below this.'
+    )
     weight = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -757,6 +769,21 @@ class ProductCombo(models.Model):
     def display_title(self):
         """Returns custom title if set, otherwise returns name"""
         return self.title if self.title else self.name
+
+    @property
+    def available_stock(self):
+        """How many of this combo can still be built, limited by the scarcest
+        component (min of each component's stock // its required quantity).
+        Returns 0 for an empty combo."""
+        # .all() (not .select_related) so the list endpoint's existing
+        # `productcomboitem_set__product` prefetch is reused — no N+1 on list.
+        items = list(self.productcomboitem_set.all())
+        if not items:
+            return 0
+        return min(
+            (item.product.stock // item.quantity) if item.quantity else 0
+            for item in items
+        )
 
 
 class ProductComboItem(models.Model):

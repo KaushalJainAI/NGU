@@ -4,6 +4,7 @@ Checkout invariants, PDF invoices, delivery bills, date filtering, CSV export, p
 from datetime import timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -196,6 +197,88 @@ class TestStockOnCheckout:
         p.refresh_from_db()
         assert p.stock == 2
         assert not Order.objects.filter(user=test_user).exists()
+
+
+@pytest.mark.django_db
+class TestLowStockAlertOnCheckout:
+    """Store-owner threshold alerts fired from the checkout transaction. The
+    senders are patched (they run on transaction.on_commit → a background thread
+    in prod); the assertions verify the CROSSING logic and the payload, not SMTP.
+    django_capture_on_commit_callbacks(execute=True) runs the on_commit hooks
+    that the default rolled-back test transaction would otherwise skip."""
+
+    def test_alert_fires_once_when_order_crosses_threshold(
+            self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
+        # threshold default is 5; stock 6 → order 2 → 4 (crosses 6>5, 4<=5).
+        p = _product(test_category, "100.00", stock=6)
+        _cart_line(test_user, p, 2)
+        with patch("orders.views.send_low_stock_alert") as mock_send:
+            with django_capture_on_commit_callbacks(execute=True):
+                assert _place(authenticated_client).status_code == 201
+        mock_send.assert_called_once()
+        items = mock_send.call_args.args[0]
+        assert items == [{"name": p.name, "stock": 4, "threshold": 5}]
+
+    def test_no_alert_when_already_below_threshold(
+            self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
+        # stock 4 already <= threshold 5; ordering 1 does NOT cross (before !> 5).
+        p = _product(test_category, "100.00", stock=4)
+        _cart_line(test_user, p, 1)
+        with patch("orders.views.send_low_stock_alert") as mock_send:
+            with django_capture_on_commit_callbacks(execute=True):
+                assert _place(authenticated_client).status_code == 201
+        mock_send.assert_not_called()
+
+    def test_no_alert_when_staying_above_threshold(
+            self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
+        p = _product(test_category, "100.00", stock=100)
+        _cart_line(test_user, p, 2)  # 100 → 98, well above 5
+        with patch("orders.views.send_low_stock_alert") as mock_send:
+            with django_capture_on_commit_callbacks(execute=True):
+                assert _place(authenticated_client).status_code == 201
+        mock_send.assert_not_called()
+
+    def test_combo_alert_on_buildable_count_crossing(
+            self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
+        # Scarcest component (A) drives the buildable count. A uses 3 units per
+        # combo; stock 20 stays well above A's OWN product threshold (5) after
+        # the order, so ONLY the combo-level alert should fire — proving the two
+        # signals are independent and the per-combo-qty math (units/line_qty=3).
+        a = _product(test_category, "50.00", stock=20, name="CompA")
+        b = _product(test_category, "50.00", stock=100, name="CompB")
+        combo = ProductCombo.objects.create(
+            name="Spice Box", price=Decimal("100.00"), is_active=True,
+            low_stock_threshold=5,
+        )
+        ProductComboItem.objects.create(combo=combo, product=a, quantity=3)
+        ProductComboItem.objects.create(combo=combo, product=b, quantity=1)
+        cart, _ = Cart.objects.get_or_create(user=test_user)
+        CartItem.objects.create(cart=cart, combo=combo, item_type="combo", quantity=2)
+        with patch("orders.views.send_low_stock_alert") as mock_send:
+            with django_capture_on_commit_callbacks(execute=True):
+                assert _place(authenticated_client).status_code == 201
+        mock_send.assert_called_once()
+        items = mock_send.call_args.args[0]
+        # buildable before = min(20//3, 100) = 6, after = min(14//3, 98) = 4;
+        # crosses combo threshold 5. Components A(14) & B(98) stay above 5.
+        assert items == [{"name": "Spice Box (combo)", "stock": 4, "threshold": 5}]
+
+    def test_coupon_usage_alert_on_crossing_limit(
+            self, authenticated_client, test_user, test_category, django_capture_on_commit_callbacks):
+        p = _product(test_category, "300.00", stock=100)
+        _cart_line(test_user, p, 1)
+        # max_usage 2, 90% → alert_level ceil(1.8)=2; pre-seed usage 1 so this
+        # redemption (→2) crosses both the warn level and exhaustion.
+        Coupon.objects.create(
+            code="SAVE", discount_type="percent", discount_percent=10,
+            is_active=True, max_usage=2, usage_count=1,
+        )
+        with patch("orders.views.send_coupon_usage_alert") as mock_send:
+            with django_capture_on_commit_callbacks(execute=True):
+                assert _place(authenticated_client, coupon_code="SAVE").status_code == 201
+        mock_send.assert_called_once()
+        coupon_arg = mock_send.call_args.args[0]
+        assert coupon_arg.usage_count == 2
 
 
 # --- From test_resilience.py ---

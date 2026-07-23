@@ -175,6 +175,102 @@ def send_new_order_admin_alert(order):
     )
 
 
+def send_low_stock_alert(items):
+    """Tell the store owner a checkout just pushed products to/below their
+    low-stock threshold (sent to ADMIN_ALERT_EMAIL).
+
+    ``items`` is a list of dicts: {'name', 'stock', 'threshold'}. Only products
+    that *crossed* the threshold on this order are passed in (see
+    orders/views.py) so the owner isn't re-alerted on every subsequent order for
+    an already-low product. Best-effort background send, like the other alerts.
+    """
+    if not items:
+        return
+    recipient = getattr(settings, 'ADMIN_ALERT_EMAIL', '') or None
+    if not recipient:
+        return
+
+    out = [it for it in items if it['stock'] <= 0]
+    low = [it for it in items if it['stock'] > 0]
+
+    lines = ["A recent order has left some products low on stock.", ""]
+    if out:
+        lines.append("Out of stock now — customers can no longer buy these:")
+        lines += [f"  - {it['name']}" for it in out]
+        lines.append("")
+    if low:
+        lines.append("Running low (at or below your alert level):")
+        lines += [
+            f"  - {it['name']} — {it['stock']} left (alert at {it['threshold']})"
+            for it in low
+        ]
+        lines.append("")
+    lines += ["Restock these in the admin panel when you can.", "", "— Your Nidhi Masala store"]
+
+    # Subject leads with the most urgent fact.
+    if out:
+        subject = f"Stock alert — {len(out)} product{'s' if len(out) != 1 else ''} now out of stock"
+    else:
+        subject = f"Stock alert — {len(low)} product{'s' if len(low) != 1 else ''} running low"
+
+    _send_async(subject=subject, message="\n".join(lines), recipient=recipient)
+
+
+def _admin_recipient():
+    return getattr(settings, 'ADMIN_ALERT_EMAIL', '') or None
+
+
+def send_coupon_usage_alert(coupon):
+    """Warn the owner a coupon is nearly exhausted (usage approaching max_usage).
+
+    Fired at redemption time; deduped so it emails once as the coupon crosses the
+    alert level, not on every remaining redemption."""
+    recipient = _admin_recipient()
+    if not recipient:
+        return
+    remaining = max(0, (coupon.max_usage or 0) - coupon.usage_count)
+    exhausted = remaining == 0
+    lines = [
+        (f"Your coupon \"{coupon.code}\" has been fully used up "
+         f"({coupon.usage_count}/{coupon.max_usage}) and can no longer be applied."
+         if exhausted else
+         f"Your coupon \"{coupon.code}\" is almost used up: "
+         f"{coupon.usage_count} of {coupon.max_usage} uses, {remaining} left."),
+        "",
+        ("Create a new coupon or raise its usage limit to keep the offer running."
+         if exhausted else
+         "Raise its usage limit in the admin panel if you want the offer to continue."),
+        "",
+        "— Your Nidhi Masala store",
+    ]
+    subject = (f"Coupon {coupon.code} is used up" if exhausted
+               else f"Coupon {coupon.code} almost used up — {remaining} left")
+    _send_async(subject=subject, message="\n".join(lines), recipient=recipient)
+
+
+def send_payment_spike_alert(cancelled, window_desc):
+    """Warn the owner that an unusual number of ONLINE checkouts were auto-cancelled
+    in one reconcile run — usually a payment/checkout problem, not chance."""
+    recipient = _admin_recipient()
+    if not recipient:
+        return
+    lines = [
+        f"{cancelled} online orders were just auto-cancelled because their payment "
+        f"was never completed ({window_desc}).",
+        "",
+        "A burst like this often means customers are hitting a problem at the "
+        "payment step (gateway down, card failures, or a checkout bug). It's worth "
+        "placing a small test order to make sure online payment is working.",
+        "",
+        "— Your Nidhi Masala store",
+    ]
+    _send_async(
+        subject=f"Heads up — {cancelled} online payments just failed to complete",
+        message="\n".join(lines),
+        recipient=recipient,
+    )
+
+
 def send_order_status_email(order, status_changed=False, tracking_added=False):
     """Notify the customer that their order status advanced and/or a tracking
     number was added. No-op if neither actually changed."""

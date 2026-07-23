@@ -98,6 +98,18 @@ class Command(BaseCommand):
                 received_at__lt=timezone.now() - timedelta(days=30)).delete()
             cache.set(RECONCILE_LAST_RUN_KEY, timezone.now().isoformat(), None)
 
+        # A burst of auto-cancellations in ONE run usually means customers are
+        # failing at the payment step (gateway down / checkout bug), not chance
+        # abandonment — alert the owner. Per-run count, so no dedup is needed.
+        spike_threshold = getattr(settings, 'PAYMENT_STUCK_SPIKE_THRESHOLD', 5)
+        if not dry_run and cancelled >= spike_threshold:
+            try:
+                from orders.emails import send_payment_spike_alert
+                send_payment_spike_alert(
+                    cancelled, window_desc=f"unpaid past {ttl_minutes} min")
+            except Exception:  # noqa: BLE001 — an alert must never fail reconcile
+                self.stderr.write("  (payment-spike alert failed to send)")
+
         self.stdout.write(self.style.SUCCESS(
             f"reconcile_payments done (dry_run={dry_run}): "
             f"recovered={recovered} cancelled={cancelled} "

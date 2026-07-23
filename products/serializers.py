@@ -19,7 +19,8 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'slug', 'weight', 'unit', 'formatted_weight',
             'price', 'discount_price', 'final_price', 'discount_percentage',
-            'stock', 'in_stock', 'sku', 'is_default', 'is_active', 'display_order',
+            'stock', 'in_stock', 'low_stock_threshold', 'sku', 'is_default',
+            'is_active', 'display_order',
         ]
         read_only_fields = fields
 
@@ -37,8 +38,8 @@ class ProductVariantWriteSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'product', 'product_name', 'slug', 'weight', 'unit',
             'formatted_weight', 'price', 'discount_price', 'final_price',
-            'discount_percentage', 'stock', 'in_stock', 'sku', 'is_default',
-            'is_active', 'display_order',
+            'discount_percentage', 'stock', 'in_stock', 'low_stock_threshold',
+            'sku', 'is_default', 'is_active', 'display_order',
         ]
         read_only_fields = ['slug', 'formatted_weight', 'final_price',
                             'discount_percentage', 'in_stock', 'product_name']
@@ -541,14 +542,16 @@ class ProductComboSerializer(serializers.ModelSerializer):
     final_price = serializers.ReadOnlyField()
     total_original_price = serializers.ReadOnlyField()
     total_weight = serializers.ReadOnlyField()
-    
+    available_stock = serializers.ReadOnlyField()
+
     class Meta:
         model = ProductCombo
         fields = [
             'id', 'name', 'slug', 'description', 'title', 'subtitle',
             'display_title', 'price', 'discount_price', 'final_price', 'tax_rate',
             'discount_percentage', 'total_original_price', 'total_weight',
-            'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at', 
+            'low_stock_threshold', 'available_stock',
+            'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at',
             'items', 'sections', 'section_names'
         ]
         read_only_fields = ['slug', 'created_at']

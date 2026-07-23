@@ -523,6 +523,26 @@ PAYMENT_ALERT_EMAIL = config('PAYMENT_ALERT_EMAIL', default='') or config('EMAIL
 # digest, weekly summary); falls back to EMAIL_HOST_USER like PAYMENT_ALERT_EMAIL.
 ADMIN_ALERT_EMAIL = config('ADMIN_ALERT_EMAIL', default='') or config('EMAIL_HOST_USER', default='')
 
+# --- Threshold-based store-owner alerts (all sent to ADMIN_ALERT_EMAIL) ---
+# Real-time low-stock alert fires per crossing at checkout (see orders/views.py).
+# These tune the other threshold alerts; each is env-overridable.
+#
+# Defaults are sized for the current business: ~Rs 1 crore/year of orders, which
+# at a typical spice AOV of ~Rs 350-450 is ~25,000 orders/year — roughly 65-70
+# orders/day, ~3/hour. The idea is "clearly abnormal, worth interrupting the
+# owner", not "slightly busy". Bump these via env as volume grows.
+#
+# Spike of abandoned ONLINE checkouts auto-cancelled in a SINGLE reconcile run
+# (every RECONCILE_INTERVAL_MINUTES = 5 min). At ~3 orders/hour a 5-min window
+# normally sees <1 order, so 5 auto-cancels at once is a genuine burst (gateway
+# down / checkout bug), not chance abandonment.
+PAYMENT_STUCK_SPIKE_THRESHOLD = config('PAYMENT_STUCK_SPIKE_THRESHOLD', default=5, cast=int)
+# Coupon usage alert: warn when usage_count reaches this % of max_usage (so the
+# owner can extend/replace a promo before it runs out mid-campaign).
+COUPON_USAGE_ALERT_PERCENT = config('COUPON_USAGE_ALERT_PERCENT', default=90, cast=int)
+# (Order-backlog / waiting-chat alerts are covered by the daily digest, so there
+# is no separate periodic checker for them.)
+
 # Background scheduler cadence (see `manage.py run_scheduler`). Reconcile runs
 # often enough that an abandoned checkout is cancelled within one interval of the
 # 15-minute TTL; rollups keep the admin Insights dashboard live.
