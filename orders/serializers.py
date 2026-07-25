@@ -115,6 +115,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         max_digits=10, decimal_places=2, source="discount_amount"
     )
     tax = serializers.DecimalField(max_digits=10, decimal_places=2)
+    # Delivery fee actually charged on this order (0 when the order cleared the
+    # free-shipping threshold). Exposed so the order breakdown adds up to `total`.
+    shipping_charge = serializers.DecimalField(max_digits=10, decimal_places=2)
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, source="total_amount"
     )
@@ -134,6 +137,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             "items",
             "subtotal",
             "tax",
+            "shipping_charge",
             "discount",
             "total",
             "shipping_address",
@@ -172,6 +176,9 @@ class OrderListSerializer(serializers.ModelSerializer):
         max_digits=10, decimal_places=2, source="discount_amount"
     )
     tax = serializers.DecimalField(max_digits=10, decimal_places=2)
+    # See OrderDetailSerializer — the delivery fee is part of the breakdown the
+    # customer's order card renders, so it must be present on the list response too.
+    shipping_charge = serializers.DecimalField(max_digits=10, decimal_places=2)
     total = serializers.DecimalField(
         max_digits=10, decimal_places=2, source="total_amount"
     )
@@ -195,6 +202,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             "items",
             "subtotal",
             "tax",
+            "shipping_charge",
             "discount",
             "total",
             "shipping_address",
