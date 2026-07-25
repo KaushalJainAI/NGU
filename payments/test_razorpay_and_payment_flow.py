@@ -566,7 +566,9 @@ class TestPaymentDetailVisibility:
             'order_RZP123', 'pay_WH', source='webhook',
             payment_entity=_entity(method='card',
                                    card={'last4': '4242', 'network': 'Visa'}))
-        resp = admin_client.get('/api/orders/')
+        # scope=all → admin table; the order belongs to another user, so the
+        # bare (customer) list would not contain it.
+        resp = admin_client.get('/api/orders/?scope=all')
         assert resp.status_code == 200
         results = resp.data['results'] if 'results' in resp.data else resp.data
         row = next(r for r in results if r['id'] == order.id)

@@ -182,14 +182,20 @@ Every mutation runs inside `transaction.atomic()` with `select_for_update` locks
 
 ## 5. Orders — app: `orders` — [orders/views.py](../orders/views.py)
 
-Router basename `orders`, `IsAuthenticated`. Customers see only their own
-(non-deleted) orders; staff see all (paginated, with server-side filter/sort/search).
+Router basename `orders`, `IsAuthenticated`. The list endpoint serves **two
+surfaces**, selected by the REQUEST and not by the caller's role: without
+`?scope=all` it is the storefront's "My Orders" — the caller's own non-deleted
+orders as a bare array, **staff included**; with `?scope=all` (staff only, else
+403) it is the admin table — every customer's orders, paginated, with
+server-side filter/sort/search. Detail actions keep the unconditional staff
+scope. Deciding on `is_staff` alone used to serve a shop owner's own /my-orders
+page the paginated all-customers table, which the storefront could not render.
 This is the **most complex** module — checkout does pricing, per-line tax, stock
 reservation, coupon locking, and cart clearing in one transaction.
 
 | URL | Method | What | Access | Complexity | Tests | Serializer | DB tables | Atomic | Risk | Notes |
 |-----|--------|------|--------|-----------|-------|-----------|-----------|--------|------|-------|
-| `/api/orders/` | GET | List orders (customer array / admin paginated + CSV) | Auth (admin sees all) | O(n)/Aggregate | ✅ good / ✅ bad | `OrderListSerializer` | Order, OrderItem, User, Payment | N/A | 🔴 Critical | One missing `is_staff` branch exposes every customer's name, address, phone and spend. `?export=csv`, `?deleted=true`, admin filter/sort/search all DB-side |
+| `/api/orders/` | GET | List orders (own, bare array / `?scope=all` → admin paginated + CSV) | Auth; `?scope=all` **admin only** (403) | O(n)/Aggregate | ✅ good / ✅ bad | `OrderListSerializer` | Order, OrderItem, User, Payment | N/A | 🔴 Critical | Scope AND shape both come from `_wants_admin_list()` so they can never disagree: envelope ⇒ all orders, bare array ⇒ own only. One slip here exposes every customer's name, address, phone and spend. `?export=csv`, `?deleted=true`, admin filter/sort/search all DB-side (all imply admin intent for pre-`scope` admin builds) |
 | `/api/orders/` | POST | **Create order / checkout** | Auth (OrderRate + Daily throttle) | O(n) + locks | ✅ good / ✅ bad | `OrderCreateSerializer` → `OrderDetailSerializer` | Order, OrderItem, Cart, CartItem, Product, ProductVariant, ProductComboItem, Coupon, Payment | **Yes** | 🔴 Critical | The money path: computes what the customer pays, reserves stock, redeems coupons. Bugs = oversell, under-charge, or coupon over-redemption. Locks Cart; supersedes stale ONLINE order; per-line proportional discount + GST |
 | `/api/orders/{id}/` | GET | Order detail | Auth (owner/staff) | O(1) | ✅ good / ✅ bad | `OrderDetailSerializer` | Order, OrderItem, Payment | N/A | 🔴 Critical | IDOR target — full PII + payment instrument on one object. Other-user access 404s |
 | `/api/orders/{id}/` | PUT/PATCH | Admin edit (status/tracking/address/payment_status) | **Admin only** | O(1) + locks | ✅ good / ✅ bad | `OrderDetailSerializer` | Order, Payment, Product, ProductVariant | **Yes** | 🔴 Critical | Can flip `payment_status` (marks an unpaid order paid) and fires the irreversible shipping email. Cancel-via-status restocks; only tracking-added emails |

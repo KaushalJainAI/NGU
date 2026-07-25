@@ -179,6 +179,92 @@ class TestOrderListRetrieve:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
+# ============ LIST SCOPE: CUSTOMER SURFACE vs ADMIN SURFACE ============
+
+@pytest.mark.django_db
+class TestOrderListScope:
+    """The order list serves two surfaces with different powers, chosen by the
+    REQUEST (`?scope=all`) and not by the caller's is_staff flag.
+
+    Regression: a staff account browsing the storefront used to be served the
+    paginated all-customers admin table on /my-orders. The storefront expects a
+    bare array, so it rendered "no orders" and the owner could not see an order
+    they had just paid for — while the same response carried every customer's PII.
+    """
+
+    base_url = '/api/orders/'
+
+    def test_staff_storefront_list_is_bare_array_of_own_orders_only(
+        self, admin_client, test_admin, test_order, test_product,
+    ):
+        """A staff user with no admin params gets the CUSTOMER view: a bare array
+        holding only their own orders. `test_order` belongs to `test_user`, so it
+        must NOT appear."""
+        from orders.models import Order
+        own = Order.objects.create(
+            user=test_admin, shipping_address='1 Admin Way', phone_number='555',
+            payment_method='COD', subtotal=Decimal('10.00'),
+            discount_amount=Decimal('0.00'), tax=Decimal('0.00'),
+            total_amount=Decimal('10.00'), status='pending',
+        )
+
+        response = admin_client.get(self.base_url)
+
+        assert response.status_code == status.HTTP_200_OK
+        # Bare array — NOT a {count, results} envelope the storefront can't read.
+        assert isinstance(response.data, list)
+        assert [o['id'] for o in response.data] == [own.id]
+
+    def test_admin_scope_returns_all_orders_paginated(
+        self, admin_client, test_order,
+    ):
+        """`?scope=all` keeps the admin table exactly as the panel expects:
+        every customer's orders, in a DRF pagination envelope."""
+        response = admin_client.get(self.base_url, {'scope': 'all', 'page': 1})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert set(response.data) >= {'count', 'next', 'previous', 'results'}
+        # test_order belongs to another user and must be visible to the admin.
+        assert test_order.id in [o['id'] for o in response.data['results']]
+
+    def test_customer_cannot_request_admin_scope(
+        self, authenticated_client_user2, test_order,
+    ):
+        """A non-staff caller asking for the admin table is refused outright,
+        rather than silently downgraded to an empty-looking customer list."""
+        response = authenticated_client_user2.get(self.base_url, {'scope': 'all'})
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_customer_with_stray_admin_param_still_gets_own_orders(
+        self, authenticated_client, test_order,
+    ):
+        """The compat shim is staff-only: a customer sending `?page=1` gets their
+        own orders, not a 403 and never someone else's."""
+        response = authenticated_client.get(self.base_url, {'page': 1})
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data, list)
+        assert [o['id'] for o in response.data] == [test_order.id]
+
+    def test_customer_list_unaffected_by_scope_change(
+        self, authenticated_client, test_order,
+    ):
+        """The ordinary customer path still returns a bare array of own orders."""
+        response = authenticated_client.get(self.base_url)
+        assert response.status_code == status.HTTP_200_OK
+        assert isinstance(response.data, list)
+        assert [o['id'] for o in response.data] == [test_order.id]
+
+    def test_legacy_admin_params_still_serve_admin_view(
+        self, admin_client, test_order,
+    ):
+        """Compat shim: an admin build predating `scope=all` is recognised by its
+        filter params, so the panel keeps working across the deploy gap."""
+        response = admin_client.get(self.base_url, {'page': 1})
+        assert response.status_code == status.HTTP_200_OK
+        assert 'results' in response.data
+        assert test_order.id in [o['id'] for o in response.data['results']]
+
+
 # ==================== ORDER AUTHORIZATION TESTS (BOLA) ====================
 
 @pytest.mark.django_db

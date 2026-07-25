@@ -2,9 +2,12 @@
 Order Views - Order Management API
 
 Architecture:
-- OrderViewSet: Complete order CRUD with role-based filtering
-  - Regular users: see only their orders
-  - Admins (is_staff): see all orders
+- OrderViewSet: Complete order CRUD serving two surfaces from one route
+  - Storefront "My Orders" (default): the caller's own orders, bare array —
+    staff get this too when they browse the storefront
+  - Admin table (`?scope=all`, staff only): every customer's orders, paginated
+  The list scope follows the REQUEST, not the caller's is_staff flag; detail
+  actions keep the unconditional staff scope. See `_wants_admin_list`.
 
 Order Creation Flow:
 1. Validate cart exists and has items
@@ -131,10 +134,54 @@ class OrderViewSet(viewsets.ModelViewSet):
         'lowestTotal': 'total_amount',
     }
 
+    # Query params that only the admin order table ever sends. Their presence is
+    # treated as a request for the admin view (see `_wants_admin_list`) so the
+    # currently-deployed admin panel keeps working before it is rebuilt to send
+    # `?scope=all`. Storefront "My Orders" sends none of these.
+    _ADMIN_LIST_PARAMS = frozenset({
+        'page', 'deleted', 'export', 'status', 'payment_method',
+        'date_from', 'date_to', 'min_amount', 'max_amount', 'ordering', 'search',
+    })
+
+    def _wants_admin_list(self):
+        """True when this `list` call is the ADMIN order table rather than the
+        storefront's "My Orders".
+
+        The two surfaces have genuinely different powers — every order vs. only
+        the caller's — so the scope must follow the request's INTENT, not merely
+        the caller's `is_staff` flag. A shop owner browsing their own storefront
+        is a customer there and must see only their own orders; the same person
+        in /panel/orders is an administrator and sees everyone's.
+
+        Deciding on identity alone (the pre-2026-07-25 behaviour) meant a staff
+        user's /my-orders page was served the paginated all-customers admin table,
+        which the storefront could not render — and would have leaked every
+        customer's PII if it had.
+
+        Admin intent is `?scope=all`. Non-staff asking for it EXPLICITLY are
+        refused in `list()` rather than silently downgraded, so a permission
+        problem is never mistaken for an empty order history.
+        """
+        params = self.request.query_params
+        if params.get('scope') == 'all':
+            return True
+        # Compat: pre-`scope` admin builds are recognised by their filter params.
+        # Staff-only, so a customer who happens to send `?page=1` (or a stray
+        # `?search=`) still gets their own orders instead of a 403 — the shim
+        # must never change what a non-admin request means.
+        user = self.request.user
+        if not (user.is_staff or user.is_superuser):
+            return False
+        return any(key in params for key in self._ADMIN_LIST_PARAMS)
+
     def get_queryset(self):
         user = self.request.user
-        # Admin/superusers can see all orders
-        if user.is_staff or user.is_superuser:
+        is_admin = user.is_staff or user.is_superuser
+        # The admin's all-orders scope applies to `list` only when the admin view
+        # was actually requested. Detail actions (retrieve/update/restore/…) keep
+        # the unconditional staff scope — they address one known order and are
+        # what the admin panel's row actions rely on.
+        if is_admin and (self.action != 'list' or self._wants_admin_list()):
             qs = Order.objects.all().prefetch_related(
                 'items__product', 'items__combo', 'items__variant'
             ).select_related('user', 'payment')
@@ -152,7 +199,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # plenty.
                 qs = self._apply_admin_filters(qs)
             return qs
-        # Regular users only see their own, non-deleted orders
+        # Customer scope — only their own, non-deleted orders. Staff land here too
+        # when they browse the storefront.
         return Order.objects.filter(user=user, is_deleted=False).prefetch_related(
             'items__product', 'items__combo', 'items__variant')
 
@@ -1237,26 +1285,42 @@ class OrderViewSet(viewsets.ModelViewSet):
         """
         List orders.
 
-        Staff/admin: the full order table, so the response is PAGINATED
-        (PAGE_SIZE=12) — bounded work per request and it powers the admin's
-        server-side Prev/Next. The admin sort param (applied in get_queryset)
-        overrides the default order.
+        Admin view (`?scope=all`, staff only): the full order table, so the
+        response is PAGINATED (PAGE_SIZE=12) — bounded work per request and it
+        powers the admin's server-side Prev/Next. The admin sort param (applied
+        in get_queryset) overrides the default order.
 
-        Customer: only their own orders — a naturally small set that the
-        storefront expects as a bare array, so it stays unpaginated.
+        Customer view (no admin params — the storefront's "My Orders"): only the
+        caller's own orders, a naturally small set the storefront expects as a
+        bare array, so it stays unpaginated.
+
+        Which one you get follows the REQUEST, not the caller's role: staff
+        browsing the storefront are customers there and get the customer view.
+        Scope and shape are decided by the single `_wants_admin_list()` predicate
+        so they can never disagree — a paginated envelope always means the
+        all-orders scope, and a bare array always means own-orders-only.
         """
+        is_admin = request.user.is_staff or request.user.is_superuser
+        admin_view = self._wants_admin_list()
+        if admin_view and not is_admin:
+            # Explicit refusal beats silently serving the customer view: a
+            # non-staff caller asking for the admin table has a permission
+            # problem, and an empty-looking list would hide it.
+            return Response({'error': 'Admin access required.'},
+                            status=status.HTTP_403_FORBIDDEN)
+
         queryset = self.get_queryset()
         if not queryset.query.order_by:
             queryset = queryset.order_by('-created_at')
 
-        # CSV export (staff only): stream EVERY filtered row, ignoring pagination,
-        # so the admin's accountant gets the whole selection in one file. The
-        # active filters (status/date/search/…) already applied in get_queryset.
-        if (request.user.is_staff or request.user.is_superuser) and \
-                request.query_params.get('export') == 'csv':
+        # CSV export (admin view only): stream EVERY filtered row, ignoring
+        # pagination, so the admin's accountant gets the whole selection in one
+        # file. The active filters (status/date/search/…) already applied in
+        # get_queryset.
+        if admin_view and request.query_params.get('export') == 'csv':
             return self._export_orders_csv(queryset)
 
-        if request.user.is_staff or request.user.is_superuser:
+        if admin_view:
             page = self.paginate_queryset(queryset)
             if page is not None:
                 serializer = self.get_serializer(page, many=True)

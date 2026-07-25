@@ -806,7 +806,9 @@ class TestDeliveryBillSerializerMetadata:
         return f"/api/orders/{order.id}/delivery_bill/"
 
     def test_list_flags_absence_then_presence(self, admin_client, test_order):
-        before = admin_client.get("/api/orders/").data
+        # scope=all → the admin table. A bare /api/orders/ is the *customer*
+        # surface and would return only the admin's own orders.
+        before = admin_client.get("/api/orders/?scope=all").data
         row = next(o for o in before["results"] if o["id"] == test_order.id)
         assert row["has_delivery_bill"] is False
         assert row["delivery_bill_uploaded_at"] is None
@@ -814,7 +816,7 @@ class TestDeliveryBillSerializerMetadata:
 
         admin_client.post(self._url(test_order), {"file": _pdf_upload()}, format="multipart")
 
-        after = admin_client.get("/api/orders/").data
+        after = admin_client.get("/api/orders/?scope=all").data
         row = next(o for o in after["results"] if o["id"] == test_order.id)
         assert row["has_delivery_bill"] is True
         assert row["delivery_bill_uploaded_at"] is not None
@@ -939,7 +941,7 @@ class TestOrderSoftDelete:
         kept = _order(test_user)
         gone = _order(test_user)
         admin_client.delete(f"/api/orders/{gone.id}/")
-        ids = _ids(admin_client.get("/api/orders/"))
+        ids = _ids(admin_client.get("/api/orders/?scope=all"))
         assert kept.id in ids
         assert gone.id not in ids
 
@@ -968,7 +970,7 @@ class TestOrderRestore:
         order.refresh_from_db()
         assert order.is_deleted is False
         assert order.deleted_at is None
-        assert order.id in _ids(admin_client.get("/api/orders/"))
+        assert order.id in _ids(admin_client.get("/api/orders/?scope=all"))
 
     def test_restore_non_deleted_is_400(self, admin_client, test_user):
         order = _order(test_user)
