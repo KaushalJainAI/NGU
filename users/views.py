@@ -1,5 +1,8 @@
+import logging
+
 from rest_framework import generics, status
 from rest_framework.response import Response
+from django.db import IntegrityError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
@@ -11,6 +14,40 @@ from .serializers import (
     UserSerializer,
     CustomTokenObtainPairSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+# ==================== AUTH COOKIE HELPERS ====================
+
+def _cookie_max_age(key, default_seconds):
+    """Cookie lifetime in seconds, taken from SIMPLE_JWT so the cookie can never
+    outlive (or expire before) the token it carries."""
+    lifetime = getattr(settings, 'SIMPLE_JWT', {}).get(key)
+    return int(lifetime.total_seconds()) if lifetime else default_seconds
+
+
+def set_access_cookie(response, access_token):
+    response.set_cookie(
+        key='access_token',
+        value=str(access_token),
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+        max_age=_cookie_max_age('ACCESS_TOKEN_LIFETIME', 3600),
+    )
+
+
+def set_refresh_cookie(response, refresh_token):
+    response.set_cookie(
+        key='refresh_token',
+        value=str(refresh_token),
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite=settings.AUTH_COOKIE_SAMESITE,
+        max_age=_cookie_max_age('REFRESH_TOKEN_LIFETIME', 3600 * 24 * 7),
+    )
 
 
 # ==================== CUSTOM THROTTLES ====================
@@ -103,24 +140,9 @@ class CustomTokenObtainPairView(TokenObtainPairView):
             access_token = response.data['access']
             refresh_token = response.data['refresh']
             
-            # Set access token in secure HttpOnly cookie
-            response.set_cookie(
-                key='access_token',
-                value=access_token,
-                httponly=True,
-                secure=settings.AUTH_COOKIE_SECURE,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-                max_age=3600 # 1 hour
-            )
-            # Set refresh token in secure HttpOnly cookie
-            response.set_cookie(
-                key='refresh_token',
-                value=refresh_token,
-                httponly=True,
-                secure=settings.AUTH_COOKIE_SECURE,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-                max_age=3600 * 24 * 7 # 7 days
-            )
+            # Set both tokens in secure HttpOnly cookies
+            set_access_cookie(response, access_token)
+            set_refresh_cookie(response, refresh_token)
             # The tokens now live ONLY in the HttpOnly cookies above — don't also
             # return them in the JSON body, where page JavaScript (and thus any
             # XSS) could read them. The SPA relies on the cookie, not the body.
@@ -140,26 +162,10 @@ class CustomTokenRefreshView(TokenRefreshView):
             
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
-            access_token = response.data['access']
-            response.set_cookie(
-                key='access_token',
-                value=access_token,
-                httponly=True,
-                secure=settings.AUTH_COOKIE_SECURE,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-                max_age=3600
-            )
+            set_access_cookie(response, response.data['access'])
             # If rotation is on, we'll get a new refresh token
             if 'refresh' in response.data:
-                refresh_token = response.data['refresh']
-                response.set_cookie(
-                    key='refresh_token',
-                    value=refresh_token,
-                    httponly=True,
-                    secure=settings.AUTH_COOKIE_SECURE,
-                    samesite=settings.AUTH_COOKIE_SAMESITE,
-                    max_age=3600 * 24 * 7
-                )
+                set_refresh_cookie(response, response.data['refresh'])
             # Deliver the refreshed token via the HttpOnly cookie only, never the
             # JSON body (see CustomTokenObtainPairView).
             response.data = {'success': True}
@@ -348,6 +354,21 @@ class PasswordResetConfirmView(APIView):
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
+def _unique_username_from_email(email):
+    """Derive a username from the local part, de-duplicated.
+
+    The bare local part collides across domains (a@x.com vs a@y.com), which used
+    to surface as an IntegrityError/500 on the second signup.
+    """
+    base = email.split('@')[0][:140] or 'user'
+    username = base
+    suffix = 1
+    while User.objects.filter(username=username).exists():
+        suffix += 1
+        username = f'{base}{suffix}'
+    return username
+
+
 class GoogleLogin(APIView):
     """
     Google Social Login View (Manual id_token Verification)
@@ -384,10 +405,21 @@ class GoogleLogin(APIView):
             name = idinfo.get('name', '')
             first_name = idinfo.get('given_name', '')
             last_name = idinfo.get('family_name', '')
-            
+
             if not email:
                 return Response({'detail': 'Email not provided by Google'}, status=status.HTTP_400_BAD_REQUEST)
-                
+
+            # A validly-signed id_token can still carry an UNVERIFIED email. Since
+            # we match existing accounts by email below, trusting one would let a
+            # holder of such a token sign in as any existing user with that
+            # address — account takeover. Google sends `email_verified` as a bool
+            # or the string "true" depending on the flow; accept only those.
+            if idinfo.get('email_verified') not in (True, 'true'):
+                return Response(
+                    {'detail': 'Google account email is not verified'},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+
             # 3. Get or create user (match email case-insensitively so a Google
             # sign-in never forks a second account from a case variant).
             email = email.strip().lower()
@@ -396,12 +428,12 @@ class GoogleLogin(APIView):
             if created:
                 user = User.objects.create(
                     email=email,
-                    username=email.split('@')[0],
+                    username=_unique_username_from_email(email),
                     name=name,
                     first_name=first_name,
                     last_name=last_name,
                 )
-            
+
             if created:
                 user.set_unusable_password()
                 user.save()
@@ -423,25 +455,20 @@ class GoogleLogin(APIView):
             }, status=status.HTTP_200_OK if not created else status.HTTP_201_CREATED)
             
             # 5. Set HttpOnly secure cookies
-            response.set_cookie(
-                key='access_token',
-                value=str(access),
-                httponly=True,
-                secure=settings.AUTH_COOKIE_SECURE,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-                max_age=3600
-            )
-            response.set_cookie(
-                key='refresh_token',
-                value=str(refresh),
-                httponly=True,
-                secure=settings.AUTH_COOKIE_SECURE,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-                max_age=3600 * 24 * 7
-            )
-            
+            set_access_cookie(response, access)
+            set_refresh_cookie(response, refresh)
+
             return response
-            
+
         except ValueError as e:
+            # google-auth raises ValueError for a bad signature/aud/issuer/expiry.
             return Response({'detail': 'Invalid Google token', 'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+        except (KeyError, IntegrityError) as e:
+            # Misconfigured SOCIALACCOUNT_PROVIDERS, or a racing signup on the
+            # same email. Neither is the caller's fault — don't leak a 500.
+            logger.exception('Google login failed: %s', e)
+            return Response(
+                {'detail': 'Google sign-in is temporarily unavailable.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 

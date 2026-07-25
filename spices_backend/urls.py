@@ -104,9 +104,11 @@ urlpatterns = [
     path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
     
-    # Standard dj-rest-auth routes
-    path('api/auth/', include('dj_rest_auth.urls')),
-    path('api/auth/registration/', include('dj_rest_auth.registration.urls')),
+    # dj-rest-auth routes were UNMOUNTED (2026-07-25). They exposed a second,
+    # public, untested auth surface (login/logout/password-reset/registration)
+    # alongside the hand-written views above, with different validation and
+    # different throttles. Nothing in the storefront or admin panel called them.
+    # Do not re-add without owning the tests and rate limits.
 
     # Coupon validation endpoint
     path('api/auth/validate-coupon/', ValidateCouponAPIView.as_view(), name='validate-coupon'),

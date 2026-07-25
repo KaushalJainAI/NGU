@@ -350,7 +350,11 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
-# dj-rest-auth configuration
+# dj-rest-auth configuration.
+# NOTE (2026-07-25): the dj-rest-auth ROUTES are no longer mounted in urls.py —
+# auth is served entirely by the hand-written views in users/views.py. The apps
+# stay in INSTALLED_APPS (allauth wiring depends on them) and this config is kept
+# so the settings stay coherent if the routes are ever restored.
 REST_AUTH = {
     'USE_JWT': True,
     'TOKEN_MODEL': None,

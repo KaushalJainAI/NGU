@@ -16,11 +16,16 @@ need them, e.g. server-side rendering):
 
 | Cookie | Value | Max-Age | Flags |
 |--------|-------|---------|-------|
-| `access_token` | Short-lived JWT | 1 hour (3 600 s) | HttpOnly, SameSite=Lax, Secure=True in prod |
-| `refresh_token` | Long-lived JWT | 7 days (604 800 s) | HttpOnly, SameSite=Lax, Secure=True in prod |
+| `access_token` | Short-lived JWT | `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` — currently 1 hour | HttpOnly, SameSite=Lax, Secure=True in prod |
+| `refresh_token` | Long-lived JWT | `SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']` — currently 7 days | HttpOnly, SameSite=Lax, Secure=True in prod |
 
 `Secure` is `not settings.DEBUG` — cookies are plain-HTTP in local dev, HTTPS-only in
 production.
+
+All three views that set these cookies (login, refresh, Google) go through the shared
+`set_access_cookie()` / `set_refresh_cookie()` helpers in `users/views.py`, which read
+the max-age from `SIMPLE_JWT` rather than hardcoding it — so a cookie can never outlive
+(or expire before) the token it carries.
 
 ### Token Refresh (`POST /api/auth/token/refresh/`)
 
@@ -75,7 +80,8 @@ Frontend                  Backend                    Google
    │── POST /auth/google/ ──▶│                          │
    │   {access_token: ...}   │                          │
    │                         │── verify_oauth2_token ──▶│
-   │                         │◀── idinfo (email, name) ─│
+   │                         │◀── idinfo (email, verified)│
+   │                         │  reject if !email_verified│
    │                         │                          │
    │                         │  get_or_create User      │
    │                         │  set_unusable_password   │
@@ -86,15 +92,23 @@ Frontend                  Backend                    Google
 
 1. `id_token.verify_oauth2_token()` validates the token signature against Google's
    public certificates and checks the `aud` (audience) matches `GOOGLE_CLIENT_ID`.
-2. Email is extracted and used as the unique key for `get_or_create`. Username defaults to
-   the part before `@` in the email (e.g. `kaushaljain` from `kaushaljain7000@gmail.com`).
-3. On first login: `set_unusable_password()` is called — Google-only users cannot log in
+2. **The `email_verified` claim must be true** (bool `True` or the string `"true"`;
+   a missing claim is treated as unverified) — otherwise the request is rejected 401
+   and no account is created or matched. This is load-bearing: step 3 matches existing
+   accounts *by email*, so accepting an unverified address would let the holder of a
+   validly-signed token sign in as any user with that email. See
+   `users/test_google_login.py::test_unverified_email_rejected`.
+3. Email is extracted and used as the unique key for `get_or_create`. Username derives
+   from the part before `@` in the email (e.g. `kaushaljain` from
+   `kaushaljain7000@gmail.com`), with a numeric suffix appended if that username is
+   taken — the bare local part collides across domains (`a@x.com` vs `a@y.com`).
+4. On first login: `set_unusable_password()` is called — Google-only users cannot log in
    via email/password until they explicitly set one via `change-password`.
-4. On subsequent logins: name is updated if it was previously blank; everything else
+5. On subsequent logins: name is updated if it was previously blank; everything else
    is left unchanged.
-5. The same `CustomTokenObtainPairSerializer.get_token(user)` is used as for password
+6. The same `CustomTokenObtainPairSerializer.get_token(user)` is used as for password
    login — OAuth users get identical JWT cookies.
-6. Response status is `201 Created` for new users, `200 OK` for returning users.
+7. Response status is `201 Created` for new users, `200 OK` for returning users.
 
 ---
 
@@ -205,6 +219,7 @@ validators on the new one before saving. No token refresh is needed after a pass
 | Email enumeration | Constant-time dummy branch on reset request |
 | OTP brute-force | 5-attempt lock, 10-minute expiry |
 | Google token forgery | Server-side `verify_oauth2_token` against Google certs |
+| Google unverified-email takeover | `email_verified` claim required before any account match |
 | CSRF | Cookie + `X-CSRFToken` header double-submit |
 | Password strength | Django's built-in `validate_password()` validators |
 | Card numbers | Never stored; gateway tokens only |

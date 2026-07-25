@@ -36,7 +36,7 @@ Complete reference for all API endpoints and their permission requirements.
 | `/api/auth/register/` | POST | User registration |
 | `/api/auth/login/` | POST | User login (JWT) |
 | `/api/auth/token/refresh/` | POST | Refresh JWT token |
-| `/api/auth/google/` | POST | Google OAuth login |
+| `/api/auth/google/` | POST | Google OAuth login (requires a verified Google email — see AUTH.md) |
 | `/api/auth/password-reset-request/` | POST | Request password reset |
 | `/api/auth/password-reset-verify/` | POST | Verify reset token |
 | `/api/auth/password-reset-confirm/` | POST | Confirm new password |
@@ -167,7 +167,11 @@ Admins (`is_staff=True`) can access all data.
 3. **JWT Tokens** — 1 hour access, 7 day refresh
 4. **Password Hashing** — Django's PBKDF2 with SHA256
 5. **CORS** — Configured for specific origins only
+6. **Google sign-in** — the `email_verified` claim is required; a signed token with an
+   unverified email is rejected 401 so it can never match an existing account
+7. **dj-rest-auth routes** — unmounted (2026-07-25). Auth is served only by the
+   hand-written views listed above; do not re-add the stock routes without tests
 
 ---
 
-*Last Updated: 2026-06-20*
+*Last Updated: 2026-07-25*

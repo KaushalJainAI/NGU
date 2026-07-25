@@ -355,9 +355,29 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    # Uploads go straight to Cloudinary (metered), so cap size and restrict the
+    # type here — the other two upload paths (order delivery bill, assistant
+    # audio) already do the equivalent.
+    MAX_IMAGE_BYTES = 5 * 1024 * 1024
+    ALLOWED_CONTENT_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+
     class Meta:
         model = ProductImage
         fields = ['id', 'product', 'image', 'alt_text']
+
+    def validate_image(self, value):
+        size = getattr(value, 'size', None)
+        if size and size > self.MAX_IMAGE_BYTES:
+            raise serializers.ValidationError(
+                f'Image too large (max {self.MAX_IMAGE_BYTES // (1024 * 1024)} MB).'
+            )
+
+        content_type = getattr(value, 'content_type', None)
+        if content_type and content_type.lower() not in self.ALLOWED_CONTENT_TYPES:
+            raise serializers.ValidationError(
+                'Unsupported image type. Use JPEG, PNG, WebP or GIF.'
+            )
+        return value
 
 
 class ProductListSerializer(serializers.ModelSerializer):
