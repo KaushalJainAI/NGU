@@ -681,8 +681,8 @@ SELLER_GSTIN = config('SELLER_GSTIN', default='23ABUPJ8925C1ZI')
 SELLER_FSSAI = config('SELLER_FSSAI', default='11414730000288')
 SELLER_STATE = config('SELLER_STATE', default='Madhya Pradesh')
 SELLER_STATE_CODE = config('SELLER_STATE_CODE', default='23')
-SELLER_EMAIL = config('SELLER_EMAIL', default='nidhigrahudyog@rediffmail.com')
-SELLER_PHONE = config('SELLER_PHONE', default='+91 93029 22251')
+SELLER_EMAIL = config('SELLER_EMAIL', default='nidhispicesandfood@gmail.com')
+SELLER_PHONE = config('SELLER_PHONE', default='+91 93000 05040')
 
 # Coarse IP -> region lookups for anonymous-traffic analytics (MaxMind GeoLite2).
 # Optional: if the .mmdb is absent the analytics module degrades gracefully and
