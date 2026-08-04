@@ -54,12 +54,17 @@ class ProductImageInline(admin.TabularInline):
 
 
 class ProductVariantInline(admin.TabularInline):
-    """Manage the packaging sizes (100g / 500g / 1kg ...) of a product inline."""
+    """Manage the packaging sizes (100g / 500g / 1kg ...) of a product inline.
+
+    A size can be switched off but never removed — untick `is_active`. See
+    ProductVariantAdmin.has_delete_permission for why.
+    """
     model = ProductVariant
     extra = 1
     fields = ['weight', 'unit', 'price', 'discount_price', 'stock',
               'is_default', 'is_active', 'display_order', 'sku', 'slug']
     readonly_fields = ['slug']
+    can_delete = False
 
 
 @admin.register(Product)
@@ -113,6 +118,17 @@ class ProductVariantAdmin(admin.ModelAdmin):
     autocomplete_fields = ['product']
     readonly_fields = ['slug']
     ordering = ['product', 'display_order']
+
+    def has_delete_permission(self, request, obj=None):
+        """Sizes are retired, never deleted — same rule as the admin panel API.
+
+        A variant is the row that priced a line on an order and on the tax
+        invoice issued for it. Order items and combo items PROTECT it, so a
+        delete here would either fail with an opaque 500 or, for a size nothing
+        has bought yet, succeed and silently empty the carts holding it. Untick
+        `is_active` instead (`ProductVariantViewSet.destroy` does exactly that).
+        """
+        return False
 
 
 class ProductComboItemInline(admin.TabularInline):

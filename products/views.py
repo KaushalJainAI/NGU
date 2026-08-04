@@ -509,8 +509,8 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     """Admin CRUD for product packaging sizes (variants).
 
     GET is public (so the admin panel can list); writes are staff-only.
-    Filter by ?product=<id>. Ensures a single default per product and never
-    hard-deletes a variant referenced by an order (deactivates instead)."""
+    Filter by ?product=<id>. Ensures a single default per product and NEVER
+    hard-deletes a variant — DELETE retires it (is_active=False) instead."""
     serializer_class = ProductVariantWriteSerializer
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = None
@@ -542,41 +542,56 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a size — but never in a way that leaves the catalog broken.
+        """RETIRE a size. A variant row is NEVER removed from the database.
 
-        Three things are checked BEFORE the delete, because the alternative is
-        discovering them as an IntegrityError or, worse, not at all:
+        A size is a priced, stocked, invoiced thing: it is named on order items,
+        on issued tax invoices, in combos, and in live carts. Deleting the row
+        would either be refused by the DB (order items and combo items are
+        PROTECTed) or succeed and quietly take history and carts with it. One of
+        those outcomes is destructive and neither is what an admin means by
+        "remove this size from the shop", so DELETE just flips `is_active` off:
+
+          * it stops being sellable and leaves the storefront,
+          * every past order, invoice and report still resolves it,
+          * it can be switched back on if it was retired by mistake.
+
+        Two guards still run first, because retiring the wrong size breaks the
+        catalog in ways deactivation alone does not fix:
 
         1. The last active size cannot go. A product with no sellable size still
            lists and still shows a (now stale) mirrored price, but nothing can be
-           added to a cart — a silent dead product.
-        2. A size a combo is built from cannot go. `ProductComboItem.variant` is
-           PROTECTed, so the DB would refuse anyway; this turns that into a
-           message naming the combos to fix first.
-        3. Live carts holding this size are reported back, since the FK cascade
-           removes those lines out from under the customer.
+           added to a cart — a silent dead product. Deactivate the product.
+        2. A size a combo is built from cannot go. The combo consumes that exact
+           packaging, so retiring it makes the bundle unbuildable (available
+           stock 0) rather than repricing it. Fix the combos first.
 
-        Only order history falls through to the retire-instead path — those rows
-        must survive for invoices, so the variant is deactivated, not deleted.
+        Live carts holding the size are reported back so the admin knows how many
+        customers are about to hit "no longer available" at checkout. Those rows
+        are left alone — nothing is yanked out of a cart by an admin edit.
         """
-        from django.db.models import ProtectedError
         instance = self.get_object()
 
-        # 1. Never strand a product without a sellable size.
-        if instance.is_active:
-            siblings = ProductVariant.objects.filter(
-                product_id=instance.product_id, is_active=True
-            ).exclude(pk=instance.pk).count()
-            if siblings == 0:
-                return Response(
-                    {'detail': 'This is the only active size for this product. '
-                               'Add another size first, or deactivate the whole '
-                               'product instead of deleting its last size.'},
-                    status=status.HTTP_409_CONFLICT,
-                )
+        if not instance.is_active:
+            return Response(
+                {'detail': 'This size is already retired.',
+                 'carts_affected': 0, 'is_active': False},
+                status=status.HTTP_200_OK,
+            )
 
-        # 2. Combos are built from this exact size — deleting it would silently
-        #    change what the bundle contains.
+        # 1. Never strand a product without a sellable size.
+        siblings = ProductVariant.objects.filter(
+            product_id=instance.product_id, is_active=True
+        ).exclude(pk=instance.pk).count()
+        if siblings == 0:
+            return Response(
+                {'detail': 'This is the only active size for this product. '
+                           'Add another size first, or deactivate the whole '
+                           'product instead of removing its last size.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 2. Combos are built from this exact size — retiring it would silently
+        #    make the bundle unbuildable.
         combo_names = list(
             ProductCombo.objects.filter(productcomboitem__variant=instance)
             .values_list('name', flat=True).distinct()
@@ -589,30 +604,22 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        # 3. Warn about live carts the cascade is about to empty.
+        # Retire, never delete. Dropping is_default lets the post_save signal
+        # promote a surviving sibling as the product's default size.
+        instance.is_active = False
+        instance.is_default = False
+        instance.save(update_fields=['is_active', 'is_default'])
+
         from cart.models import CartItem
         affected_carts = CartItem.objects.filter(variant=instance).count()
-
-        try:
-            instance.delete()
-        except ProtectedError:
-            # Referenced by historical orders — keep the row, just retire it.
-            instance.is_active = False
-            instance.is_default = False
-            instance.save(update_fields=['is_active', 'is_default'])
-            return Response(
-                {'detail': 'Variant is used by existing orders; it was deactivated instead of deleted.'},
-                status=status.HTTP_200_OK,
-            )
-
+        detail = ('Size retired. It is no longer sellable, but past orders and '
+                  'invoices still reference it.')
         if affected_carts:
-            return Response(
-                {'detail': f'Size deleted. It was removed from {affected_carts} '
-                           f'customer cart(s).',
-                 'carts_affected': affected_carts},
-                status=status.HTTP_200_OK,
-            )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+            detail += f' It is still sitting in {affected_carts} customer cart(s).'
+        return Response(
+            {'detail': detail, 'carts_affected': affected_carts, 'is_active': False},
+            status=status.HTTP_200_OK,
+        )
 
 
 from .recommendations import SpiceSearchEngine
