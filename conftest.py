@@ -197,12 +197,12 @@ def test_combo(db, test_product, test_product2):
     combo = ProductCombo.objects.create(
         name='Test Combo Pack',
         description='A combo of test products',
-        price=Decimal('300.00'),
         discount_price=Decimal('250.00'),
         is_active=True,
         is_featured=True
     )
-    # Add products to combo
+    # Add products to combo. There is no `price` to set: the MRP is DERIVED from
+    # these components — 150 + 200 = ₹350 — and the combo sells for 250.
     ProductComboItem.objects.create(combo=combo, product=test_product, quantity=1)
     ProductComboItem.objects.create(combo=combo, product=test_product2, quantity=1)
     return combo

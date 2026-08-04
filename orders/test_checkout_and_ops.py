@@ -29,7 +29,9 @@ from orders.models import Order, OrderItem
 from orders.views import OrderViewSet
 from payments import services
 from payments.models import Payment
-from products.models import Product, ProductCombo, ProductComboItem
+from products.models import (
+    Product, ProductCombo, ProductComboItem, default_variant_for,
+)
 
 URL = "/api/orders/"
 ADDR = {"shipping_address": "1 Test Rd", "phone_number": "1234567890", "payment_method": "COD"}
@@ -65,17 +67,25 @@ class TestTotalsWithoutCoupon:
         o = Order.objects.get(user=test_user)
         assert o.subtotal == Decimal("400.00")
         assert o.discount_amount == Decimal("0")
-        assert o.shipping_charge == Decimal("69")
-        assert o.tax == Decimal("20.00")
-        assert o.total_amount == Decimal("489.00")
+        assert o.shipping_charge == Decimal("59")
+        # Prices are GST-inclusive: the 5% is carved OUT of the ₹400 subtotal
+        # (400 * 5/105), not added to it.
+        assert o.tax == Decimal("19.05")
+        assert o.tax_inclusive is True
+        # Delivery uses the OPPOSITE convention — quoted net and taxed at 18% on
+        # top (SAC 9968) — so its GST really is an addend:
+        #   400 (incl. 19.05 GST) + 59 + 10.62 = 469.62
+        assert o.shipping_tax == Decimal("10.62")
+        assert o.total_tax == Decimal("29.67")
+        assert o.total_amount == Decimal("469.62")
 
     def test_subtotal_exactly_500_is_free_shipping(self, authenticated_client, test_user, test_category):
         _cart_line(test_user, _product(test_category, "250.00"), 2)
         r = _place(authenticated_client)
         o = Order.objects.get(user=test_user)
         assert o.shipping_charge == Decimal("0")
-        assert o.tax == Decimal("25.00")
-        assert o.total_amount == Decimal("525.00")
+        assert o.tax == Decimal("23.81")          # 500 * 5/105, contained in subtotal
+        assert o.total_amount == Decimal("500.00")
 
     def test_subtotal_above_threshold_free_shipping(self, authenticated_client, test_user, test_category):
         _cart_line(test_user, _product(test_category, "300.00"), 2)
@@ -83,7 +93,7 @@ class TestTotalsWithoutCoupon:
         assert o_resp.status_code == 201
         o = Order.objects.get(user=test_user)
         assert o.shipping_charge == Decimal("0")
-        assert o.total_amount == Decimal("630.00")
+        assert o.total_amount == Decimal("600.00")
 
 
 @pytest.mark.django_db
@@ -102,8 +112,9 @@ class TestTotalsWithCoupon:
         o = Order.objects.get(user=test_user)
         assert o.discount_amount == Decimal("60.00")
         assert o.shipping_charge == Decimal("0")
-        assert o.tax == Decimal("27.00")
-        assert o.total_amount == Decimal("567.00")
+        # GST extracted from the DISCOUNTED line total: 540 * 5/105.
+        assert o.tax == Decimal("25.71")
+        assert o.total_amount == Decimal("540.00")
         c.refresh_from_db()
         assert c.usage_count == 1
 
@@ -247,8 +258,7 @@ class TestLowStockAlertOnCheckout:
         a = _product(test_category, "50.00", stock=20, name="CompA")
         b = _product(test_category, "50.00", stock=100, name="CompB")
         combo = ProductCombo.objects.create(
-            name="Spice Box", price=Decimal("100.00"), is_active=True,
-            low_stock_threshold=5,
+            name="Spice Box", is_active=True, low_stock_threshold=5,
         )
         ProductComboItem.objects.create(combo=combo, product=a, quantity=3)
         ProductComboItem.objects.create(combo=combo, product=b, quantity=1)
@@ -313,7 +323,9 @@ def _resilience_product(cat, name, price="100.00", stock=5):
 
 
 def _combo(name, *components):
-    combo = ProductCombo.objects.create(name=name, price=Decimal("300.00"), is_active=True)
+    """A combo over `(product, qty)` pairs. No price is passed: the MRP is
+    DERIVED from the components attached below."""
+    combo = ProductCombo.objects.create(name=name, is_active=True)
     for product, qty in components:
         ProductComboItem.objects.create(combo=combo, product=product, quantity=qty)
     return combo
@@ -558,21 +570,33 @@ def _pdf_is_valid(data: bytes) -> bool:
     return isinstance(data, bytes) and data[:5] == b"%PDF-" and len(data) > 1000
 
 
+def _invoice_for(order):
+    """Issue the order's tax invoice and return it, for renderer tests.
+
+    The renderer takes an issued `Invoice`, not an Order: its contents are
+    frozen at issue (orders/invoicing.py). Tests that exercise the DOCUMENT go
+    through here; the issuing rules themselves are covered in test_invoicing.py.
+    """
+    from orders.invoicing import issue_invoice
+    invoice, _ = issue_invoice(order)
+    return invoice
+
+
 @pytest.mark.django_db
 class TestGenerateInvoicePdf:
     def test_happy_path_returns_pdf_bytes(self, test_order):
-        pdf = generate_invoice_pdf(test_order)
+        pdf = generate_invoice_pdf(_invoice_for(test_order))
         assert _pdf_is_valid(pdf)
 
     def test_cancelled_order_still_renders(self, test_order):
         test_order.status = "cancelled"
         test_order.save(update_fields=["status"])
-        pdf = generate_invoice_pdf(test_order)
+        pdf = generate_invoice_pdf(_invoice_for(test_order))
         assert _pdf_is_valid(pdf)
 
     def test_free_shipping_and_zero_discount(self, test_order):
         assert test_order.shipping_charge == 0
-        assert generate_invoice_pdf(test_order)[:5] == b"%PDF-"
+        assert generate_invoice_pdf(_invoice_for(test_order))[:5] == b"%PDF-"
 
     def test_paid_shipping_and_coupon_discount(self, db, test_user, test_product):
         from orders.models import Order, OrderItem
@@ -599,7 +623,7 @@ class TestGenerateInvoicePdf:
             quantity=4, price=Decimal("100.00"), final_price=Decimal("360.00"),
         )
         assert order.coupon_code == code
-        assert _pdf_is_valid(generate_invoice_pdf(order))
+        assert _pdf_is_valid(generate_invoice_pdf(_invoice_for(order)))
 
     def test_large_multi_lakh_total(self, db, test_user, test_product):
         from orders.models import Order, OrderItem
@@ -613,7 +637,7 @@ class TestGenerateInvoicePdf:
             product_name=test_product.name, product_weight="1 kg",
             quantity=1, price=Decimal("1050000.00"), final_price=Decimal("1050000.00"),
         )
-        assert _pdf_is_valid(generate_invoice_pdf(order))
+        assert _pdf_is_valid(generate_invoice_pdf(_invoice_for(order)))
 
 
 @pytest.mark.django_db
@@ -622,12 +646,29 @@ class TestInvoiceEndpoint:
         return f"/api/orders/{order.id}/invoice/"
 
     def test_owner_downloads_pdf(self, authenticated_client, test_order):
+        invoice = _invoice_for(test_order)
         r = authenticated_client.get(self._url(test_order))
         assert r.status_code == 200
         assert r["Content-Type"] == "application/pdf"
         assert "attachment" in r["Content-Disposition"]
-        assert f"ORD-{test_order.id:06d}" in r["Content-Disposition"]
+        # Named by the INVOICE serial now, not the order id — that is the number
+        # the customer's accountant looks for.
+        assert invoice.number.replace("/", "-") in r["Content-Disposition"]
         assert r.content[:5] == b"%PDF-"
+
+    def test_order_without_an_issued_invoice_is_refused(
+            self, authenticated_client, test_order):
+        """Downloading is a reprint, never an issue event — so an order with no
+        invoice has nothing to serve. Previously this rendered a document headed
+        TAX INVOICE for any order at all, including an unpaid one."""
+        test_order.payment_status = "pending"
+        test_order.status = "pending"
+        test_order.save(update_fields=["payment_status", "status"])
+
+        r = authenticated_client.get(self._url(test_order))
+
+        assert r.status_code == 409
+        assert r.json()["code"] == "invoice_not_issued"
 
     def test_anonymous_is_rejected(self, api_client, test_order):
         r = api_client.get(self._url(test_order))
@@ -638,6 +679,7 @@ class TestInvoiceEndpoint:
         assert r.status_code in (403, 404)
 
     def test_staff_can_download_any_order(self, admin_client, test_order):
+        _invoice_for(test_order)
         r = admin_client.get(self._url(test_order))
         assert r.status_code == 200
         assert r.content[:5] == b"%PDF-"
@@ -853,7 +895,10 @@ class TestOrderDateFilter:
             created_at=timezone.now() - timedelta(days=30))
         recent = _make_order(test_user, test_product)
 
-        today = timezone.now().date()
+        # localdate(), not now().date(): the filter reads its bounds as LOCAL
+        # calendar days, so a UTC date silently excludes orders placed between
+        # midnight and 05:30 IST.
+        today = timezone.localdate()
         frm = (today - timedelta(days=7)).isoformat()
         resp = admin_client.get('/api/orders/', {'date_from': frm, 'date_to': today.isoformat()})
         assert resp.status_code == 200
@@ -1024,7 +1069,7 @@ class TestRecycleBinPurge:
     def test_old_deactivated_product_and_combo_purged(self, test_category):
         prod = _product(test_category, "100.00", name="OldDelisted")
         Product.objects.filter(pk=prod.pk).update(is_active=False, deactivated_at=_aged(40))
-        combo = ProductCombo.objects.create(name="OldCombo", price=Decimal("300.00"))
+        combo = ProductCombo.objects.create(name="OldCombo")
         ProductCombo.objects.filter(pk=combo.pk).update(is_active=False, deactivated_at=_aged(40))
         call_command("purge_recycle_bin")
         assert not Product.objects.filter(pk=prod.pk).exists()
@@ -1083,3 +1128,325 @@ class TestDeactivatedAtLifecycle:
         prod.refresh_from_db()
         assert prod.is_active is True
         assert prod.deactivated_at is None
+
+
+# --- GST-inclusive pricing ---
+
+class TestExtractTax:
+    """`extract_tax` carves GST OUT of an inclusive price rather than adding it.
+
+    A ₹105 price at 5% contains ₹5 of GST — not ₹5.25, which is what the old
+    additive formula would have produced from the same number.
+    """
+
+    def test_carves_tax_out_of_gross(self):
+        from orders.pricing import extract_tax
+        assert extract_tax(Decimal("105"), Decimal("5")) == Decimal("5.00")
+        assert extract_tax(Decimal("118"), Decimal("18")) == Decimal("18.00")
+        assert extract_tax(Decimal("400"), Decimal("5")) == Decimal("19.05")
+
+    def test_exempt_and_empty_lines_are_zero(self):
+        from orders.pricing import extract_tax
+        assert extract_tax(Decimal("100"), Decimal("0")) == Decimal("0.00")  # papad
+        assert extract_tax(Decimal("0"), Decimal("5")) == Decimal("0.00")
+        assert extract_tax(None, None) == Decimal("0.00")
+
+
+@pytest.mark.django_db
+class TestTaxIsNotAddedToTotal:
+    def test_cart_summary_total_excludes_tax(self, authenticated_client, test_user, test_category):
+        """The cart preview must quote the same total the order will charge."""
+        _cart_line(test_user, _product(test_category, "200.00"), 2)
+        summary = authenticated_client.get("/api/cart/").json()["summary"]
+        assert summary["subtotal"] == 400.0
+        assert summary["tax"] == 19.05           # contained in subtotal
+        # Goods GST is NOT added to the total; delivery GST is, because the fee
+        # is quoted net. 400 + 59 + 10.62 = 469.62.
+        assert summary["shipping_tax"] == 10.62
+        assert summary["total_tax"] == 29.67
+        assert summary["total"] == 469.62
+
+    def test_coupon_preview_matches_placed_order(self, authenticated_client, test_user, test_category):
+        """Preview and placement share `extract_tax`, so they cannot drift."""
+        Coupon.objects.create(code="PREVIEW10", discount_percent=10, is_active=True,
+                              valid_until=timezone.now() + timedelta(days=5))
+        _cart_line(test_user, _product(test_category, "300.00"), 2)
+        preview = authenticated_client.post(
+            f"{URL}validate_coupon/", {"coupon_code": "PREVIEW10"}, format="json").json()
+        assert _place(authenticated_client, coupon_code="PREVIEW10").status_code == 201
+        o = Order.objects.get(user=test_user)
+        assert Decimal(str(preview["tax"])) == o.tax
+        assert Decimal(str(preview["total_amount"])) == o.total_amount
+
+    def test_exempt_product_pays_no_tax_but_same_price(self, authenticated_client, test_user, test_category):
+        """A 0% (papad) line still costs its listed price — the rate only changes
+        how the invoice splits it, never what the customer pays."""
+        papad = _product(test_category, "100.00", name="Papad")
+        papad.tax_rate = Decimal("0")
+        papad.save(update_fields=["tax_rate"])
+        _cart_line(test_user, papad, 1)
+        assert _place(authenticated_client).status_code == 201
+        o = Order.objects.get(user=test_user)
+        assert o.tax == Decimal("0.00")
+        # 0% goods, but delivery is still an 18% taxable service:
+        # 100 + 59 + 10.62 = 169.62
+        assert o.shipping_tax == Decimal("10.62")
+        assert o.total_amount == Decimal("169.62")
+
+
+@pytest.mark.django_db
+class TestInvoiceHonoursPricingConvention:
+    """A reprinted historical bill must still reconcile, so the renderer branches
+    on `tax_inclusive` rather than assuming the current convention."""
+
+    @pytest.mark.parametrize("inclusive", [True, False])
+    def test_renders_both_conventions(self, inclusive, test_user, test_product):
+        order = Order.objects.create(
+            user=test_user, shipping_address="1 Rd", phone_number="1234567890",
+            payment_method="COD", subtotal=Decimal("400.00"),
+            shipping_charge=Decimal("69.00"), tax=Decimal("19.05"),
+            total_amount=Decimal("469.00"), status="pending", tax_inclusive=inclusive,
+        )
+        OrderItem.objects.create(
+            order=order, product=test_product, item_type="product",
+            product_name=test_product.name, product_weight="250 g",
+            quantity=2, price=Decimal("200.00"), final_price=Decimal("400.00"),
+        )
+        assert _pdf_is_valid(generate_invoice_pdf(_invoice_for(order)))
+
+    def test_new_orders_default_to_inclusive(self, authenticated_client, test_user, test_category):
+        _cart_line(test_user, _product(test_category, "200.00"), 1)
+        assert _place(authenticated_client).status_code == 201
+        assert Order.objects.get(user=test_user).tax_inclusive is True
+
+
+# --- Combo stock symmetry (G2) ---
+
+@pytest.mark.django_db
+class TestComboCancelRestocksVariants:
+    """Checkout draws a combo's components from VARIANT stock, so cancelling has
+    to give it back to the same place.
+
+    Crediting `Product.stock` instead — as the restore path used to — destroys
+    the sellable inventory (nothing reads the legacy mirror at checkout) while
+    inflating the mirror, so the loss compounds silently on every cancellation.
+    """
+
+    def _combo_of(self, category, qty_each=2):
+        from products.models import ProductVariant
+        combo = ProductCombo.objects.create(
+            name="Restock Combo", description="x", is_active=True,
+        )
+        variants = []
+        for i in (1, 2):
+            product = _product(category, "200.00", stock=10, name=f"Combo Part {i}")
+            variant = ProductVariant.objects.filter(product=product).first()
+            assert variant is not None, "product save should mint a default size"
+            variant.stock = 10
+            variant.save(update_fields=["stock"])
+            ProductComboItem.objects.create(
+                combo=combo, variant=variant, quantity=qty_each)
+            variants.append(variant)
+        return combo, variants
+
+    def _place_combo(self, client, user, combo, quantity=1):
+        cart, _ = Cart.objects.get_or_create(user=user)
+        CartItem.objects.create(
+            cart=cart, combo=combo, item_type="combo", quantity=quantity)
+        return _place(client)
+
+    def test_cancel_returns_component_stock_to_the_variant(
+            self, authenticated_client, test_user, test_category):
+        combo, variants = self._combo_of(test_category)
+        before = [v.stock for v in variants]
+
+        assert self._place_combo(authenticated_client, test_user, combo).status_code == 201
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was - 2, "checkout must draw from the variant"
+
+        order = Order.objects.get(user=test_user)
+        r = authenticated_client.post(f"{URL}{order.id}/cancel/")
+        assert r.status_code == 200, r.content
+
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was, "cancel must return it to the same variant"
+
+    def test_cancel_does_not_inflate_the_legacy_product_mirror(
+            self, authenticated_client, test_user, test_category):
+        """The mirror tracks the default variant — a round trip must leave it
+        exactly where it started, not credited a second time."""
+        combo, variants = self._combo_of(test_category)
+        products = [v.product for v in variants]
+        before = [p.stock for p in products]
+
+        assert self._place_combo(authenticated_client, test_user, combo).status_code == 201
+        order = Order.objects.get(user=test_user)
+        assert authenticated_client.post(f"{URL}{order.id}/cancel/").status_code == 200
+
+        for product, was in zip(products, before):
+            product.refresh_from_db()
+            assert product.stock == was
+
+    def test_cancel_restocks_from_the_order_snapshot_not_the_live_recipe(
+            self, authenticated_client, test_user, test_category):
+        """The combo is EDITED between placement and cancellation.
+
+        Restoring from the live recipe credits whatever the combo contains today,
+        which is not what the order consumed: the swapped-in component gains stock
+        it never gave up, and the swapped-out one never gets its stock back. Both
+        drifts are silent. `OrderItemComponent` records what actually moved, so
+        the restore must read that.
+        """
+        from products.models import ProductVariant
+        combo, variants = self._combo_of(test_category)
+        before = [v.stock for v in variants]
+
+        assert self._place_combo(authenticated_client, test_user, combo).status_code == 201
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was - 2
+
+        # An admin reworks the combo AFTER the order was placed: component 2 is
+        # replaced by a different size entirely.
+        intruder_product = _product(test_category, "150.00", stock=10, name="Swapped In")
+        intruder = ProductVariant.objects.filter(product=intruder_product).first()
+        intruder.stock = 10
+        intruder.save(update_fields=["stock"])
+        ProductComboItem.objects.filter(combo=combo, variant=variants[1]).delete()
+        ProductComboItem.objects.create(combo=combo, variant=intruder, quantity=2)
+
+        order = Order.objects.get(user=test_user)
+        assert authenticated_client.post(f"{URL}{order.id}/cancel/").status_code == 200
+
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was, (
+                "both ORIGINAL components must be made whole — including the one "
+                "the combo no longer contains")
+        intruder.refresh_from_db()
+        assert intruder.stock == 10, (
+            "the swapped-in variant never left stock, so it must not be credited")
+
+    def test_snapshot_restock_is_not_multiplied_twice_for_multi_quantity_lines(
+            self, authenticated_client, test_user, test_category):
+        """`OrderItemComponent.quantity` is ALREADY per-combo x line quantity.
+        Multiplying by the line quantity again would over-credit every combo
+        ordered more than once."""
+        combo, variants = self._combo_of(test_category)   # 2 units of each per combo
+        before = [v.stock for v in variants]
+
+        assert self._place_combo(
+            authenticated_client, test_user, combo, quantity=3).status_code == 201
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was - 6, "3 combos x 2 units"
+
+        order = Order.objects.get(user=test_user)
+        assert authenticated_client.post(f"{URL}{order.id}/cancel/").status_code == 200
+
+        for variant, was in zip(variants, before):
+            variant.refresh_from_db()
+            assert variant.stock == was, "exactly 6 back, not 18"
+
+
+@pytest.fixture
+def separate_admin_client(test_admin):
+    """An admin client on its OWN APIClient.
+
+    The shared `admin_client` fixture reuses the same `api_client` instance as
+    `authenticated_client` and merely overwrites its credentials, so a test that
+    needs BOTH ends up with whichever fixture resolved last — silently 403ing the
+    admin calls. These tests need a customer to place the order and an admin to
+    PATCH it, so the admin gets its own client.
+    """
+    from rest_framework.test import APIClient
+    from rest_framework_simplejwt.tokens import RefreshToken
+    client = APIClient()
+    client.credentials(
+        HTTP_AUTHORIZATION=f'Bearer {RefreshToken.for_user(test_admin).access_token}')
+    return client
+
+
+@pytest.mark.django_db
+class TestAdminUpdateAtomicity:
+    """A rejected admin PATCH must leave NOTHING behind.
+
+    `_perform_admin_update` runs inside `transaction.atomic()`, and a `return`
+    from inside an atomic block exits the context manager WITHOUT an exception —
+    so the transaction commits. Any write performed before a validation
+    `return Response(400)` therefore survives the "failed" request. Restocking is
+    the write that makes that dangerous: it credits inventory AND stamps
+    `stock_restored_at`, which permanently disarms the real cancel later.
+    """
+
+    def _placed_order(self, client, user, category, stock=10, qty=2):
+        product = _resilience_product(category, "AtomicItem", stock=stock)
+        _cart_line(user, product, qty)
+        assert _place(client).status_code == 201
+        return Order.objects.get(user=user), default_variant_for(product.pk)
+
+    @pytest.mark.parametrize("bad_field", [
+        {"shipping_cost": "not-a-number"},
+        {"shipping_cost": "-5"},
+        {"place_of_supply_state_code": "99"},
+    ])
+    def test_rejected_cancel_does_not_restock(
+            self, separate_admin_client, authenticated_client, test_user, test_category, bad_field):
+        """Cancel + an invalid field in the same PATCH: the 400 must roll back the
+        restock, not commit it and leave the order live."""
+        order, variant = self._placed_order(
+            authenticated_client, test_user, test_category)
+        variant.refresh_from_db()
+        after_checkout = variant.stock
+
+        r = separate_admin_client.patch(f"{URL}{order.id}/",
+                               {"status": "cancelled", **bad_field}, format="json")
+        assert r.status_code == 400
+
+        order.refresh_from_db()
+        variant.refresh_from_db()
+        assert order.status != "cancelled", "the order was never actually cancelled"
+        assert order.stock_restored_at is None, (
+            "stock_restored_at was committed by a REJECTED request — the real "
+            "cancel would now be a silent no-op")
+        assert variant.stock == after_checkout, (
+            "inventory was credited for an order that is still live and will ship")
+
+    def test_a_later_genuine_cancel_still_restocks(
+            self, separate_admin_client, authenticated_client, test_user, test_category):
+        """The point of the above: after a rejected attempt, cancelling for real
+        must still return the units exactly once."""
+        order, variant = self._placed_order(
+            authenticated_client, test_user, test_category, stock=10, qty=2)
+
+        separate_admin_client.patch(f"{URL}{order.id}/",
+                           {"status": "cancelled", "shipping_cost": "oops"},
+                           format="json")
+        r = separate_admin_client.patch(f"{URL}{order.id}/", {"status": "cancelled"},
+                               format="json")
+        assert r.status_code == 200
+
+        order.refresh_from_db()
+        variant.refresh_from_db()
+        assert order.status == "cancelled"
+        assert order.stock_restored_at is not None
+        assert variant.stock == 10, "all 2 units back, exactly once"
+
+    def test_valid_cancel_with_a_valid_shipping_cost_still_works(
+            self, separate_admin_client, authenticated_client, test_user, test_category):
+        """Guard against 'fixing' the ordering by simply not restocking."""
+        order, variant = self._placed_order(
+            authenticated_client, test_user, test_category, stock=10, qty=2)
+
+        r = separate_admin_client.patch(f"{URL}{order.id}/",
+                               {"status": "cancelled", "shipping_cost": "40.00"},
+                               format="json")
+        assert r.status_code == 200
+
+        order.refresh_from_db()
+        variant.refresh_from_db()
+        assert order.status == "cancelled"
+        assert order.shipping_cost == Decimal("40.00")
+        assert variant.stock == 10

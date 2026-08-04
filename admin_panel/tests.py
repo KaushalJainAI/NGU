@@ -374,6 +374,33 @@ class TestDashboardActions:
         resp = authenticated_client.get('/api/dashboard/actions/')
         assert resp.status_code == 403
 
+    def test_unread_chats_and_new_contacts(self, admin_client, test_user):
+        from assistant.models import AssistantConversation, AssistantMessage
+        from support.models import ContactSubmission
+
+        # Customer wrote last → unread.
+        waiting = AssistantConversation.objects.create(user=test_user, status='active')
+        AssistantMessage.objects.create(conversation=waiting, role='user', content='hi?')
+        # Assistant answered last → not unread.
+        answered = AssistantConversation.objects.create(user=test_user, status='active')
+        AssistantMessage.objects.create(conversation=answered, role='user', content='hi')
+        AssistantMessage.objects.create(conversation=answered, role='assistant', content='hello')
+        # Escalated threads are counted by chats_waiting, not twice here.
+        escalated = AssistantConversation.objects.create(
+            user=test_user, status='active', needs_human=True)
+        AssistantMessage.objects.create(conversation=escalated, role='user', content='help')
+
+        ContactSubmission.objects.create(
+            name='A', email='a@example.com', subject='s', message='m')
+        ContactSubmission.objects.create(
+            name='B', email='b@example.com', subject='s', message='m', status='read')
+
+        resp = admin_client.get('/api/dashboard/actions/')
+        assert resp.status_code == 200
+        assert resp.data['unread_chats'] == 1
+        assert resp.data['chats_waiting'] == 1
+        assert resp.data['new_contacts'] == 1
+
 
 # --------------------------------------------------------------------------- #
 # Global admin search

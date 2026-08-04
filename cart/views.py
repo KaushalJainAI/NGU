@@ -290,14 +290,29 @@ class CartViewSet(viewsets.ViewSet):
                 else:
                     item = Product.objects.select_for_update().get(id=product_id, is_active=True)
                     variant = _resolve_variant(item, variant_id, lock=True)
+                    cart_item = None
                     if variant:
-                        cart_item = CartItem.objects.select_for_update().get(
-                            cart=cart, variant=variant, item_type='product')
+                        cart_item = CartItem.objects.select_for_update().filter(
+                            cart=cart, variant=variant, item_type='product').first()
                         stock = variant.stock
                     else:
-                        cart_item = CartItem.objects.select_for_update().get(
-                            cart=cart, product=item, variant__isnull=True, item_type='product')
                         stock = item.stock
+                    if cart_item is None and not variant_id:
+                        # Legacy line: added before this product had any size, so
+                        # it carries variant=NULL and the resolved default above
+                        # matches nothing. Every product now gets a default size
+                        # (products.signals), which would otherwise make every
+                        # such pre-existing cart row permanently unmodifiable —
+                        # "Cart item not found" on any quantity change. Only fall
+                        # back when the caller did NOT name a specific size, so
+                        # an explicit variant_id can never hit the wrong line.
+                        cart_item = CartItem.objects.select_for_update().filter(
+                            cart=cart, product=item, variant__isnull=True,
+                            item_type='product').first()
+                        if cart_item is not None and variant is None:
+                            stock = item.stock
+                    if cart_item is None:
+                        raise CartItem.DoesNotExist()
 
                 if quantity <= 0:
                     cart_item.delete()

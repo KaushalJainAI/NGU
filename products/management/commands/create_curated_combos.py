@@ -8,7 +8,9 @@ kit, masala chai, papad set).
 
 Pricing is COMPUTED from current catalog prices so it stays correct in any
 environment:
-  * combo.price          = sum of each item's regular (MRP) price  -> strike-through
+  * combo.price          = DERIVED by the model — the sum of each component
+                           size's regular (MRP) price -> strike-through. Nothing
+                           to set here; attaching the items is what sets it.
   * combo.discount_price = a bundle deal a notch below the sum of the items'
                            current selling prices, rounded to a tidy ...9 ending.
 
@@ -26,7 +28,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from products.models import Product, ProductCombo, ProductComboItem
+from products.models import (
+    Product, ProductCombo, ProductComboItem, ensure_default_variant_for,
+)
 
 # Extra discount applied to the sum of the items' *selling* prices to set the
 # bundle deal, so a combo always beats buying the items separately.
@@ -205,10 +209,17 @@ class Command(BaseCommand):
                         skipped += 1
                         continue
 
-                    resolved = [self._match_product(f) for f in spec["items"]]
+                    # Price off the VARIANT, not the legacy Product columns.
+                    # `ProductCombo.total_original_price` sums `variant__price`,
+                    # so pricing the bundle from the product mirror would make
+                    # the printed savings disagree with what the API reports the
+                    # moment the mirror drifts.
+                    resolved = [
+                        ensure_default_variant_for(self._match_product(f))
+                        for f in spec["items"]
+                    ]
 
-                    mrp = sum((Decimal(str(p.price)) for p in resolved), Decimal("0"))
-                    sell = sum((Decimal(str(p.final_price)) for p in resolved), Decimal("0"))
+                    sell = sum((Decimal(str(v.final_price)) for v in resolved), Decimal("0"))
                     deal = deal_price(sell)
 
                     combo = ProductCombo(
@@ -219,20 +230,30 @@ class Command(BaseCommand):
                         badge=spec["badge"],
                         is_featured=spec["is_featured"],
                         is_active=True,
-                        price=mrp,
+                        # No `price`: the MRP is derived from the components
+                        # attached just below (sum of variant prices).
                         discount_price=deal,
                     )
                     combo.save()
-                    for p in resolved:
-                        ProductComboItem.objects.create(combo=combo, product=p, quantity=1)
+                    for variant in resolved:
+                        ProductComboItem.objects.create(
+                            combo=combo, variant=variant, quantity=1)
 
-                    off = int((mrp - deal) / mrp * 100)
+                    # MRP is DERIVED from the components just attached, so it can
+                    # only be read after they exist — there is no `price` to set
+                    # on the combo itself any more. Guarded against a zero MRP
+                    # (every component priced at 0), which would divide by zero.
+                    mrp = combo.total_original_price
+                    off = int((mrp - deal) / mrp * 100) if mrp else 0
                     self.stdout.write(self.style.SUCCESS(f"CREATE: {spec['name']}"))
                     self.stdout.write(
                         f"        MRP Rs{mrp} | buy-separately Rs{sell} | "
                         f"bundle Rs{deal} ({off}% off MRP, save Rs{sell - deal} vs separate)"
                     )
-                    self.stdout.write("        items: " + ", ".join(p.name for p in resolved))
+                    # `resolved` holds VARIANTS (sizes), not products — name the
+                    # size, since that is what the combo actually bundles.
+                    self.stdout.write("        items: " + ", ".join(
+                        f"{v.product.name} ({v.formatted_weight})" for v in resolved))
                     created += 1
 
                 if not apply:

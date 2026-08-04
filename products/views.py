@@ -378,14 +378,35 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
 
+class MRPOrderingFilter(filters.OrderingFilter):
+    """Lets `?ordering=price` keep working on combos after MRP became derived.
+
+    `ProductCombo.price` is now a property (the sum of its component sizes), so
+    it cannot be handed to `order_by()`. `ProductComboQuerySet.with_mrp()` puts
+    the identical figure in the `_mrp` annotation; this maps the public name
+    onto it *after* DRF has validated the term against `ordering_fields`, so the
+    API contract is unchanged and an unknown field is still rejected.
+    """
+
+    ALIASES = {'price': '_mrp', '-price': '-_mrp'}
+
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not ordering:
+            return ordering
+        return [self.ALIASES.get(term, term) for term in ordering]
+
+
 class ComboProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductComboSerializer
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = None
     lookup_field = 'slug'
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, MRPOrderingFilter]
     filterset_fields = ['is_featured', 'is_active']
     search_fields = ['name', 'description']
+    # `price` stays a public ordering field even though it is no longer a column:
+    # MRPOrderingFilter rewrites it onto the `_mrp` annotation from with_mrp().
     ordering_fields = ['price', 'created_at', 'name']
     ordering = ['-created_at']
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -395,8 +416,10 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
         is_staff = user and user.is_staff
 
-        # Base queryset
-        qs = ProductCombo.objects.all()
+        # Base queryset. `with_mrp()` annotates the derived MRP (sum of the
+        # component sizes' prices) so the serializer doesn't fire one aggregate
+        # per combo, and so ?ordering=price can sort on it.
+        qs = ProductCombo.objects.with_mrp()
 
         # Filter for non-staff users
         if not is_staff:
@@ -407,7 +430,12 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         # weight, unit, thumbnail, sections) and to_representation always
         # serializes productcomboitem_set — both were N+1 on list. Prefetch the
         # items and sections that the serializer walks.
-        qs = qs.prefetch_related('productcomboitem_set__product', 'sections')
+        # `variant` is walked by available_stock / total_weight / the item
+        # serializer, so prefetch it alongside the product used for display.
+        qs = qs.prefetch_related(
+            'productcomboitem_set__product', 'productcomboitem_set__variant',
+            'sections',
+        )
 
         return qs
 
@@ -514,8 +542,57 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def destroy(self, request, *args, **kwargs):
+        """Delete a size — but never in a way that leaves the catalog broken.
+
+        Three things are checked BEFORE the delete, because the alternative is
+        discovering them as an IntegrityError or, worse, not at all:
+
+        1. The last active size cannot go. A product with no sellable size still
+           lists and still shows a (now stale) mirrored price, but nothing can be
+           added to a cart — a silent dead product.
+        2. A size a combo is built from cannot go. `ProductComboItem.variant` is
+           PROTECTed, so the DB would refuse anyway; this turns that into a
+           message naming the combos to fix first.
+        3. Live carts holding this size are reported back, since the FK cascade
+           removes those lines out from under the customer.
+
+        Only order history falls through to the retire-instead path — those rows
+        must survive for invoices, so the variant is deactivated, not deleted.
+        """
         from django.db.models import ProtectedError
         instance = self.get_object()
+
+        # 1. Never strand a product without a sellable size.
+        if instance.is_active:
+            siblings = ProductVariant.objects.filter(
+                product_id=instance.product_id, is_active=True
+            ).exclude(pk=instance.pk).count()
+            if siblings == 0:
+                return Response(
+                    {'detail': 'This is the only active size for this product. '
+                               'Add another size first, or deactivate the whole '
+                               'product instead of deleting its last size.'},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        # 2. Combos are built from this exact size — deleting it would silently
+        #    change what the bundle contains.
+        combo_names = list(
+            ProductCombo.objects.filter(productcomboitem__variant=instance)
+            .values_list('name', flat=True).distinct()
+        )
+        if combo_names:
+            return Response(
+                {'detail': 'This size is part of the combo(s): '
+                           f"{', '.join(combo_names)}. Remove it from them first.",
+                 'combos': combo_names},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 3. Warn about live carts the cascade is about to empty.
+        from cart.models import CartItem
+        affected_carts = CartItem.objects.filter(variant=instance).count()
+
         try:
             instance.delete()
         except ProtectedError:
@@ -525,6 +602,14 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
             instance.save(update_fields=['is_active', 'is_default'])
             return Response(
                 {'detail': 'Variant is used by existing orders; it was deactivated instead of deleted.'},
+                status=status.HTTP_200_OK,
+            )
+
+        if affected_carts:
+            return Response(
+                {'detail': f'Size deleted. It was removed from {affected_carts} '
+                           f'customer cart(s).',
+                 'carts_affected': affected_carts},
                 status=status.HTTP_200_OK,
             )
         return Response(status=status.HTTP_204_NO_CONTENT)

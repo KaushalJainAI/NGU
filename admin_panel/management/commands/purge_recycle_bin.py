@@ -21,6 +21,9 @@ Deletion is permanent:
   * Orders cascade to their line items, payment, and payment events (all FKs are
     on_delete=CASCADE). Orders are financial records — this is deliberate and
     irreversible; it runs only because the store opted into purging orders too.
+    An order carrying an ISSUED TAX INVOICE is the exception: it is protected at
+    the DB level (Invoice.order is on_delete=PROTECT) and is skipped, staying in
+    the bin. A numbered invoice in a filed series must keep its supply.
   * Products/combos that appear in ANY historical order are protected at the DB
     level (OrderItem FKs are on_delete=PROTECT). Those CANNOT be deleted, so the
     job skips them (they simply stay in the bin) instead of failing.
@@ -32,7 +35,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import ProtectedError
 from django.utils import timezone
 
-from orders.models import Order, OrderItem
+from orders.models import Invoice, Order, OrderItem
 from products.models import Product, ProductCombo
 
 
@@ -72,15 +75,39 @@ class Command(BaseCommand):
 
     def _purge_orders(self, cutoff, dry_run):
         """Hard-delete soft-deleted orders past the cutoff (cascades line items,
-        payment, and payment events)."""
+        payment, and payment events).
+
+        An order with an ISSUED TAX INVOICE is skipped and stays in the bin.
+        `Invoice.order` is on_delete=PROTECT, so the database refuses the delete
+        anyway — this turns that into a reported skip instead of an exception
+        that would abort the nightly job partway through. Deleting it would
+        destroy the supply behind a numbered document in a series the store has
+        filed returns on, which is not housekeeping.
+        """
         qs = Order.objects.filter(is_deleted=True, deleted_at__lt=cutoff)
-        count = qs.count()
-        if count and not dry_run:
-            # Iterate so each Order's CASCADE runs through the ORM (collectors),
-            # matching how the app deletes elsewhere; the volume here is tiny.
-            for order in qs.iterator():
+        purged = 0
+        for order in qs.iterator():
+            if Invoice.objects.filter(order_id=order.pk).exists():
+                self.stdout.write(
+                    f"  {'would skip' if dry_run else 'skipped'} order #{order.pk} "
+                    f"— a tax invoice has been issued against it.")
+                continue
+            if dry_run:
+                purged += 1
+                continue
+            try:
+                # Iterate so each Order's CASCADE runs through the ORM
+                # (collectors), matching how the app deletes elsewhere.
                 order.delete()
-        return count
+                purged += 1
+            except ProtectedError:
+                # Belt-and-braces, mirroring the product/combo path below: an
+                # invoice raised between the check and the delete still cannot be
+                # purged — leave it in the bin.
+                self.stdout.write(
+                    f"  skipped order #{order.pk} — a tax invoice has been issued "
+                    f"against it.")
+        return purged
 
     def _purge_soft_deleted(self, model, cutoff, dry_run, label):
         """Hard-delete soft-deleted (is_active=False) products/combos past the

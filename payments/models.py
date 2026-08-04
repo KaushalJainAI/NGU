@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from orders.models import Order
 from users.models import User
@@ -32,11 +34,40 @@ class Payment(models.Model):
     failure_reason = models.CharField(max_length=255, blank=True, null=True)
     failure_code = models.CharField(max_length=64, blank=True, null=True)
     transaction_details = models.JSONField(blank=True, null=True)
+
+    # --- Gateway cost -------------------------------------------------------
+    # What Razorpay kept out of this payment. Both arrive on the captured
+    # payment entity (in PAISE — converted on the way in) and were previously
+    # dropped, which meant two real things were invisible:
+    #
+    #   1. The fee is a genuine business expense (~2%), so margin was overstated
+    #      by it on every online order.
+    #   2. `gateway_tax` is GST WE PAID on a service. That is INPUT TAX CREDIT —
+    #      deductible from the output tax collected on sales. Not recording it
+    #      means paying tax that was already offsettable.
+    #
+    # 0 is "not known", not "free": COD orders have no Payment row at all, and a
+    # payment captured through the /verify/ callback carries no entity, so its
+    # fee only lands when the webhook or L3 reconcile supplies one.
+    gateway_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Total Razorpay fee on this payment, INCLUDING the GST on it. "
+                  "0 = not reported yet (no webhook/reconcile has supplied it).")
+    gateway_tax = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="GST portion of gateway_fee — input tax credit, deductible "
+                  "from output tax. Contained in gateway_fee, not added to it.")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Payment {self.payment_id} - {self.status}"
+
+    @property
+    def net_settlement(self):
+        """What actually reaches the bank: amount less the gateway's cut."""
+        return (self.amount or Decimal('0')) - (self.gateway_fee or Decimal('0'))
 
 
 class PaymentEvent(models.Model):

@@ -20,6 +20,7 @@ transition through the functions here, so the guarantees live in one place:
   customer about a payment that didn't persist.
 """
 import logging
+from decimal import Decimal
 
 from django.db import transaction, IntegrityError
 
@@ -132,9 +133,11 @@ def _extract_instrument_details(entity):
     """Whitelist the display-safe instrument fields from a Razorpay payment
     entity (webhook `payment.entity` or a reconcile-fetched payment dict).
 
-    Deliberately excludes contact/email (PII) and fee/tax — the admin only needs
-    to see *how* the customer paid. Returns {} when there's nothing usable so
-    callers can cheaply skip a write.
+    Deliberately excludes contact/email (PII). Fee/tax are excluded too, but for
+    a different reason — they are not display detail, they are accounting, and
+    live in their own `gateway_fee`/`gateway_tax` columns via
+    `_extract_gateway_cost`. Returns {} when there's nothing usable so callers
+    can cheaply skip a write.
     """
     if not entity:
         return {}
@@ -152,6 +155,46 @@ def _extract_instrument_details(entity):
     elif method == 'wallet':
         details['wallet'] = entity.get('wallet')
     return {k: v for k, v in details.items() if v is not None}
+
+
+def _extract_gateway_cost(entity):
+    """Razorpay's cut of a captured payment, as (fee, tax) in RUPEES.
+
+    Both fields arrive in **paise** on the payment entity and are ``None`` until
+    the payment is actually captured, so this returns ``(None, None)`` whenever
+    there is nothing trustworthy to record — the caller must then leave the
+    stored values alone rather than zeroing them, or a later event with no fee
+    would erase a fee an earlier one supplied.
+
+    `tax` is the GST *inside* `fee`, not on top of it. It is input tax credit:
+    GST we paid on a service, deductible from the output tax collected on sales.
+    """
+    if not entity:
+        return None, None
+    fee, tax = entity.get('fee'), entity.get('tax')
+    if fee is None and tax is None:
+        return None, None
+    to_rupees = lambda paise: (          # noqa: E731 — trivial, local, used twice
+        Decimal(str(paise)) / Decimal('100') if paise is not None else None)
+    return to_rupees(fee), to_rupees(tax)
+
+
+def _apply_gateway_cost(payment, entity, fields):
+    """Copy the gateway's fee/tax onto `payment`, appending changed field names.
+
+    Split out because every capture path — webhook, reconcile, and the terminal
+    early-return that only backfills detail — has to do this identically. A
+    payment captured via the browser /verify/ callback carries no entity, so its
+    fee arrives later from the webhook or L3; that backfill is the whole point.
+    """
+    fee, tax = _extract_gateway_cost(entity)
+    if fee is not None and payment.gateway_fee != fee:
+        payment.gateway_fee = fee
+        fields.append('gateway_fee')
+    if tax is not None and payment.gateway_tax != tax:
+        payment.gateway_tax = tax
+        fields.append('gateway_tax')
+    return fields
 
 
 def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
@@ -176,13 +219,20 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
         # Idempotency guard — a terminal payment is a no-op for state, but we
         # still merge any newly-arrived instrument details (see docstring).
         if payment.status in ('completed', 'refunded'):
+            terminal_fields = []
             if details_update and any(
                 (payment.transaction_details or {}).get(k) != v
                 for k, v in details_update.items()
             ):
                 payment.transaction_details = {**(payment.transaction_details or {}),
                                                **details_update}
-                payment.save(update_fields=['transaction_details', 'updated_at'])
+                terminal_fields.append('transaction_details')
+            # The fee is the main reason this path exists in practice: /verify/
+            # completes the payment with no entity, so the webhook arriving
+            # afterwards is usually the FIRST time a fee is available at all.
+            _apply_gateway_cost(payment, payment_entity, terminal_fields)
+            if terminal_fields:
+                payment.save(update_fields=terminal_fields + ['updated_at'])
             _record_processed_event(event_id, 'payment.captured')
             log_payment_event(payment, event_type='duplicate_ignored', source=source,
                               message=f"Capture ignored; status already {payment.status}.",
@@ -218,8 +268,9 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
             payment.transaction_details = {**(payment.transaction_details or {}),
                                            'razorpay_payment_id': razorpay_payment_id,
                                            **details_update}
-            payment.save(update_fields=['status', 'razorpay_payment_id',
-                                        'transaction_details', 'updated_at'])
+            _fields = _apply_gateway_cost(payment, payment_entity, [
+                'status', 'razorpay_payment_id', 'transaction_details'])
+            payment.save(update_fields=_fields + ['updated_at'])
             log_payment_event(
                 payment, event_type='captured_after_cancel', source=source,
                 from_status='pending', to_status='completed',
@@ -236,12 +287,22 @@ def mark_payment_captured(razorpay_order_id, razorpay_payment_id,
         payment.transaction_details = {**(payment.transaction_details or {}),
                                        'razorpay_payment_id': razorpay_payment_id,
                                        **details_update}
-        payment.save(update_fields=['status', 'razorpay_payment_id',
-                                    'transaction_details', 'updated_at'])
+        _fields = _apply_gateway_cost(payment, payment_entity, [
+            'status', 'razorpay_payment_id', 'transaction_details'])
+        payment.save(update_fields=_fields + ['updated_at'])
 
         order.payment_status = 'paid'
         order.status = 'confirmed'
         order.save(update_fields=['payment_status', 'status', 'updated_at'])
+
+        # The supply is now committed, so raise the tax invoice. Done HERE and
+        # not at PDF download: the number comes from a continuous series and the
+        # contents are frozen at this instant, so it must be allocated at a
+        # defined business event rather than whenever someone clicks a button.
+        # Never raises — a failure is logged and left for `backfill_invoices`,
+        # because nothing about document generation may roll back a capture.
+        from orders.invoicing import maybe_issue_invoice
+        maybe_issue_invoice(order)
 
         # Cart is emptied HERE, at capture — an ONLINE order keeps the customer's
         # cart while payment is pending (orders.views.create) so an abandoned
@@ -309,12 +370,30 @@ def mark_payment_failed(razorpay_order_id, event_id=None, source='webhook',
 
 
 def mark_payment_refunded(razorpay_order_id=None, event_id=None, source='webhook',
-                          raw_payload=None, razorpay_payment_id=None):
-    """Record a refund (phase-2 minimal). Marks the payment/order refunded; stock
-    restoration per business rule is left to the admin/cancel flow.
+                          raw_payload=None, razorpay_payment_id=None,
+                          refund_amount_paise=None, refund_reference=None):
+    """Record a refund: marks the payment/order refunded AND appends a ledger row
+    that reverses the refund's share of GST. Stock restoration per business rule
+    is left to the admin/cancel flow.
 
     Resolves the local Payment by Razorpay order id when present, else by the
-    captured payment id — refund entities do not always carry the order id."""
+    captured payment id — refund entities do not always carry the order id.
+
+    `refund_amount_paise` / `refund_reference` come from the gateway's refund
+    entity. When the amount is absent (older payloads), the refund is treated as
+    FULL, because a refund we can't size must not silently reverse ₹0 of tax —
+    under-reversing means over-paying GST.
+
+    We never ISSUE a partial refund (orders/refunds.py), but Razorpay's dashboard
+    can, so one may still arrive. It is recorded truthfully — the money really
+    moved and its GST really is reversed — while the payment, the order status
+    and the customer's "refund processed" email all wait for the whole amount to
+    come back. Anything else would tell the customer they have been refunded
+    while we still hold most of their money.
+    """
+    from decimal import Decimal
+    from orders.refunds import record_refund, refundable_balance
+
     with transaction.atomic():
         order, payment = _lock_order_and_payment(
             razorpay_order_id=razorpay_order_id,
@@ -322,21 +401,46 @@ def mark_payment_refunded(razorpay_order_id=None, event_id=None, source='webhook
 
         if event_id and ProcessedWebhookEvent.objects.filter(event_id=event_id).exists():
             return payment
+        # NOTE: a fully-refunded payment short-circuits, but a PARTIALLY refunded
+        # one must fall through so a second partial refund is still recorded.
         if payment.status == 'refunded':
             _record_processed_event(event_id, 'refund.processed')
             return payment
 
-        from_status = payment.status
-        payment.status = 'refunded'
-        payment.save(update_fields=['status', 'updated_at'])
-        order.payment_status = 'refunded'
-        order.save(update_fields=['payment_status', 'updated_at'])
+        if refund_amount_paise is not None:
+            amount = (Decimal(str(refund_amount_paise)) / 100).quantize(Decimal('0.01'))
+        else:
+            amount = refundable_balance(order)
 
-        log_payment_event(payment, event_type='refunded', source=source,
-                          from_status=from_status, to_status='refunded',
-                          message='Refund processed at Razorpay.', raw_payload=raw_payload)
+        # The ledger owns the GST reversal, the running totals, and the order
+        # status. It is idempotent on `reference`, so a redelivered webhook that
+        # slips past the event-id check still cannot double-reverse the tax.
+        refund = record_refund(order, amount, source='gateway',
+                               reference=refund_reference,
+                               note='Refund processed at Razorpay.')
+        order.refresh_from_db()
+
+        fully_refunded = (Decimal(str(order.refunded_amount or 0))
+                          >= Decimal(str(order.total_amount or 0)) > 0)
+
+        from_status = payment.status
+        if fully_refunded:
+            payment.status = 'refunded'
+            payment.save(update_fields=['status', 'updated_at'])
+
+        log_payment_event(
+            payment, event_type='refunded', source=source,
+            from_status=from_status,
+            to_status='refunded' if fully_refunded else from_status,
+            message=(f"Refund of Rs. {refund.amount} processed at Razorpay "
+                     f"(GST reversed Rs. {refund.tax_amount})."
+                     if refund else 'Refund processed at Razorpay.'),
+            raw_payload=raw_payload)
         _record_processed_event(event_id, 'refund.processed')
-        _on_commit_customer_email('refunded', order.id)
+        # Only once the whole order is back — "your refund has been processed"
+        # is a promise about the entire order, not about a slice of it.
+        if fully_refunded:
+            _on_commit_customer_email('refunded', order.id)
         return payment
 
 

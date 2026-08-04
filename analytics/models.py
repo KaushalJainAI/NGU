@@ -141,7 +141,33 @@ class DailySalesRollup(models.Model):
     date = models.DateField(unique=True, db_index=True)
     orders = models.PositiveIntegerField(default=0)
     units = models.PositiveIntegerField(default=0)
+    # GROSS revenue — the amount actually collected, so it reconciles against
+    # gateway settlements. The GST and delivery components below are reported
+    # ALONGSIDE it, never subtracted from it.
     revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # GST collected from customers on the day's sales (output tax) — goods GST
+    # PLUS the 18% on delivery. A record of money taken, NOT the amount to
+    # remit: that is this minus input tax credit on purchases, which this
+    # system does not track and leaves to the owner's books.
+    gst_collected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Money refunded and the GST reversed with it, bucketed by the date the
+    # REFUND happened (not the sale) — a credit note reduces output tax in its
+    # own period, so this must never rewrite an already-filed month.
+    refunds = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    gst_refunded = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Delivery fees charged to customers vs what the couriers charged us.
+    # `shipping_cost` is admin-entered per order, so it is 0 until recorded.
+    shipping_collected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # The 18% GST on those delivery fees, already counted inside gst_collected.
+    # Broken out so the delivery slab can be reported on its own for GSTR-1
+    # without re-querying every order.
+    shipping_tax_collected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    shipping_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # COD cash confirmed received on this day, bucketed by CONFIRMATION date —
+    # the order it settles is usually older, since couriers remit in batches.
+    # A cash-ledger figure: deliberately unrelated to `revenue`, which accrues at
+    # order date and does not move when the money actually turns up.
+    cod_collected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     aov = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     coupon_orders = models.PositiveIntegerField(default=0)
     coupon_discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -152,6 +178,16 @@ class DailySalesRollup(models.Model):
     class Meta:
         ordering = ['-date']
         verbose_name = 'Daily Sales Rollup'
+
+    @property
+    def net_gst_collected(self):
+        """Tax actually held for the day: collected minus reversed by refunds.
+
+        Deliberately NOT called "payable". What is remitted is this minus input
+        tax credit on purchases, which this system does not track and does not
+        try to guess — see docs/ANALYTICS.md.
+        """
+        return (self.gst_collected or 0) - (self.gst_refunded or 0)
 
     def __str__(self):
         return f"{self.date}: {self.orders} orders / ₹{self.revenue}"

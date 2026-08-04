@@ -21,6 +21,7 @@ from .serializers import (
 from cart.models import Cart
 from orders.models import Order
 from products.models import Product, ProductCombo, ProductComboItem
+from spices_backend.timeranges import range_filter
 
 
 # ==================== PERMISSIONS ====================
@@ -191,10 +192,11 @@ class DashboardViewSet(viewsets.ViewSet):
         Cached briefly — this is polled by the panel landing page."""
         from django.core.cache import cache
         from django.conf import settings
-        from django.db.models import F, Q, Sum
+        from django.db.models import Count, F, OuterRef, Q, Subquery, Sum
         from django.utils import timezone
         from datetime import timedelta
-        from assistant.models import AssistantConversation
+        from assistant.models import AssistantConversation, AssistantMessage
+        from support.models import ContactSubmission
 
         cache_key = 'ngu:dashboard:actions'
         cached = cache.get(cache_key)
@@ -202,7 +204,12 @@ class DashboardViewSet(viewsets.ViewSet):
             return Response(cached)
 
         now = timezone.now()
-        today = now.date()
+        # localdate(), NOT now.date(). `timezone.now()` is UTC-aware, so .date()
+        # yields the UTC calendar date while range_filter interprets the bounds
+        # in TIME_ZONE (Asia/Kolkata). Between 00:00 and 05:30 IST the two
+        # disagree, and every "today" figure on this dashboard — revenue, GST,
+        # delivery margin — silently reported the PREVIOUS day.
+        today = timezone.localdate()
 
         # New orders the admin can act on: pending AND actually payable/paid
         # (an ONLINE order still waiting for payment isn't confirmable yet).
@@ -224,6 +231,20 @@ class DashboardViewSet(viewsets.ViewSet):
         chats_waiting = AssistantConversation.objects.filter(
             needs_human=True, status='active').count()
 
+        # "Unread" chats: nobody has answered the customer's last message yet.
+        # There is no per-thread read flag, so this is derived — an active thread
+        # whose most recent visible turn is the customer's. Threads already
+        # counted in chats_waiting are excluded so the two cards don't overlap.
+        last_role = AssistantMessage.objects.filter(
+            conversation=OuterRef('pk'),
+            role__in=['user', 'assistant', 'admin'],
+        ).order_by('-created_at', '-id').values('role')[:1]
+        unread_chats = AssistantConversation.objects.filter(
+            status='active', needs_human=False,
+        ).annotate(last_role=Subquery(last_role)).filter(last_role='user').count()
+
+        new_contacts = ContactSubmission.objects.filter(status='new').count()
+
         ttl = getattr(settings, 'PAYMENT_STUCK_TTL_MINUTES', 15)
         stuck_payments = Order.objects.filter(
             is_deleted=False,
@@ -234,9 +255,69 @@ class DashboardViewSet(viewsets.ViewSet):
         ).count()
 
         today_orders = Order.objects.filter(
-            is_deleted=False, created_at__date=today,
+            is_deleted=False, **range_filter('created_at', today, today),
         ).exclude(status='cancelled')
-        today_stats = today_orders.aggregate(revenue=Sum('total_amount'))
+        # Revenue stays GROSS (what was actually collected) so it reconciles
+        # against Razorpay settlements. The GST and delivery components are
+        # surfaced ALONGSIDE it rather than deducted from it.
+        today_stats = today_orders.aggregate(
+            revenue=Sum('total_amount'),
+            # Output tax = goods GST + the 18% on delivery. `tax` alone
+            # under-reports every order that paid for shipping.
+            gst=Sum(F('tax') + F('shipping_tax')),
+            shipping_collected=Sum('shipping_charge'),
+            shipping_cost=Sum('shipping_cost'),
+        )
+        # Month-to-date GST, because GST is filed monthly — a today-only figure
+        # is useless for the return the owner actually has to file.
+        month_start = today.replace(day=1)
+        mtd_agg = Order.objects.filter(
+            is_deleted=False, **range_filter('created_at', month_start),
+        ).exclude(status='cancelled').aggregate(
+            gst=Sum(F('tax') + F('shipping_tax')), revenue=Sum('total_amount'))
+        mtd_gst = mtd_agg['gst'] or 0
+        mtd_revenue = mtd_agg['revenue'] or 0
+
+        # COD cash the couriers are still holding: dispatched or delivered COD
+        # orders nobody has confirmed payment on. A point-in-time figure, so it
+        # is computed live rather than rolled up. `aged` is the slice past a week,
+        # which is the part worth chasing.
+        cod_pending_qs = Order.objects.filter(
+            is_deleted=False, payment_method='COD', cod_paid_at__isnull=True,
+            status__in=['shipped', 'delivering', 'delivered'],
+        )
+        cod_pending = cod_pending_qs.aggregate(
+            amount=Sum('total_amount'), n=Count('id'))
+        cod_aged = cod_pending_qs.filter(
+            created_at__lt=now - timedelta(days=7)).count()
+        cod_collected_today = Order.objects.filter(
+            is_deleted=False, **range_filter('cod_paid_at', today, today),
+        ).aggregate(amount=Sum('total_amount'))['amount'] or 0
+
+        # Razorpay's cut, month to date. Two separate reasons this is here:
+        # the fee is a real expense that was invisible (margin was overstated by
+        # it), and `gateway_tax` is GST WE paid on a service — input tax credit,
+        # deductible from the output tax below. Reported gross so the ITC figure
+        # can be carried into whatever books actually file the return.
+        from payments.models import Payment
+        mtd_gw = Payment.objects.filter(
+            status__in=['completed', 'refunded'],
+            order__is_deleted=False,
+            **range_filter('order__created_at', month_start),
+        ).aggregate(fee=Sum('gateway_fee'), tax=Sum('gateway_tax'))
+        mtd_gateway_fee = mtd_gw['fee'] or 0
+        mtd_gateway_tax = mtd_gw['tax'] or 0
+        # Refunds reverse output tax in the period the refund happened, so they
+        # are counted by REFUND date — not by the date of the order being
+        # refunded, which may sit in an already-filed month.
+        from orders.refunds import refunded_totals_between
+        mtd_ref = refunded_totals_between(month_start, today)
+        today_ref = refunded_totals_between(today, today)
+        mtd_gst_refunded = mtd_ref['tax'] or 0
+        today_gst_refunded = today_ref['tax'] or 0
+        shipping_collected = today_stats['shipping_collected'] or 0
+        shipping_cost = today_stats['shipping_cost'] or 0
+        delivered_count = today_orders.filter(shipping_cost__gt=0).count()
 
         data = {
             'orders_to_confirm': confirmable.count(),
@@ -244,10 +325,77 @@ class DashboardViewSet(viewsets.ViewSet):
             'low_stock_count': low_stock_qs.count(),
             'low_stock_items': low_stock_items,
             'chats_waiting': chats_waiting,
+            'unread_chats': unread_chats,
+            'new_contacts': new_contacts,
             'stuck_payments': stuck_payments,
             'today_orders': today_orders.count(),
             'today_revenue': str(today_stats['revenue'] or 0),
+            # Gross revenue beside a separate refunds figure reads as net to
+            # almost everyone, so the netted number is given explicitly.
+            # `today_revenue` stays GROSS — it is what reconciles against
+            # gateway settlements.
+            'today_net_revenue': str(
+                (today_stats['revenue'] or 0) - (today_ref['amount'] or 0)),
+            'mtd_net_revenue': str(mtd_revenue - (mtd_ref['amount'] or 0)),
+            'mtd_revenue': str(mtd_revenue),
+            # What was SOLD, net of the tax collected on it — revenue minus
+            # output tax. This is the taxable value of the period's supplies
+            # (goods plus the net delivery charge), and it reconciles with the
+            # taxable-value total on the HSN summary screen.
+            'today_taxable_sales': str(
+                (today_stats['revenue'] or 0) - (today_stats['gst'] or 0)),
+            'mtd_taxable_sales': str(mtd_revenue - mtd_gst),
+            # GST COLLECTED from customers on those sales (output tax). This is
+            # a fact about money we took, and it is deliberately the ONLY kind
+            # of tax number this system reports. What is finally REMITTED is
+            # output tax minus input credit on purchases (ingredients,
+            # packaging, courier, rent, gateway fees) — NGU tracks no purchase
+            # ledger, so that figure is the owner's/accountant's to compute in
+            # their books. Nothing here should be named or read as "payable".
+            'today_gst_collected': str(today_stats['gst'] or 0),
+            'mtd_gst_collected': str(mtd_gst),
+            # GST reversed by refunds, counted on the day the refund happened.
+            'today_gst_refunded': str(today_gst_refunded),
+            'mtd_gst_refunded': str(mtd_gst_refunded),
+            # Collected − refunded: the net tax actually held for the period.
+            # The number the GST tile leads with.
+            'today_gst_net_collected': str(
+                (today_stats['gst'] or 0) - today_gst_refunded),
+            'mtd_gst_net_collected': str(mtd_gst - mtd_gst_refunded),
+            'today_refunds': str(today_ref['amount'] or 0),
+            'mtd_refunds': str(mtd_ref['amount'] or 0),
+            # Delivery economics. `shipping_cost` is admin-entered per order, so
+            # the average covers only orders where it was actually recorded —
+            # averaging over all orders would understate it with silent zeros.
+            'today_shipping_collected': str(shipping_collected),
+            'today_shipping_cost': str(shipping_cost),
+            'today_shipping_margin': str(shipping_collected - shipping_cost),
+            'today_avg_shipping_cost': str(
+                round(shipping_cost / delivered_count, 2) if delivered_count else 0
+            ),
+            'today_shipping_cost_recorded': delivered_count,
+            # COD cash ledger. Separate from revenue/GST above, which accrue at
+            # order date: this is purely "has the money arrived yet".
+            'cod_pending_amount': str(cod_pending['amount'] or 0),
+            'cod_pending_count': cod_pending['n'] or 0,
+            'cod_pending_aged_count': cod_aged,
+            'cod_collected_today': str(cod_collected_today),
+            # Gateway cost MTD. `mtd_gateway_tax` is GST WE PAID on Razorpay's
+            # fee — one line of input credit that happens to be evidenced in
+            # this system. It is reported on its OWN, not folded into a
+            # payable: it is a single input among many we don't see, so netting
+            # it off here would produce a number that looks filed-ready and
+            # isn't. Carry it into the books that do the return.
+            'mtd_gateway_fee': str(mtd_gateway_fee),
+            'mtd_gateway_tax': str(mtd_gateway_tax),
         }
+        # Deprecated aliases, kept only so a panel build from before the
+        # "collected, not payable" rename keeps rendering during a rolling
+        # deploy. Delete once the admin image is rolled out everywhere.
+        data['today_gst_payable'] = data['today_gst_net_collected']
+        data['mtd_gst_payable'] = data['mtd_gst_net_collected']
+        data['mtd_gst_payable_after_known_itc'] = str(
+            mtd_gst - mtd_gst_refunded - mtd_gateway_tax)
         cache.set(cache_key, data, 60)
         return Response(data)
 
@@ -451,7 +599,11 @@ class AdminCustomerViewSet(viewsets.ReadOnlyModelViewSet):
         not_cancelled = DQ(orders__is_deleted=False) & ~DQ(orders__status='cancelled')
         qs = User.objects.annotate(
             order_count=Count('orders', filter=not_cancelled, distinct=True),
+            # GROSS lifetime spend — what the customer actually paid us.
             total_spent=Sum('orders__total_amount', filter=not_cancelled),
+            # How much of that was GST passed through to the government, so the
+            # "best customer" figure can be read net of tax when that matters.
+            total_gst=Sum('orders__tax', filter=not_cancelled),
         ).order_by('-created_at')
 
         search = (self.request.query_params.get('search') or '').strip()
@@ -468,7 +620,9 @@ class AdminCustomerViewSet(viewsets.ReadOnlyModelViewSet):
         page = self.paginate_queryset(self.get_queryset())
         rows = [
             {**AdminCustomerListSerializer(u).data,
-             'total_spent': str(u.total_spent or 0)}
+             'total_spent': str(u.total_spent or 0),
+             'total_gst': str(u.total_gst or 0),
+             'total_spent_ex_gst': str((u.total_spent or 0) - (u.total_gst or 0))}
             for u in page
         ]
         return self.get_paginated_response(rows)

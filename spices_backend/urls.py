@@ -24,7 +24,9 @@ from products.views import (
 )
 from products.bulk_views import (
     bulk_products, bulk_products_apply, bulk_products_import, export_products_csv,
+    hsn_coverage, hsn_reference,
 )
+from orders.gst_views import hsn_summary_report
 from cart.views import CartViewSet, ValidateCouponAPIView, FavoritesViewSet
 from orders.views import OrderViewSet
 from reviews.views import ReviewViewSet
@@ -124,6 +126,14 @@ urlpatterns = [
     path('api/admin/bulk-products/apply/', bulk_products_apply, name='bulk-products-apply'),
     path('api/admin/bulk-products/import/', bulk_products_import, name='bulk-products-import'),
     path('api/admin/products-export/', export_products_csv, name='products-export'),
+
+    # GST classification: the curated HSN code list with the statutory rate for
+    # each (reference for the product form), a coverage report of what is still
+    # unclassified or rate-mismatched, and the HSN-wise summary of outward
+    # supplies that GSTR-1 Table 12 is filed from (`?format=csv` to download).
+    path('api/admin/hsn-reference/', hsn_reference, name='hsn-reference'),
+    path('api/admin/hsn-coverage/', hsn_coverage, name='hsn-coverage'),
+    path('api/admin/hsn-summary/', hsn_summary_report, name='hsn-summary'),
 
     path('api/spice-forms/', get_spice_forms, name='spice-forms'),
     path('api/search/suggest/', search_suggest, name='search-suggest'),

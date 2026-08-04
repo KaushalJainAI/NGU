@@ -77,13 +77,67 @@ views. Idempotent: each run deletes-and-recomputes the target day(s).
 
 | Table | Source | Notes |
 |-------|--------|-------|
-| `DailySalesRollup` | `orders` | revenue/orders/units/AOV/coupon impact/new-vs-returning. **Excludes `cancelled`.** |
+| `DailySalesRollup` | `orders` | revenue/orders/units/AOV/coupon impact/new-vs-returning, plus `gst_collected`, `shipping_collected`, `shipping_cost`. **Excludes `cancelled`.** |
 | `DailyFunnelRollup` | `UserEvent` | per-event-type counts/day (logged-in funnel) |
 | `SearchTermStat` | `UserEvent(search)` | per-term counts + zero-result flag (from `metadata`) |
 | `DailyAnonStat` | Redis counters | flushed by the same command |
 
 New-vs-returning: a customer is **new** on the day of their first-ever
 non-cancelled order; everyone else who ordered that day is **returning**.
+
+### Revenue is GROSS — GST is reported alongside, never deducted
+
+`revenue` is `Sum(total_amount)`: the money actually collected, so it reconciles
+against Razorpay settlements. GST and delivery are surfaced as **separate**
+figures rather than subtracted from it:
+
+| Field | Meaning |
+|-------|---------|
+| `gst_collected` | Output tax on sales — `Sum(Order.tax)`. Prices are GST-inclusive, so this is contained in `revenue`. |
+| `gst_refunded` | Output tax **reversed by refunds**, bucketed by the day the refund happened. |
+| `refunds` | Money returned to customers that day. |
+| `shipping_collected` | Delivery fees charged to customers. |
+| `shipping_cost` | What couriers charged **us**, admin-entered per order (`0` until recorded). Margin = collected − cost. |
+
+`DailySalesRollup.net_gst_collected` = `gst_collected − gst_refunded`. That is the
+figure the dashboard tile and the Insights `net_gst_collected` KPI lead with.
+`taxable_sales` (`revenue − gst_collected`) is reported next to it: tax collected
+means nothing without the sales value it was collected on.
+
+**Refunds reduce GST, and they do it in their own period.** A refund is booked on
+the day it happened, never the day of the sale — a credit note reduces output tax
+in the period it is issued, so a March refund must not retroactively rewrite a
+January return you have already filed. The ledger is `orders.OrderRefund`; see
+`orders/refunds.py::refunded_totals_between`.
+
+⚠ **NGU reports tax COLLECTED, never tax PAYABLE — by design.** What is remitted is
+output tax minus **input tax credit** on purchases (ingredients, packaging, courier,
+gateway fees, rent), and NGU deliberately keeps no purchase ledger: that is what
+accounting software is for, and a half-built one produces a number that looks
+filed-ready and isn't. So the rule for every surface (dashboard tile, digest, weekly
+summary, Insights, HSN report):
+
+* Report **what was sold** and **what tax was collected on it**. Both, together.
+* Never name a field `*_payable`, never present a total as "what you owe", and never
+  net a partial input credit off the collected figure.
+* `mtd_gateway_tax` (GST we paid Razorpay) is shown **on its own line, unsubtracted** —
+  it is one evidenced input among many unseen ones, for the owner to carry into their
+  books.
+* Deciding the liability is the owner's / their accountant's call.
+
+The dashboard still emits `today_gst_payable`, `mtd_gst_payable` and
+`mtd_gst_payable_after_known_itc` as **deprecated aliases** so an older admin build
+keeps rendering across a rolling deploy. Delete them from `admin_panel/views.py` once
+the admin image is rolled out; do not read them in new code.
+
+⚠ **Gateway refunds never reach the ledger — refunds are MANUAL-ONLY (2026-08-01).**
+The `refund.processed` branch in `payments/views.py` is commented out, so a Razorpay
+refund is logged and ignored, not recorded. Every refund — online or COD — must be
+entered by an admin in the order dialog, which writes the same ledger. An unentered
+refund leaves its GST un-reversed and overstates the tax owed.
+
+Averages over `shipping_cost` use only orders **with a cost recorded** as the
+denominator — averaging across all orders would silently understate it with zeros.
 
 ### Scheduling
 
@@ -99,6 +153,21 @@ python manage.py rollup_analytics --days 2
 Wire via container cron / host crontab / celery-beat — see `DEPLOYMENT.md`.
 Until scheduled, the command is fully usable manually. Dashboard "today" is
 current within the rollup cadence.
+
+⚠ **One-off after deploying migration `analytics/0004`.** It adds
+`gst_collected` / `shipping_collected` / `shipping_cost` with `default=0` and
+does **not** backfill. The scheduled run only recomputes yesterday + today, so
+every historical row keeps reporting ₹0 GST and the Insights GST series
+silently under-reports for any range before deploy day. Recompute the whole
+history once:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+  python manage.py rollup_analytics --days 400   # or however far back orders go
+```
+
+`shipping_cost` legitimately stays 0 for past orders — it is admin-entered per
+order and was never recorded before this feature existed.
 
 ## Insights API
 
