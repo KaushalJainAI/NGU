@@ -419,7 +419,13 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         # Base queryset. `with_mrp()` annotates the derived MRP (sum of the
         # component sizes' prices) so the serializer doesn't fire one aggregate
         # per combo, and so ?ordering=price can sort on it.
-        qs = ProductCombo.objects.with_mrp()
+        # Same review aggregates as ProductViewSet: without them the combo
+        # serializer falls back to two queries per combo, and `distinct=True`
+        # guards the count against row multiplication from with_mrp()'s joins.
+        qs = ProductCombo.objects.with_mrp().annotate(
+            _average_rating=Avg('reviews__rating', filter=Q(reviews__is_hidden=False)),
+            _reviews_count=Count('reviews', filter=Q(reviews__is_hidden=False), distinct=True),
+        )
 
         # Filter for non-staff users
         if not is_staff:

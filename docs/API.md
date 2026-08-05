@@ -278,17 +278,25 @@ per-user. The four Razorpay function endpoints live under `/api/payments/`.
 ## 7. Reviews — app: `reviews` — [reviews/views.py](../reviews/views.py)
 
 Router basename `reviews`, `IsAuthenticatedOrReadOnly`. Verified-purchase gated;
-staff moderation via `is_hidden`.
+staff moderation via `is_hidden`, home page placement via `is_featured`
+(capped at `reviews.models.MAX_FEATURED_REVIEWS` = 3).
+
+⚠ Any write here invalidates the **product/combo catalogue cache**
+(`reviews/signals.py`). `GET /api/products/` embeds `average_rating` /
+`reviews_count`, so without it a hidden review keeps its stars on the shop for
+the whole 5-minute TTL.
 
 | URL | Method | What | Access | Complexity | Tests | Serializer | DB tables | Atomic | Risk | Notes |
 |-----|--------|------|--------|-----------|-------|-----------|-----------|--------|------|-------|
-| `/api/reviews/` | GET | List reviews (filter by product/combo) | Auth+RO/Public | O(n) | ✅ good / ✅ bad | `ReviewSerializer` | Review, User, Product, ProductCombo | N/A | 🟠 High | Public read that joins User — over-serializing leaks buyer identity, and a visibility bug un-hides moderated content. Hidden reviews visible only to staff + author |
+| `/api/reviews/` | GET | List reviews (filter by product/combo; `?all=true` staff moderation view, `?featured=true` the pinned set) | Auth+RO/Public | O(n) | ✅ good / ✅ bad | `ReviewSerializer` | Review, User, Product, ProductCombo | N/A | 🟠 High | Public read that joins User — over-serializing leaks buyer identity, and a visibility bug un-hides moderated content. Hidden reviews visible only to staff + author. `user_name` is the display name, never the email-derived `username` |
 | `/api/reviews/` | POST | Create review | Auth | O(1) | ✅ good / ✅ bad | `ReviewSerializer` | Review, OrderItem, Order | No | 🟠 High | Public-facing UGC; the verified-purchase check is the anti-astroturfing gate. Enforces no duplicate |
 | `/api/reviews/{id}/` | GET | Review detail | Auth+RO/Public | O(1) | ✅ / — | `ReviewSerializer` | Review | N/A | 🟡 Medium | No bad-path test; must respect `is_hidden` |
 | `/api/reviews/{id}/` | PUT/PATCH | Edit own review | Auth (owner) | O(1) | ✅ good / ✅ bad | `ReviewSerializer` | Review | No | 🟠 High | Edit-then-repoint would launder a verified review onto an unbought product. Cannot re-point (anti-fraud) |
 | `/api/reviews/{id}/` | DELETE | Delete own review | Auth (owner/staff) | O(1) | ✅ / — | — | Review | No | 🟡 Medium | Hard delete, no bad-path test. Non-owner queryset excluded |
 | `/api/reviews/can-review/` | GET | May the user review X? (UX hint) | Auth | O(1) | ✅ good / ✅ bad | — | Review, OrderItem | N/A | 🟢 Low | Advisory only — POST re-checks. Exactly one of product/combo |
-| `/api/reviews/{id}/set-hidden/` | POST | Moderate (hide/show) | **Staff only** | O(1) | ✅ good / ✅ bad | — | Review | No | 🟠 High | Censorship control — if it leaked to non-staff, anyone could bury bad reviews. Non-staff 403 |
+| `/api/reviews/{id}/set-hidden/` | POST | Moderate (hide/show) | **Staff only** | O(1) | ✅ good / ✅ bad | — | Review | No | 🟠 High | Censorship control — if it leaked to non-staff, anyone could bury bad reviews. Non-staff 403. Hiding also clears `is_featured`, releasing the home page slot |
+| `/api/reviews/featured/` | GET | Home page testimonials strip | **Public** | O(1) | ✅ good / ✅ bad | `ReviewSerializer` | Review, User, Product, ProductCombo | N/A | 🟡 Medium | Always returns ≤3: admin picks first, topped up with the best visible reviews so the strip is never sparse. Hidden reviews excluded unconditionally |
+| `/api/reviews/{id}/set-featured/` | POST | Pin/unpin to the home page | **Staff only** | O(1) | ✅ good / ✅ bad | — | Review | Yes | 🟠 High | Cap of 3 enforced under `select_for_update` so two admins can't both pass the count check. Rejects the 4th rather than displacing a pick; refuses hidden reviews |
 
 ---
 

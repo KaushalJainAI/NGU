@@ -11,6 +11,31 @@ from .models import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Review aggregates
+#
+# Every rating surface goes through these two helpers so the annotated
+# fast-path and the fallback can never disagree. The fallback MUST filter
+# is_hidden: it used to count every review, so a moderated review kept
+# propping up a product's star rating everywhere the viewset annotation
+# wasn't applied (combos, homepage cards, single-object serialization).
+# ---------------------------------------------------------------------------
+
+def visible_review_average(obj):
+    """Mean rating over non-hidden reviews, rounded to 1dp (0 when none)."""
+    if hasattr(obj, '_average_rating'):
+        return round(obj._average_rating, 1) if obj._average_rating else 0
+    avg = obj.reviews.filter(is_hidden=False).aggregate(avg=Avg('rating'))['avg']
+    return round(avg, 1) if avg else 0
+
+
+def visible_review_count(obj):
+    """Number of non-hidden reviews."""
+    if hasattr(obj, '_reviews_count'):
+        return obj._reviews_count or 0
+    return obj.reviews.filter(is_hidden=False).count()
+
+
 class ProductVariantSerializer(serializers.ModelSerializer):
     """A single packaging/size of a product (read-only nested view)."""
     final_price = serializers.ReadOnlyField()
@@ -77,6 +102,16 @@ class SectionProductSerializer(serializers.Serializer):
     badge = serializers.SerializerMethodField()
     is_featured = serializers.BooleanField()
     variant_count = serializers.SerializerMethodField()
+    # Homepage cards had no rating at all, so a product with reviews still
+    # showed as unrated on the front page.
+    average_rating = serializers.SerializerMethodField()
+    reviews_count = serializers.SerializerMethodField()
+
+    def get_average_rating(self, obj):
+        return visible_review_average(obj)
+
+    def get_reviews_count(self, obj):
+        return visible_review_count(obj)
 
     def get_variant_count(self, obj):
         variants = getattr(obj, 'variants', None)
@@ -424,22 +459,12 @@ class ProductListSerializer(serializers.ModelSerializer):
         return sum(1 for v in obj.variants.all() if v.is_active)
     
     def get_average_rating(self, obj):
-        """Get average rating using aggregation to avoid N+1 queries"""
-        # Use the annotated value when present (set by the viewset queryset),
-        # normalized to match the manual-fallback output exactly.
-        if hasattr(obj, '_average_rating'):
-            return round(obj._average_rating, 1) if obj._average_rating else 0
-        # Fallback to manual calculation
-        avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
-        return round(avg, 1) if avg else 0
+        """Average rating over visible reviews (annotated fast-path inside)."""
+        return visible_review_average(obj)
 
     def get_reviews_count(self, obj):
-        """Get reviews count using aggregation to avoid N+1 queries"""
-        # Use the annotated value when present (set by the viewset queryset).
-        if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count or 0
-        # Fallback to manual count
-        return obj.reviews.count()
+        """Visible review count (annotated fast-path inside)."""
+        return visible_review_count(obj)
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -486,17 +511,12 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return sum(1 for v in obj.variants.all() if v.is_active)
     
     def get_average_rating(self, obj):
-        """Get average rating using aggregation"""
-        if hasattr(obj, '_average_rating'):
-            return round(obj._average_rating, 1) if obj._average_rating else 0
-        avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
-        return round(avg, 1) if avg else 0
+        """Average rating over visible reviews (annotated fast-path inside)."""
+        return visible_review_average(obj)
 
     def get_reviews_count(self, obj):
-        """Get reviews count using aggregation"""
-        if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count or 0
-        return obj.reviews.count()
+        """Visible review count (annotated fast-path inside)."""
+        return visible_review_count(obj)
     
     def validate(self, data):
         """Validate discount price"""
@@ -585,6 +605,16 @@ class ProductComboSerializer(serializers.ModelSerializer):
     total_original_price = serializers.ReadOnlyField()
     total_weight = serializers.ReadOnlyField()
     available_stock = serializers.ReadOnlyField()
+    # Combos accept reviews (My Orders offers a review dialog for them) but had
+    # no rating fields, so those reviews were written and never displayed.
+    average_rating = serializers.SerializerMethodField(read_only=True)
+    reviews_count = serializers.SerializerMethodField(read_only=True)
+
+    def get_average_rating(self, obj):
+        return visible_review_average(obj)
+
+    def get_reviews_count(self, obj):
+        return visible_review_count(obj)
 
     class Meta:
         model = ProductCombo
@@ -594,6 +624,7 @@ class ProductComboSerializer(serializers.ModelSerializer):
             'discount_percentage', 'total_original_price', 'total_weight',
             'low_stock_threshold', 'available_stock',
             'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at',
+            'average_rating', 'reviews_count',
             'items', 'sections', 'section_names'
         ]
         read_only_fields = ['slug', 'created_at']
