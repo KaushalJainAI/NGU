@@ -27,11 +27,20 @@ class ReviewSerializer(serializers.ModelSerializer):
                             'is_featured']
 
     def get_user_name(self, obj):
+        """Public display name for the review author.
+
+        Never falls back to `username`. For a Google sign-in the username is
+        derived from the email's local part (users/views.py), so returning it
+        publishes a piece of the customer's email address on a page anyone can
+        read — including the unauthenticated home-page testimonials strip. An
+        email/password customer who never filled in a name has no display name
+        to publish at all, so the review is attributed generically rather than
+        by leaking the one identifier we do hold.
+        """
         user = obj.user
         if not user:
             return ''
-        # `name` is the profile's own display field; fall back through the
-        # Django name fields before ever exposing the username.
+        # `name` is the profile's own display field; then the Django name fields.
         for candidate in (
             getattr(user, 'name', '') or '',
             (f"{user.first_name} {user.last_name}").strip(),
@@ -39,7 +48,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         ):
             if candidate.strip():
                 return candidate.strip()
-        return user.username
+        return 'Customer'
 
     def validate(self, data):
         # Be partial-update aware: on a PATCH that only edits rating/comment the

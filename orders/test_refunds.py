@@ -234,7 +234,12 @@ class TestAdminCanRecordARefund:
         assert paid_order.status == "delivered", "the status change rolled back too"
         assert paid_order.refunds.count() == 0
 
-    @pytest.mark.parametrize("bad", ["abc", "0", "-50"])
+    # "NaN" and the infinities are the sharp ones: Decimal() accepts all of
+    # them, and quantize() passes NaN through QUIETLY — so the `<= 0` guard was
+    # the thing that raised, turning a malformed request into a 500 on the
+    # refund path. They must 400 like any other junk.
+    @pytest.mark.parametrize(
+        "bad", ["abc", "0", "-50", "NaN", "nan", "Infinity", "-Infinity", "1e999"])
     def test_a_nonsense_amount_is_rejected(self, admin_client, paid_order, bad):
         r = admin_client.patch(f"{URL}{paid_order.id}/",
                                {"status": "refunded", "refund_amount": bad},
@@ -479,6 +484,18 @@ class TestCreditNote:
         r = authenticated_client.get(
             f"{URL}{paid_order.id}/credit-note/?refund={stray.id}")
         assert r.status_code == 404
+
+    @pytest.mark.parametrize("bad", ["abc", "1;2", "", " "])
+    def test_a_non_numeric_refund_id_is_a_bad_request_not_a_crash(
+            self, authenticated_client, paid_order, bad):
+        """`filter(pk='abc')` raises ValueError from inside the ORM, which DRF
+        renders as a 500 — a server fault reported for a malformed URL."""
+        record_refund(paid_order, Decimal("469.00"), source="admin")
+        r = authenticated_client.get(
+            f"{URL}{paid_order.id}/credit-note/?refund={bad}")
+        # An EMPTY value means "no id given", which falls through to the latest
+        # refund; anything else non-numeric (whitespace included) is rejected.
+        assert r.status_code == (200 if bad == "" else 400)
 
     def test_the_invoice_discloses_the_refund(self, paid_order):
         """The invoice keeps its original amounts — it is never rewritten — but

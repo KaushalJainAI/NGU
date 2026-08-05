@@ -177,6 +177,25 @@ class TestBulkImportPreview:
                                          {'file': self._csv('name,price\nx,1\n')}, format='multipart')
         assert resp.status_code == 403
 
+    def test_name_matching_stays_case_insensitive(self, admin_client, test_product):
+        """The one-query name lookup replaced a per-row `name__iexact`; it must
+        still match the way a spreadsheet actually spells things."""
+        csv = f"name,price\n{test_product.name.upper()},175\n"
+        resp = admin_client.post('/api/admin/bulk-products/import/',
+                                 {'file': self._csv(csv)}, format='multipart')
+        assert resp.status_code == 200
+        assert resp.data['ok_count'] == 1
+        assert resp.data['rows'][0]['id'] == test_product.id
+
+    def test_an_oversized_sheet_is_refused(self, admin_client, test_product):
+        """5 MB of CSV is ~100k rows, and every row used to cost its own query."""
+        from products.bulk_views import MAX_BULK_ROWS
+        body = 'name,price\n' + f"{test_product.name},175\n" * (MAX_BULK_ROWS + 1)
+        resp = admin_client.post('/api/admin/bulk-products/import/',
+                                 {'file': self._csv(body)}, format='multipart')
+        assert resp.status_code == 400
+        assert 'Too many rows' in resp.data['error']
+
 
 @pytest.mark.django_db
 class TestProductsExport:

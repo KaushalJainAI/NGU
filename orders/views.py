@@ -1147,6 +1147,12 @@ class OrderViewSet(viewsets.ModelViewSet):
             except (InvalidOperation, ValueError):
                 return Response({'error': 'refund_amount must be a number.'},
                                 status=status.HTTP_400_BAD_REQUEST)
+            # quantize() RAISES on Infinity but passes NaN through quietly, and
+            # `NaN <= 0` then raises InvalidOperation — a 500 on the refund path.
+            # The finite check has to be its own step for that reason.
+            if not refund_amount.is_finite():
+                return Response({'error': 'refund_amount must be a number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
             if refund_amount <= 0:
                 return Response({'error': 'refund_amount must be greater than zero.'},
                                 status=status.HTTP_400_BAD_REQUEST)
@@ -1230,6 +1236,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 try:
                     cost = Decimal(str(raw).strip() or '0')
                 except (InvalidOperation, ValueError):
+                    return Response({'error': 'shipping_cost must be a number.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                # NaN and Infinity are valid Decimals but not valid money, and a
+                # NaN comparison RAISES InvalidOperation rather than returning
+                # False — so `cost < 0` below would 500 instead of 400. Reject
+                # them here, matching products/bulk_views.py::_parse_decimal.
+                if not cost.is_finite():
                     return Response({'error': 'shipping_cost must be a number.'},
                                     status=status.HTTP_400_BAD_REQUEST)
                 if cost < 0 or cost > MAX_ORDER_TOTAL:
@@ -1526,9 +1539,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         from django.http import HttpResponse
 
         order = self.get_object()
-        refund_id = request.query_params.get('refund')
+        raw_refund_id = request.query_params.get('refund')
         refunds = order.refunds.all()
-        refund = refunds.filter(pk=refund_id).first() if refund_id else refunds.first()
+        if raw_refund_id:
+            # Coerce before querying: `filter(pk='abc')` raises ValueError from
+            # inside the ORM, which surfaces as a 500 on a request that is simply
+            # malformed. A non-numeric id is a bad request, not a server fault.
+            try:
+                refund_id = int(raw_refund_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'refund must be a refund id.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            refund = refunds.filter(pk=refund_id).first()
+        else:
+            refund = refunds.first()
         if refund is None:
             return Response(
                 {'error': 'No refund has been recorded on this order.'},

@@ -1390,6 +1390,11 @@ class TestAdminUpdateAtomicity:
     @pytest.mark.parametrize("bad_field", [
         {"shipping_cost": "not-a-number"},
         {"shipping_cost": "-5"},
+        # Decimal() accepts these happily; it is the `< 0` comparison that then
+        # raises InvalidOperation, so without an explicit finite check the
+        # request 500s instead of 400-ing.
+        {"shipping_cost": "NaN"},
+        {"shipping_cost": "Infinity"},
         {"place_of_supply_state_code": "99"},
     ])
     def test_rejected_cancel_does_not_restock(

@@ -3,8 +3,8 @@
 Covers the three behaviours added alongside the moderation fixes:
   * an admin picks at most MAX_FEATURED_REVIEWS reviews for the home page,
   * the review title is genuinely optional (the storefront says it is),
-  * `user_name` never falls back to the email-derived username when the
-    customer has a real name.
+  * `user_name` never publishes the email-derived username — it prefers a real
+    name and falls back to a generic label, never to the username.
 """
 from decimal import Decimal
 
@@ -225,7 +225,13 @@ class TestReviewerDisplayName:
         assert resp.status_code == 200
         assert resp.data['results'][0]['user_name'] == 'Kaushal Jain'
 
-    def test_falls_back_to_username_when_nameless(self, api_client, test_user, test_product):
+    def test_never_publishes_the_username(self, api_client, test_user, test_product):
+        """A nameless author is attributed generically, NOT by username.
+
+        The username is derived from the email's local part for Google sign-ins,
+        so falling back to it publishes part of the customer's email address on
+        a public page — the very leak this display name exists to avoid.
+        """
         test_user.username = 'anon123'
         test_user.first_name = ''
         test_user.last_name = ''
@@ -235,4 +241,20 @@ class TestReviewerDisplayName:
         _review(test_user, test_product)
 
         resp = api_client.get(f'/api/reviews/?product={test_product.id}')
-        assert resp.data['results'][0]['user_name'] == 'anon123'
+        assert resp.data['results'][0]['user_name'] == 'Customer'
+
+    def test_public_featured_strip_never_publishes_the_username(
+            self, api_client, test_user, test_product):
+        """Same guarantee on the unauthenticated home-page endpoint."""
+        test_user.username = 'kaushaljain7000'
+        test_user.first_name = ''
+        test_user.last_name = ''
+        if hasattr(test_user, 'name'):
+            test_user.name = ''
+        test_user.save()
+        _review(test_user, test_product)
+
+        resp = api_client.get('/api/reviews/featured/')
+        assert resp.status_code == 200
+        names = [r['user_name'] for r in resp.data['results']]
+        assert 'kaushaljain7000' not in names

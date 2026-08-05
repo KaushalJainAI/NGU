@@ -9,6 +9,7 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from conftest import create_test_image
+from products.bulk_views import MAX_BULK_ROWS
 from products.hsn import HSN_BY_CODE, HSN_REFERENCE, describe, suggest, validate_hsn_code
 from products.models import Product
 
@@ -251,3 +252,53 @@ class TestBulkToolsCarryHsn:
         assert response.status_code == 400
         product.refresh_from_db()
         assert product.hsn_code == ""
+
+
+@pytest.mark.django_db
+class TestBulkApplyGuardsItsInput:
+    """Malformed ids and oversized batches are the client's problem, not a 500.
+
+    Ids arrive as JSON, so anything can turn up in them. Handing a non-numeric
+    id to `filter(id__in=…)` raises ValueError from inside the ORM, which DRF
+    renders as a server error on what is simply a bad request.
+    """
+    URL = "/api/admin/bulk-products/apply/"
+
+    @pytest.mark.parametrize("bad_id", ["abc", None, {}, [], "12x"])
+    def test_a_non_numeric_id_is_reported_not_crashed(
+            self, admin_client, test_category, bad_id):
+        _product(test_category, "Haldi")
+        response = admin_client.post(
+            self.URL, {"changes": [{"id": bad_id, "price": "120"}]}, format="json")
+        assert response.status_code == 400
+        assert response.json()["errors"][0]["error"] == "Product not found."
+
+    def test_a_boolean_id_does_not_become_product_one(
+            self, admin_client, test_category):
+        """`int(True)` is 1 — coercing blindly would edit whichever product
+        happens to hold that id."""
+        product = _product(test_category, "Haldi")   # _product prices at 100
+        response = admin_client.post(
+            self.URL, {"changes": [{"id": True, "price": "999"}]}, format="json")
+        assert response.status_code == 400
+        product.refresh_from_db()
+        assert product.price == Decimal("100")
+
+    def test_a_variant_id_that_is_not_a_number_is_reported(
+            self, admin_client, test_category):
+        product = _product(test_category, "Haldi")
+        response = admin_client.post(
+            self.URL,
+            {"changes": [{"id": product.id, "variant_id": "abc", "price": "120"}]},
+            format="json")
+        assert response.status_code == 400
+        assert "Size not found" in response.json()["errors"][0]["error"]
+
+    def test_an_oversized_batch_is_refused(self, admin_client, test_category):
+        """apply() locks every row it touches in ONE transaction — the same rows
+        checkout locks — so an unbounded batch can stall the shop."""
+        product = _product(test_category, "Haldi")
+        changes = [{"id": product.id, "price": "120"}] * (MAX_BULK_ROWS + 1)
+        response = admin_client.post(self.URL, {"changes": changes}, format="json")
+        assert response.status_code == 400
+        assert "Too many changes" in response.json()["error"]

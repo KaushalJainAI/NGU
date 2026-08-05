@@ -15,6 +15,7 @@ from io import StringIO
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models.functions import Lower
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -39,17 +40,47 @@ class IsStaff(BasePermission):
 # several rows for the same product.
 _IMPORT_FIELDS = ('price', 'discount_price', 'stock', 'hsn_code')
 
+# Most rows one request may carry, for both the edit grid and the CSV import.
+# The 5 MB upload limit alone allows ~100k rows, and apply() holds a
+# select_for_update on every row it touches inside ONE transaction — the same
+# rows checkout locks to decrement stock. A mis-saved spreadsheet could
+# therefore stall the shop rather than merely being slow. 5000 is far past any
+# real catalogue (a few hundred products x their sizes) and still bounded.
+MAX_BULK_ROWS = 5000
 
-def _resolve_variant(product, size, line_no):
+
+def _as_id(value):
+    """Coerce a primary key to int, or None if it isn't one.
+
+    Ids arrive from JSON, so a client can send `"abc"` or `null`. Passing that
+    to `filter(id__in=…)` raises ValueError from deep inside the ORM and DRF
+    renders it as a 500; a bad id belongs in the per-row error list instead.
+    Booleans are rejected explicitly — `int(True)` is 1, which would silently
+    edit product 1.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _resolve_variant(product, size, line_no, actives=None):
     """Return (variant, error) for a CSV row: the named size, or the default.
 
     A blank `size` means "the default size" — that is what a sheet written
     before variants existed meant, and it keeps old sheets importable. An
     unmatched size is an error rather than a silent fallback, because quietly
     repricing the wrong packaging is worse than refusing the row.
+
+    `actives` lets the caller pass the product's active sizes in, since an import
+    sheet lists one row PER SIZE and would otherwise re-run this query once for
+    every row of the same product.
     """
-    actives = list(ProductVariant.objects.filter(product=product, is_active=True)
-                   .order_by('display_order', 'weight'))
+    if actives is None:
+        actives = list(ProductVariant.objects.filter(product=product, is_active=True)
+                       .order_by('display_order', 'weight'))
     if not actives:
         return None, f"Row {line_no}: '{product.name}' has no active size to update."
 
@@ -259,11 +290,21 @@ def bulk_products_apply(request):
     if not isinstance(changes, list) or not changes:
         return Response({'error': 'Send {"changes": [{"id": …, "price"/"discount_price"/"stock": …}, …]}.'},
                         status=status.HTTP_400_BAD_REQUEST)
+    if len(changes) > MAX_BULK_ROWS:
+        return Response(
+            {'error': f'Too many changes in one request ({len(changes)}; max '
+                      f'{MAX_BULK_ROWS}). Apply them in smaller batches.'},
+            status=status.HTTP_400_BAD_REQUEST)
 
-    ids = [c.get('id') for c in changes if isinstance(c, dict)]
+    # Ids are coerced BEFORE they reach the ORM — see `_as_id`. A row whose id
+    # doesn't coerce simply matches nothing and is reported as "Product not
+    # found" below, which is what it is from the admin's point of view.
+    ids = [pk for pk in (_as_id(c.get('id')) for c in changes if isinstance(c, dict))
+           if pk is not None]
     products = {p.id: p for p in Product.objects.filter(id__in=ids)}
-    variant_ids = [c.get('variant_id') for c in changes
-                   if isinstance(c, dict) and c.get('variant_id')]
+    variant_ids = [pk for pk in (_as_id(c.get('variant_id')) for c in changes
+                                 if isinstance(c, dict) and c.get('variant_id'))
+                   if pk is not None]
     variants = {v.id: v for v in ProductVariant.objects.filter(id__in=variant_ids)}
 
     errors = []
@@ -272,14 +313,14 @@ def bulk_products_apply(request):
         if not isinstance(change, dict) or 'id' not in change:
             errors.append({'row': i, 'error': 'Missing product id.'})
             continue
-        product = products.get(change['id'])
+        product = products.get(_as_id(change['id']))
         if product is None:
             errors.append({'row': i, 'id': change.get('id'), 'error': 'Product not found.'})
             continue
         # Resolve the edit target: a specific size, or the product itself.
         target = product
         if change.get('variant_id'):
-            target = variants.get(change['variant_id'])
+            target = variants.get(_as_id(change['variant_id']))
             if target is None or target.product_id != product.id:
                 errors.append({'row': i, 'id': product.id,
                                'error': 'Size not found for this product.'})
@@ -391,17 +432,41 @@ def bulk_products_import(request):
         return Response({'error': 'The file must have at least one of these columns: price, discount_price, stock, hsn_code.'},
                         status=status.HTTP_400_BAD_REQUEST)
 
-    # One lookup of names → product (exact, case-insensitive).
     name_col = normalised['name']
     size_col = normalised.get('size')
+
+    # Materialise the sheet first so the row count can be checked before any
+    # database work: 5 MB of CSV is ~100k rows, and the loop below used to run a
+    # name lookup (plus a variant lookup) for every one of them.
+    sheet = [(line_no, raw_row) for line_no, raw_row
+             in enumerate(reader, start=2)  # row 1 is the header
+             if (raw_row.get(name_col) or '').strip()]
+    if len(sheet) > MAX_BULK_ROWS:
+        return Response(
+            {'error': f'Too many rows ({len(sheet)}; max {MAX_BULK_ROWS}). '
+                      f'Split the sheet and import it in parts.'},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    # ONE lookup of names → product (exact, case-insensitive), instead of a query
+    # per row. Ordering matches Product.Meta (`-created_at`) and the first hit per
+    # name wins, so a duplicated product name still resolves to the same row
+    # `filter(name__iexact=…).first()` used to return.
+    wanted_names = {(raw_row.get(name_col) or '').strip().lower() for _, raw_row in sheet}
+    products_by_name = {}
+    for product in Product.objects.annotate(_lname=Lower('name')).filter(
+            _lname__in=wanted_names):
+        products_by_name.setdefault(product._lname, product)
+
+    # Active sizes per product, filled lazily — a sheet lists one row per size,
+    # so without this each product is re-queried once per size it sells in.
+    actives_by_product = {}
+
     rows_out = []
     ok_count = 0
     hsn_seen = {}  # product id -> code already taken from an earlier row
-    for line_no, raw_row in enumerate(reader, start=2):  # row 1 is the header
+    for line_no, raw_row in sheet:
         name = (raw_row.get(name_col) or '').strip()
-        if not name:
-            continue  # skip blank lines silently
-        product = Product.objects.filter(name__iexact=name).first()
+        product = products_by_name.get(name.lower())
         if product is None:
             rows_out.append({'name': name, 'id': None, 'changes': {},
                              'error': f"Row {line_no}: no product named '{name}'."})
@@ -409,7 +474,12 @@ def bulk_products_import(request):
 
         # Resolve which SIZE this row edits.
         size = (raw_row.get(size_col) or '').strip() if size_col else ''
-        variant, size_error = _resolve_variant(product, size, line_no)
+        if product.id not in actives_by_product:
+            actives_by_product[product.id] = list(
+                ProductVariant.objects.filter(product=product, is_active=True)
+                .order_by('display_order', 'weight'))
+        variant, size_error = _resolve_variant(product, size, line_no,
+                                               actives=actives_by_product[product.id])
         if size_error:
             rows_out.append({'name': name, 'size': size, 'id': product.id,
                              'variant_id': None, 'changes': {}, 'error': size_error})
