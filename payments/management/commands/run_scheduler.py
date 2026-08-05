@@ -86,10 +86,26 @@ class Command(BaseCommand):
             _run, 'interval', minutes=rollup_every,
             args=['rollup_analytics', 'rollup_analytics'],
             id='rollup_analytics', coalesce=True, max_instances=1)
+        # Nightly backfill. The window must be WIDE, not tight: the interval job
+        # above only ever touches today, so any order that changes later — a
+        # cancellation, a corrected courier cost, a Recycle Bin restore, a COD
+        # confirmation — is only picked up if its day falls inside this window.
+        # At the old 3 days, anything corrected after 72h left that day's revenue
+        # and GST overstated permanently, with nothing to detect it.
+        rollup_backfill = int(getattr(settings, 'ROLLUP_BACKFILL_DAYS', 35) or 35)
         scheduler.add_job(
             _run, CronTrigger(hour=0, minute=20),
-            kwargs={'days': 3}, args=['rollup_analytics_nightly', 'rollup_analytics'],
+            kwargs={'days': rollup_backfill},
+            args=['rollup_analytics_nightly', 'rollup_analytics'],
             id='rollup_analytics_nightly', coalesce=True, max_instances=1)
+        # Drift check: re-derive the window from source orders and compare against
+        # the stored rollups. The backfill above should make drift impossible —
+        # this is what tells us when that assumption breaks, instead of finding
+        # out months later from a wrong return.
+        scheduler.add_job(
+            _run, CronTrigger(hour=4, minute=0),
+            args=['check_rollup_drift', 'check_rollup_drift'],
+            id='check_rollup_drift', coalesce=True, max_instances=1)
         # Store-owner emails: daily digest every morning, weekly summary Mondays.
         scheduler.add_job(
             _run, CronTrigger(hour=8, minute=0),

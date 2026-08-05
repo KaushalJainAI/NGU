@@ -430,11 +430,30 @@ def _dispatch_webhook_event(event_type, payload, event_id):
             error_code=err, error_description=pay.get('error_description'),
             raw_payload=payload, payment_entity=pay)
     elif event_type == 'refund.processed':
+        # DISABLED 2026-08-01 — refunds are MANUAL-ONLY for now. The gateway no
+        # longer writes to the refund ledger; an admin records the refund in the
+        # panel (PATCH status='refunded' → orders/refunds.py record_refund) after
+        # issuing it at Razorpay. Logged loudly rather than dropped, because an
+        # unrecorded refund leaves the order reading 'paid' and its GST
+        # un-reversed — i.e. tax paid on money already returned.
+        #
+        # To re-enable: restore the call below and un-comment
+        # test_refund_webhook_without_order_id_still_refunds.
+        #
+        # refund = entity.get('refund', {}).get('entity', {})
+        # services.mark_payment_refunded(
+        #     razorpay_order_id=refund.get('order_id'),
+        #     razorpay_payment_id=refund.get('payment_id'), event_id=event_id,
+        #     source='webhook', raw_payload=payload,
+        #     # Amount (paise) and the gateway refund id drive the GST reversal and
+        #     # its idempotency — without them a refund can't reduce what's owed.
+        #     refund_amount_paise=refund.get('amount'),
+        #     refund_reference=refund.get('id'))
         refund = entity.get('refund', {}).get('entity', {})
-        services.mark_payment_refunded(
-            razorpay_order_id=refund.get('order_id'),
-            razorpay_payment_id=refund.get('payment_id'), event_id=event_id,
-            source='webhook', raw_payload=payload)
+        logger.warning(
+            "refund.processed IGNORED (manual-only mode): refund %s on payment %s. "
+            "Record it in the admin panel or the order's GST stays un-reversed.",
+            refund.get('id'), refund.get('payment_id'))
     else:
         # Unknown/unsubscribed — ACK without action.
         logger.info("Ignoring unsubscribed webhook event: %s", event_type)

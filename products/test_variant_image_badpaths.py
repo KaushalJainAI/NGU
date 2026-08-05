@@ -137,6 +137,11 @@ class TestVariantDelete:
     ):
         """DELETE must never orphan order history — it retires the row instead."""
         from orders.models import Order, OrderItem
+        # A sibling so the "last active size" guard isn't what's under test here.
+        ProductVariant.objects.create(
+            product=variant.product, price=Decimal('99.00'), stock=5,
+            weight=Decimal('250.00'), unit='g', is_active=True,
+        )
         order = Order.objects.create(
             user=test_user, shipping_address='123 Test St', phone_number='1234567890',
             payment_method='COD', subtotal=Decimal('150.00'), tax=Decimal('15.00'),
@@ -156,10 +161,31 @@ class TestVariantDelete:
         assert variant.is_active is False
         assert variant.is_default is False
 
-    def test_unreferenced_variant_is_deleted(self, admin_client, variant):
+    def test_unreferenced_variant_is_retired_not_deleted(
+        self, admin_client, variant, test_product
+    ):
+        """Even a size nothing points at survives DELETE — no hard delete exists."""
+        ProductVariant.objects.create(
+            product=test_product, price=Decimal('99.00'), stock=5,
+            weight=Decimal('250.00'), unit='g', is_active=True,
+        )
+
         r = admin_client.delete(f'{VARIANTS_URL}{variant.id}/')
-        assert r.status_code == 204
-        assert not ProductVariant.objects.filter(id=variant.id).exists()
+
+        assert r.status_code == 200
+        assert ProductVariant.objects.filter(id=variant.id).exists()
+        variant.refresh_from_db()
+        assert variant.is_active is False
+        assert variant.is_default is False
+
+    def test_last_active_size_cannot_be_removed(self, admin_client, variant):
+        ProductVariant.objects.filter(product=variant.product).exclude(
+            pk=variant.pk).update(is_active=False)
+
+        r = admin_client.delete(f'{VARIANTS_URL}{variant.id}/')
+        assert r.status_code == 409
+        variant.refresh_from_db()
+        assert variant.is_active is True
 
 
 # ==================== PRODUCT IMAGE UPLOAD ====================

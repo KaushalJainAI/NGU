@@ -1,10 +1,39 @@
 import json
+from decimal import Decimal
+
 from rest_framework import serializers
 from django.db.models import Avg, Count
 from .models import (
     Category, Product, ProductImage, ProductCombo, ProductComboItem,
     ProductSection, ProductVariant,
+    default_variant_for as _default_variant_for,
+    ensure_default_variant_for as _ensure_default_variant_for,
 )
+
+
+# ---------------------------------------------------------------------------
+# Review aggregates
+#
+# Every rating surface goes through these two helpers so the annotated
+# fast-path and the fallback can never disagree. The fallback MUST filter
+# is_hidden: it used to count every review, so a moderated review kept
+# propping up a product's star rating everywhere the viewset annotation
+# wasn't applied (combos, homepage cards, single-object serialization).
+# ---------------------------------------------------------------------------
+
+def visible_review_average(obj):
+    """Mean rating over non-hidden reviews, rounded to 1dp (0 when none)."""
+    if hasattr(obj, '_average_rating'):
+        return round(obj._average_rating, 1) if obj._average_rating else 0
+    avg = obj.reviews.filter(is_hidden=False).aggregate(avg=Avg('rating'))['avg']
+    return round(avg, 1) if avg else 0
+
+
+def visible_review_count(obj):
+    """Number of non-hidden reviews."""
+    if hasattr(obj, '_reviews_count'):
+        return obj._reviews_count or 0
+    return obj.reviews.filter(is_hidden=False).count()
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
@@ -49,7 +78,7 @@ class ProductVariantWriteSerializer(serializers.ModelSerializer):
         discount = data.get('discount_price', getattr(self.instance, 'discount_price', None))
         if discount is not None and price is not None and discount >= price:
             raise serializers.ValidationError({
-                'discount_price': 'Discount price must be less than the regular price.'
+                'discount_price': 'Discounted price must be less than the regular price.'
             })
         return data
 
@@ -73,6 +102,16 @@ class SectionProductSerializer(serializers.Serializer):
     badge = serializers.SerializerMethodField()
     is_featured = serializers.BooleanField()
     variant_count = serializers.SerializerMethodField()
+    # Homepage cards had no rating at all, so a product with reviews still
+    # showed as unrated on the front page.
+    average_rating = serializers.SerializerMethodField()
+    reviews_count = serializers.SerializerMethodField()
+
+    def get_average_rating(self, obj):
+        return visible_review_average(obj)
+
+    def get_reviews_count(self, obj):
+        return visible_review_count(obj)
 
     def get_variant_count(self, obj):
         variants = getattr(obj, 'variants', None)
@@ -399,7 +438,8 @@ class ProductListSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'slug', 'category', 'category_name', 'spice_form',
-            'price', 'discount_price', 'final_price', 'discount_percentage', 'tax_rate',
+            'price', 'discount_price', 'final_price', 'discount_percentage',
+            'tax_rate', 'hsn_code',
             'stock', 'in_stock', 'low_stock_threshold', 'weight', 'unit', 'organic',
             'image', 'thumbnail', 'is_featured',
             'average_rating', 'reviews_count', 'created_at', 'badge', 'is_active',
@@ -419,22 +459,12 @@ class ProductListSerializer(serializers.ModelSerializer):
         return sum(1 for v in obj.variants.all() if v.is_active)
     
     def get_average_rating(self, obj):
-        """Get average rating using aggregation to avoid N+1 queries"""
-        # Use the annotated value when present (set by the viewset queryset),
-        # normalized to match the manual-fallback output exactly.
-        if hasattr(obj, '_average_rating'):
-            return round(obj._average_rating, 1) if obj._average_rating else 0
-        # Fallback to manual calculation
-        avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
-        return round(avg, 1) if avg else 0
+        """Average rating over visible reviews (annotated fast-path inside)."""
+        return visible_review_average(obj)
 
     def get_reviews_count(self, obj):
-        """Get reviews count using aggregation to avoid N+1 queries"""
-        # Use the annotated value when present (set by the viewset queryset).
-        if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count or 0
-        # Fallback to manual count
-        return obj.reviews.count()
+        """Visible review count (annotated fast-path inside)."""
+        return visible_review_count(obj)
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -458,7 +488,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'category', 'category_name', 'description',
             'spice_form', 'price', 'discount_price', 'final_price',
-            'discount_percentage', 'tax_rate', 'stock', 'in_stock', 'low_stock_threshold',
+            'discount_percentage', 'tax_rate', 'hsn_code',
+            'stock', 'in_stock', 'low_stock_threshold',
             'weight', 'unit',
             'origin_country', 'organic', 'shelf_life', 'ingredients',
             'recipe', 'nutrition',
@@ -480,17 +511,12 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return sum(1 for v in obj.variants.all() if v.is_active)
     
     def get_average_rating(self, obj):
-        """Get average rating using aggregation"""
-        if hasattr(obj, '_average_rating'):
-            return round(obj._average_rating, 1) if obj._average_rating else 0
-        avg = obj.reviews.aggregate(avg=Avg('rating'))['avg']
-        return round(avg, 1) if avg else 0
+        """Average rating over visible reviews (annotated fast-path inside)."""
+        return visible_review_average(obj)
 
     def get_reviews_count(self, obj):
-        """Get reviews count using aggregation"""
-        if hasattr(obj, '_reviews_count'):
-            return obj._reviews_count or 0
-        return obj.reviews.count()
+        """Visible review count (annotated fast-path inside)."""
+        return visible_review_count(obj)
     
     def validate(self, data):
         """Validate discount price"""
@@ -499,7 +525,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
         if discount_price and price and discount_price >= price:
             raise serializers.ValidationError({
-                'discount_price': 'Discount price must be less than the regular price.'
+                'discount_price': 'Discounted price must be less than the regular price.'
             })
 
         return data
@@ -526,25 +552,37 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
 
 class ProductComboItemReadSerializer(serializers.ModelSerializer):
-    """For reading combo items with product details"""
+    """For reading combo items: the product for display, the variant for the
+    size actually bundled (and the price/stock that come with it)."""
     product = serializers.PrimaryKeyRelatedField(read_only=True)
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_slug = serializers.CharField(source='product.slug', read_only=True)
     product_image = serializers.ImageField(source='product.image', read_only=True)
     product_thumbnail = serializers.ImageField(source='product.thumbnail', read_only=True)
+    # The component's à-la-carte price is the VARIANT's price — the legacy
+    # Product.price is only a mirror of whichever size happens to be default.
     product_price = serializers.DecimalField(
-        source='product.price', 
-        max_digits=10, 
-        decimal_places=2, 
+        source='variant.price',
+        max_digits=10,
+        decimal_places=2,
         read_only=True
     )
+    variant = serializers.PrimaryKeyRelatedField(read_only=True)
+    variant_label = serializers.CharField(source='variant.formatted_weight', read_only=True)
+    variant_price = serializers.DecimalField(
+        source='variant.price', max_digits=10, decimal_places=2, read_only=True
+    )
+    variant_stock = serializers.IntegerField(source='variant.stock', read_only=True)
+    variant_is_active = serializers.BooleanField(source='variant.is_active', read_only=True)
     quantity = serializers.IntegerField(read_only=True)
-    
+
     class Meta:
         model = ProductComboItem
         fields = [
-            'product', 'product_name', 'product_slug', 
-            'product_image', 'product_thumbnail', 'product_price', 'quantity'
+            'product', 'product_name', 'product_slug',
+            'product_image', 'product_thumbnail', 'product_price',
+            'variant', 'variant_label', 'variant_price', 'variant_stock',
+            'variant_is_active', 'quantity'
         ]
 
 
@@ -559,19 +597,34 @@ class ProductComboSerializer(serializers.ModelSerializer):
     section_names = serializers.SerializerMethodField(read_only=True)
     discount_percentage = serializers.ReadOnlyField()
     display_title = serializers.ReadOnlyField()
+    # MRP is DERIVED from the components, so `price` is emitted but never
+    # accepted — a client that still posts one is ignored rather than rejected,
+    # so old admin builds keep working while they roll forward.
+    price = serializers.ReadOnlyField()
     final_price = serializers.ReadOnlyField()
     total_original_price = serializers.ReadOnlyField()
     total_weight = serializers.ReadOnlyField()
     available_stock = serializers.ReadOnlyField()
+    # Combos accept reviews (My Orders offers a review dialog for them) but had
+    # no rating fields, so those reviews were written and never displayed.
+    average_rating = serializers.SerializerMethodField(read_only=True)
+    reviews_count = serializers.SerializerMethodField(read_only=True)
+
+    def get_average_rating(self, obj):
+        return visible_review_average(obj)
+
+    def get_reviews_count(self, obj):
+        return visible_review_count(obj)
 
     class Meta:
         model = ProductCombo
         fields = [
             'id', 'name', 'slug', 'description', 'title', 'subtitle',
-            'display_title', 'price', 'discount_price', 'final_price', 'tax_rate',
+            'display_title', 'price', 'discount_price', 'final_price',
             'discount_percentage', 'total_original_price', 'total_weight',
             'low_stock_threshold', 'available_stock',
             'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at',
+            'average_rating', 'reviews_count',
             'items', 'sections', 'section_names'
         ]
         read_only_fields = ['slug', 'created_at']
@@ -607,63 +660,94 @@ class ProductComboSerializer(serializers.ModelSerializer):
         return []
 
     def _validate_and_get_items(self, items_data):
-        """Validate items and return product instances with quantities"""
+        """Validate items and return (variant, quantity) pairs.
+
+        A combo line is a SIZE, so each item should carry `variant`. Payloads
+        that only send `product` (pre-variant clients) are still accepted and
+        resolved to that product's default active size, so old integrations keep
+        working — but the resolved variant is what gets stored.
+        """
         if not items_data:
             raise serializers.ValidationError({
                 'items': 'At least one product must be added to the combo.'
             })
-        
+
         validated_items = []
-        product_ids = []
-        
+        seen_variant_ids = []
+
         for item in items_data:
+            variant_id = item.get('variant')
             product_id = item.get('product')
             quantity = item.get('quantity', 1)
-            
-            if not product_id:
+
+            if not variant_id and not product_id:
                 continue
-                
-            # Convert to int if string
-            try:
-                product_id = int(product_id)
-            except (ValueError, TypeError):
+
+            if variant_id:
+                try:
+                    variant_id = int(variant_id)
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError({
+                        'items': f'Invalid size ID: {variant_id}'
+                    })
+                variant = ProductVariant.objects.select_related('product').filter(
+                    pk=variant_id).first()
+                if variant is None:
+                    raise serializers.ValidationError({
+                        'items': f'Size with ID {variant_id} does not exist.'
+                    })
+                # Guard against a mismatched pair arriving from a stale form.
+                if product_id and int(product_id) != variant.product_id:
+                    raise serializers.ValidationError({
+                        'items': f'Size {variant_id} does not belong to product {product_id}.'
+                    })
+            else:
+                try:
+                    product_id = int(product_id)
+                except (ValueError, TypeError):
+                    raise serializers.ValidationError({
+                        'items': f'Invalid product ID: {product_id}'
+                    })
+                product_obj = Product.objects.filter(pk=product_id).first()
+                if product_obj is None:
+                    raise serializers.ValidationError({
+                        'items': f'Product with ID {product_id} does not exist.'
+                    })
+                # A product with no variant row yet still has a sellable
+                # price/stock in its legacy columns — materialise the size
+                # rather than reject a legitimate product.
+                variant = _ensure_default_variant_for(product_obj)
+
+            if not variant.is_active:
                 raise serializers.ValidationError({
-                    'items': f'Invalid product ID: {product_id}'
+                    'items': f'{variant.product.name} ({variant.formatted_weight}) is not an active size.'
                 })
-            
-            # Check for duplicates
-            if product_id in product_ids:
+
+            # The same size twice in one combo is a quantity, not two lines.
+            if variant.pk in seen_variant_ids:
                 raise serializers.ValidationError({
-                    'items': 'Cannot add the same product multiple times.'
+                    'items': 'Cannot add the same product size multiple times.'
                 })
-            product_ids.append(product_id)
-            
-            # Validate product exists and has sufficient stock
-            try:
-                product = Product.objects.get(pk=product_id)
-            except Product.DoesNotExist:
-                raise serializers.ValidationError({
-                    'items': f'Product with ID {product_id} does not exist.'
-                })
-            
-            # Validate quantity
+            seen_variant_ids.append(variant.pk)
+
             try:
                 quantity = max(1, int(quantity))
             except (ValueError, TypeError):
                 raise serializers.ValidationError({
-                    'items': f'Invalid quantity for product {product_id}'
+                    'items': f'Invalid quantity for size {variant.pk}'
                 })
-            
+
             validated_items.append({
-                'product': product,
+                'product': variant.product,
+                'variant': variant,
                 'quantity': quantity
             })
-        
+
         if not validated_items:
             raise serializers.ValidationError({
                 'items': 'At least one valid product must be added to the combo.'
             })
-        
+
         return validated_items
 
     def create(self, validated_data):
@@ -682,9 +766,10 @@ class ProductComboSerializer(serializers.ModelSerializer):
             ProductComboItem.objects.create(
                 combo=combo,
                 product=item_data['product'],
+                variant=item_data['variant'],
                 quantity=item_data['quantity']
             )
-        
+
         return combo
 
     def update(self, instance, validated_data):
@@ -712,20 +797,80 @@ class ProductComboSerializer(serializers.ModelSerializer):
                 ProductComboItem.objects.create(
                     combo=instance,
                     product=item_data['product'],
+                    variant=item_data['variant'],
                     quantity=item_data['quantity']
                 )
-        
+
         return instance
 
+    def _mrp_for_raw_items(self, items_data):
+        """Derived MRP for a payload's items — READ-ONLY, no side effects.
+
+        `validate()` cannot go through `_validate_and_get_items`: that resolves a
+        product-only line by *materialising* its default size, so a payload that
+        then fails validation would leave a freshly minted ProductVariant behind.
+        Validation must not write. Full validation (and that materialisation)
+        still happens in create()/update(), where the write is wanted.
+
+        Anything unresolvable is skipped rather than raising — this method
+        answers "what do these components add up to", and it is create()/update()
+        that rejects a bad line, with the specific message.
+        """
+        total = Decimal('0')
+        for item in items_data or []:
+            try:
+                quantity = max(1, int(item.get('quantity', 1)))
+            except (ValueError, TypeError):
+                quantity = 1
+
+            price = None
+            if item.get('variant'):
+                price = (ProductVariant.objects
+                         .filter(pk=item['variant'])
+                         .values_list('price', flat=True).first())
+            elif item.get('product'):
+                variant = _default_variant_for(item['product'])
+                # No size yet: the legacy Product.price is what such a product
+                # would be sold at, and is exactly what create() will copy onto
+                # the variant it mints.
+                price = variant.price if variant is not None else (
+                    Product.objects.filter(pk=item['product'])
+                    .values_list('price', flat=True).first())
+
+            if price:
+                total += Decimal(str(price)) * quantity
+        return total
+
     def validate(self, data):
-        """Additional validation for price logic"""
-        # Get price values from data or instance
-        price = data.get('price', getattr(self.instance, 'price', None))
+        """Reject a selling price ABOVE the MRP the components imply.
+
+        Equal is allowed: a bundle sold at exactly the sum of its parts is a
+        legitimate curation with no discount. Only charging MORE than the à-la-
+        carte total is wrong. Note the MRP is derived, so it moves whenever a
+        component is re-priced — this is a check at write time, not an invariant
+        the catalogue can maintain on its own.
+
+        The MRP has to be computed from the items in THIS payload — not from
+        `instance.price`, which still reflects the old components when the same
+        request also replaces them. On create there is no instance at all, so the
+        payload is the only source. When a request changes only `discount_price`
+        and sends no items, the stored components are the right basis and
+        `instance.price` is used.
+        """
         discount_price = data.get('discount_price')
-        
-        if discount_price and price and float(discount_price) >= float(price):
+        if not discount_price:
+            return data
+
+        items_raw = data.get('items')
+        if items_raw not in (None, ''):
+            mrp = self._mrp_for_raw_items(self._parse_items(items_raw))
+        else:
+            mrp = getattr(self.instance, 'price', None)
+
+        if mrp and Decimal(str(discount_price)) > mrp:
             raise serializers.ValidationError({
-                'discount_price': 'Discount price must be less than the regular price.'
+                'discount_price': 'Selling price cannot exceed the combo MRP '
+                                  f'(₹{mrp}, the sum of its components).'
             })
-        
+
         return data

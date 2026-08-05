@@ -319,24 +319,48 @@ class TestWebhook:
         assert resp.status_code == 200
         assert PaymentEvent.objects.filter(event_type='orphan_payment', is_exception=True).exists()
 
-    def test_refund_webhook_without_order_id_still_refunds(
+    # DISABLED 2026-08-01 alongside the refund.processed branch in
+    # payments/views.py — refunds are manual-only, so the webhook no longer
+    # refunds anything. Restore this test if the branch is re-enabled.
+    #
+    # def test_refund_webhook_without_order_id_still_refunds(
+    #         self, settings, api_client, order, pending_payment):
+    #     """A refund.processed payload carrying only payment_id (no order_id) must
+    #     still mark the local Payment refunded, not fall through to an orphan."""
+    #     settings.RAZORPAY_WEBHOOK_SECRET = 'whsec'
+    #     services.mark_payment_captured('order_RZP123', 'pay_WH', source='webhook')
+    #     body = json.dumps({
+    #         'event': 'refund.processed',
+    #         'payload': {'refund': {'entity': {'id': 'rfnd_1', 'payment_id': 'pay_WH'}}},
+    #     })
+    #     with patch('payments.views.get_razorpay_client', return_value=_mock_client(True)):
+    #         resp = api_client.post(self.url, body, content_type='application/json',
+    #                                HTTP_X_RAZORPAY_SIGNATURE='s', HTTP_X_RAZORPAY_EVENT_ID='whr')
+    #     assert resp.status_code == 200
+    #     order.refresh_from_db(); pending_payment.refresh_from_db()
+    #     assert pending_payment.status == 'refunded'
+    #     assert order.payment_status == 'refunded'
+    #     assert not PaymentEvent.objects.filter(event_type='orphan_payment').exists()
+
+    def test_refund_webhook_is_ignored_in_manual_only_mode(
             self, settings, api_client, order, pending_payment):
-        """A refund.processed payload carrying only payment_id (no order_id) must
-        still mark the local Payment refunded, not fall through to an orphan."""
+        """Manual-only refunds: a refund.processed payload is ACKed but must NOT
+        touch the payment, the order, or the refund ledger."""
         settings.RAZORPAY_WEBHOOK_SECRET = 'whsec'
         services.mark_payment_captured('order_RZP123', 'pay_WH', source='webhook')
         body = json.dumps({
             'event': 'refund.processed',
-            'payload': {'refund': {'entity': {'id': 'rfnd_1', 'payment_id': 'pay_WH'}}},
+            'payload': {'refund': {'entity': {'id': 'rfnd_1', 'payment_id': 'pay_WH',
+                                              'amount': 10000}}},
         })
         with patch('payments.views.get_razorpay_client', return_value=_mock_client(True)):
             resp = api_client.post(self.url, body, content_type='application/json',
                                    HTTP_X_RAZORPAY_SIGNATURE='s', HTTP_X_RAZORPAY_EVENT_ID='whr')
         assert resp.status_code == 200
         order.refresh_from_db(); pending_payment.refresh_from_db()
-        assert pending_payment.status == 'refunded'
-        assert order.payment_status == 'refunded'
-        assert not PaymentEvent.objects.filter(event_type='orphan_payment').exists()
+        assert pending_payment.status != 'refunded'
+        assert order.payment_status != 'refunded'
+        assert order.refunds.count() == 0
 
 
 # --------------------------------------------------------------------------- #

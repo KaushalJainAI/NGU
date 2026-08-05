@@ -11,11 +11,11 @@ Usage:
     python manage.py rollup_analytics --date 2026-06-20
     python manage.py rollup_analytics --days 30       # backfill last 30 days
 """
-from datetime import date as date_cls, datetime, time, timedelta
+from datetime import date as date_cls, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from django.db.models import Count, Min, Sum
+from django.db.models import Count, F, Min, Sum
 from django.utils import timezone
 
 from analytics.anon import flush_anon_to_db
@@ -23,9 +23,25 @@ from analytics.models import (
     DailyFunnelRollup, DailySalesRollup, SearchTermStat, UserEvent,
 )
 from orders.models import Order, OrderItem
+from spices_backend.timeranges import day_range
 
 # Orders in these statuses are excluded from sales KPIs (not realised revenue).
 EXCLUDED_ORDER_STATUSES = ['cancelled']
+
+
+def countable_orders():
+    """Orders that count towards sales KPIs.
+
+    Excludes cancelled orders (never realised) AND soft-deleted ones. The latter
+    matters more than it looks: an order in the admin Recycle Bin is already
+    hidden from every dashboard query (`admin_panel/views.py` filters
+    `is_deleted=False`), so counting it here made Insights and the dashboard
+    report different revenue for the same day. Worse, `purge_recycle_bin` hard-
+    deletes the row 30 days later, so the revenue would silently disappear from
+    any period recomputed after that while surviving in periods already stored.
+    """
+    return Order.objects.filter(is_deleted=False).exclude(
+        status__in=EXCLUDED_ORDER_STATUSES)
 
 
 class Command(BaseCommand):
@@ -67,29 +83,33 @@ class Command(BaseCommand):
 
     def _day_range(self, day):
         """Timezone-aware [start, end) bounds for a local calendar day."""
-        tz = timezone.get_current_timezone()
-        start = timezone.make_aware(datetime.combine(day, time.min), tz)
-        end = start + timedelta(days=1)
-        return start, end
+        return day_range(day)
 
     # -- rollups -------------------------------------------------------------
 
     def _rollup_sales(self, day):
         start, end = self._day_range(day)
-        orders_qs = (
-            Order.objects
-            .filter(created_at__gte=start, created_at__lt=end)
-            .exclude(status__in=EXCLUDED_ORDER_STATUSES)
-        )
+        orders_qs = countable_orders().filter(
+            created_at__gte=start, created_at__lt=end)
 
         agg = orders_qs.aggregate(
             orders=Count('id'),
             revenue=Sum('total_amount'),
             coupon_discount=Sum('discount_amount'),
+            # Output tax is goods GST PLUS the 18% on delivery. Summing `tax`
+            # alone silently under-reports the liability by the shipping GST on
+            # every order under the free-shipping threshold.
+            gst_collected=Sum(F('tax') + F('shipping_tax')),
+            shipping_collected=Sum('shipping_charge'),
+            shipping_tax_collected=Sum('shipping_tax'),
+            shipping_cost=Sum('shipping_cost'),
         )
         orders_count = agg['orders'] or 0
         revenue = agg['revenue'] or 0
         coupon_discount = agg['coupon_discount'] or 0
+        gst_collected = agg['gst_collected'] or 0
+        shipping_collected = agg['shipping_collected'] or 0
+        shipping_cost = agg['shipping_cost'] or 0
 
         units = (
             OrderItem.objects
@@ -105,8 +125,7 @@ class Command(BaseCommand):
         new_customers = 0
         if buyer_ids:
             first_order = (
-                Order.objects
-                .exclude(status__in=EXCLUDED_ORDER_STATUSES)
+                countable_orders()
                 .filter(user_id__in=buyer_ids)
                 .values('user_id')
                 .annotate(first=Min('created_at'))
@@ -114,12 +133,36 @@ class Command(BaseCommand):
             new_customers = sum(1 for r in first_order if start <= r['first'] < end)
         returning_customers = max(len(buyer_ids) - new_customers, 0)
 
+        # Refunds are bucketed by the day the REFUND happened, not the day of the
+        # sale — the order being refunded may be months old, and its GST was
+        # already reported (possibly filed) in that earlier period.
+        from orders.refunds import refunded_totals_between
+        refunded = refunded_totals_between(day, day)
+
+        # COD cash is bucketed by the day it was CONFIRMED, for the same reason
+        # as refunds: the courier usually remits days after delivery, so the
+        # order being settled is normally not one of today's. This is the cash
+        # ledger, deliberately independent of the revenue/GST figures above,
+        # which accrue at order date and do not move when the money arrives.
+        cod_collected = (
+            countable_orders()
+            .filter(cod_paid_at__gte=start, cod_paid_at__lt=end)
+            .aggregate(amt=Sum('total_amount'))['amt'] or 0
+        )
+
         DailySalesRollup.objects.update_or_create(
             date=day,
             defaults={
+                'refunds': refunded['amount'] or 0,
+                'gst_refunded': refunded['tax'] or 0,
                 'orders': orders_count,
                 'units': units,
                 'revenue': revenue,
+                'gst_collected': gst_collected,
+                'shipping_collected': shipping_collected,
+                'shipping_tax_collected': agg['shipping_tax_collected'] or 0,
+                'cod_collected': cod_collected,
+                'shipping_cost': shipping_cost,
                 'aov': aov,
                 'coupon_orders': coupon_orders,
                 'coupon_discount': coupon_discount,

@@ -16,6 +16,8 @@ from datetime import timedelta
 from django.db.models import Sum, Count, Q, F
 from django.utils import timezone
 
+from spices_backend.timeranges import range_filter
+
 logger = logging.getLogger(__name__)
 
 MAX_LIST = 20
@@ -77,7 +79,7 @@ def admin_count_orders(user, args):
     qs = Order.objects.filter(is_deleted=False)
     start = _period_start(period)
     if start is not None:
-        qs = qs.filter(created_at__date__gte=start)
+        qs = qs.filter(**range_filter('created_at', start))
     valid = {'pending', 'confirmed', 'processing', 'shipped', 'delivering', 'delivered', 'cancelled'}
     if status in valid:
         qs = qs.filter(status=status)
@@ -143,7 +145,7 @@ def admin_top_products(user, args):
     start = _period_start(period)
     qs = OrderItem.objects.filter(order__is_deleted=False).exclude(order__status='cancelled')
     if start is not None:
-        qs = qs.filter(order__created_at__date__gte=start)
+        qs = qs.filter(**range_filter('order__created_at', start))
     top = (qs.values('product_name')
            .annotate(units=Sum('quantity'), revenue=Sum('final_price'))
            .order_by('-units')[:limit])

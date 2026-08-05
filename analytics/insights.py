@@ -16,11 +16,17 @@ from django.db.models import Count, F, Sum
 from django.utils import timezone
 
 from orders.models import Order, OrderItem
+from spices_backend.timeranges import range_filter
 from .models import (
     DailyAnonStat, DailyFunnelRollup, DailySalesRollup, SearchTermStat, UserEvent, UserGeo,
 )
 
 EXCLUDED_ORDER_STATUSES = ['cancelled']
+
+# Soft-deleted orders (admin Recycle Bin) are excluded everywhere alongside
+# cancelled ones — see `rollup_analytics.countable_orders()` for why. The live
+# queries below must apply the same filter as the rollups, or the "top products"
+# panel and the revenue chart on the same screen disagree.
 
 # Ordered funnel stages we surface (logged-in journey).
 FUNNEL_STAGES = ['view', 'add_to_cart', 'checkout_started', 'purchase']
@@ -66,15 +72,21 @@ def _f(value):
 def sales(date_from, date_to, granularity='day'):
     rows = DailySalesRollup.objects.filter(date__gte=date_from, date__lte=date_to)
 
-    buckets = defaultdict(lambda: {'revenue': 0.0, 'orders': 0, 'units': 0})
+    buckets = defaultdict(lambda: {'revenue': 0.0, 'orders': 0, 'units': 0,
+                                   'gst_collected': 0.0})
+    # `revenue` stays GROSS. gst_collected / shipping_* are reported alongside
+    # it (not deducted) so the figure still ties out to gateway settlements.
     totals = {'revenue': 0.0, 'orders': 0, 'units': 0,
               'coupon_orders': 0, 'coupon_discount': 0.0,
-              'new_customers': 0, 'returning_customers': 0}
+              'new_customers': 0, 'returning_customers': 0,
+              'gst_collected': 0.0, 'shipping_collected': 0.0, 'shipping_cost': 0.0,
+              'refunds': 0.0, 'gst_refunded': 0.0}
     for r in rows:
         b = buckets[_bucket_key(r.date, granularity)]
         b['revenue'] += _f(r.revenue)
         b['orders'] += r.orders
         b['units'] += r.units
+        b['gst_collected'] += _f(r.gst_collected)
         totals['revenue'] += _f(r.revenue)
         totals['orders'] += r.orders
         totals['units'] += r.units
@@ -82,12 +94,20 @@ def sales(date_from, date_to, granularity='day'):
         totals['coupon_discount'] += _f(r.coupon_discount)
         totals['new_customers'] += r.new_customers
         totals['returning_customers'] += r.returning_customers
+        totals['gst_collected'] += _f(r.gst_collected)
+        totals['shipping_collected'] += _f(r.shipping_collected)
+        totals['shipping_cost'] += _f(r.shipping_cost)
+        totals['refunds'] += _f(r.refunds)
+        totals['gst_refunded'] += _f(r.gst_refunded)
 
     series = [
         {'bucket': k, 'revenue': round(v['revenue'], 2),
-         'orders': v['orders'], 'units': v['units']}
+         'orders': v['orders'], 'units': v['units'],
+         'gst_collected': round(v['gst_collected'], 2)}
         for k, v in sorted(buckets.items())
     ]
+    totals['shipping_margin'] = round(
+        totals['shipping_collected'] - totals['shipping_cost'], 2)
     aov = round(totals['revenue'] / totals['orders'], 2) if totals['orders'] else 0
 
     # Period-over-period deltas against the preceding equal window.
@@ -102,6 +122,12 @@ def sales(date_from, date_to, granularity='day'):
                   'granularity': granularity},
         'kpis': {
             'revenue': round(totals['revenue'], 2),
+            # GROSS revenue with refunds sitting in a separate field reads as NET
+            # to almost everyone, so the netted figure is computed here rather
+            # than left as an exercise. `revenue` stays gross because it is what
+            # reconciles against gateway settlements; this is what the business
+            # actually kept.
+            'net_revenue': round(totals['revenue'] - totals['refunds'], 2),
             'orders': totals['orders'],
             'units': totals['units'],
             'aov': aov,
@@ -109,6 +135,22 @@ def sales(date_from, date_to, granularity='day'):
             'coupon_discount': round(totals['coupon_discount'], 2),
             'revenue_delta_pct': _pct_delta(totals['revenue'], prev_rev),
             'orders_delta_pct': _pct_delta(totals['orders'], prev_orders),
+            # What was sold, net of the tax collected on it — the taxable value
+            # of the period's supplies. Pairs with `gst_collected` to answer
+            # "how much did we sell, and how much tax did we take on it".
+            'taxable_sales': round(totals['revenue'] - totals['gst_collected'], 2),
+            # Reported ALONGSIDE gross revenue, never deducted from it.
+            # `gst_collected` is output tax collected from customers — a
+            # money-taken fact, not an amount to remit (that is this minus
+            # input credit on purchases, which we deliberately don't model).
+            'gst_collected': round(totals['gst_collected'], 2),
+            'refunds': round(totals['refunds'], 2),
+            'gst_refunded': round(totals['gst_refunded'], 2),
+            # Net tax held for the period: collected − reversed by refunds.
+            'net_gst_collected': round(totals['gst_collected'] - totals['gst_refunded'], 2),
+            'shipping_collected': round(totals['shipping_collected'], 2),
+            'shipping_cost': round(totals['shipping_cost'], 2),
+            'shipping_margin': totals['shipping_margin'],
         },
         'series': series,
         'top_products': _top_products(date_from, date_to),
@@ -119,8 +161,8 @@ def sales(date_from, date_to, granularity='day'):
 def _order_items_in_range(date_from, date_to):
     return (
         OrderItem.objects
-        .filter(order__created_at__date__gte=date_from,
-                order__created_at__date__lte=date_to)
+        .filter(**range_filter('order__created_at', date_from, date_to))
+        .filter(order__is_deleted=False)
         .exclude(order__status__in=EXCLUDED_ORDER_STATUSES)
     )
 
@@ -210,8 +252,8 @@ def _viewed_not_bought(date_from, date_to, limit=10):
     """Products with view events but no purchase events over the window."""
     events = (
         UserEvent.objects
-        .filter(created_at__date__gte=date_from, created_at__date__lte=date_to,
-                product__isnull=False, event_type__in=['view', 'purchase'])
+        .filter(product__isnull=False, event_type__in=['view', 'purchase'],
+                **range_filter('created_at', date_from, date_to))
         .values('product_id', 'product__name', 'event_type')
         .annotate(c=Count('id'))
     )
@@ -277,7 +319,7 @@ def _customer_geo(limit=15):
 def _top_customers(date_from, date_to, limit=10):
     rows = (
         Order.objects
-        .filter(created_at__date__gte=date_from, created_at__date__lte=date_to)
+        .filter(**range_filter('created_at', date_from, date_to), is_deleted=False)
         .exclude(status__in=EXCLUDED_ORDER_STATUSES)
         .values('user_id', 'user__email')
         .annotate(revenue=Sum('total_amount'), orders=Count('id'))

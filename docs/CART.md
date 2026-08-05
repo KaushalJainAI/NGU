@@ -47,7 +47,16 @@ for the same variant serialise and the second one sees the stock already reduced
 Stock is read from:
 - `variant.stock` when a variant is present
 - `product.stock` for variant-less legacy lines
-- `999` (effectively unlimited) for combos
+- for combos, the scarcest component: `min(variant.stock // qty)` over the
+  components. (The cart *response* still reports `999` for a combo line's raw
+  `stock` field; the authoritative check happens at checkout, per component.)
+
+**Combo pricing in the cart.** A combo line's unit price is `discount_price` or
+the DERIVED MRP — the sum of its component sizes' prices. There is no `price`
+column, so `Cart.total_price` reaches it through `cart.models.combo_mrp_subquery()`
+rather than an `F('combo__price')`. Its GST is likewise per component, via
+`orders.pricing.combo_line_tax`, so the cart's quoted tax matches the placed
+order's exactly — see ORDER_LIFECYCLE.md.
 
 ### API Endpoints
 

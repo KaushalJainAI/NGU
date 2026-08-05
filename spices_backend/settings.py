@@ -552,6 +552,14 @@ COUPON_USAGE_ALERT_PERCENT = config('COUPON_USAGE_ALERT_PERCENT', default=90, ca
 # 15-minute TTL; rollups keep the admin Insights dashboard live.
 RECONCILE_INTERVAL_MINUTES = config('RECONCILE_INTERVAL_MINUTES', default=5, cast=int)
 ROLLUP_INTERVAL_MINUTES = config('ROLLUP_INTERVAL_MINUTES', default=5, cast=int)
+# How far back the NIGHTLY rollup rebuilds. The interval job above only ever
+# recomputes today, so this window is the only thing that picks up an order
+# changed after the fact — a late cancellation, a corrected courier cost, a
+# Recycle Bin restore, a COD cash confirmation. It was 3 days, which meant
+# anything corrected after 72h left that day's revenue and GST overstated
+# permanently. 35 covers a full month plus slack; `check_rollup_drift` reports it
+# if something ever reaches back further still.
+ROLLUP_BACKFILL_DAYS = config('ROLLUP_BACKFILL_DAYS', default=35, cast=int)
 # Admin Recycle Bin retention: a soft-deleted order/product/combo is permanently
 # purged this many days after it was deleted (rolling per-item). The scheduler
 # runs purge_recycle_bin nightly. 0 disables the purge entirely.
@@ -683,6 +691,18 @@ SELLER_STATE = config('SELLER_STATE', default='Madhya Pradesh')
 SELLER_STATE_CODE = config('SELLER_STATE_CODE', default='23')
 SELLER_EMAIL = config('SELLER_EMAIL', default='nidhispicesandfood@gmail.com')
 SELLER_PHONE = config('SELLER_PHONE', default='+91 93000 05040')
+
+# Prefix of the GST invoice serial: "<prefix>/<FY>/<6 digits>", e.g.
+# NM/25-26/000123. Read from the environment because orders/invoicing.py resolves
+# it via getattr(settings, ...) — without this line an INVOICE_NUMBER_PREFIX set
+# in .env.backend is silently ignored and every invoice falls back to 'NM'.
+#
+# ⚠ DECIDE THIS BEFORE THE FIRST INVOICE IS ISSUED. The value is baked into every
+# number in the series, and a GST series must be continuous within the financial
+# year — changing the prefix later splits it in two, which is exactly the thing a
+# numbered series exists to prevent. Max 3 chars: GST caps the whole number at 16
+# and the FY plus sequence already take 13.
+INVOICE_NUMBER_PREFIX = config('INVOICE_NUMBER_PREFIX', default='NM')
 
 # Coarse IP -> region lookups for anonymous-traffic analytics (MaxMind GeoLite2).
 # Optional: if the .mmdb is absent the analytics module degrades gracefully and

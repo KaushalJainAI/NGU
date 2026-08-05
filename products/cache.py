@@ -90,9 +90,31 @@ def invalidate_by_prefix(prefix: str):
             deleted = cache.delete_pattern(pattern)
             logger.info(f"Cache invalidated: {pattern} ({deleted} keys)")
         else:
-            # For local memory cache, we can't do pattern matching
-            # Clear specific known keys instead
-            logger.debug(f"Pattern-based cache invalidation not available for prefix: {prefix}")
+            # LocMemCache (dev + the test suite) has no delete_pattern. This
+            # used to log and give up, which made EVERY invalidation in the
+            # project a silent no-op off Redis: dev and tests could never
+            # observe a stale-cache bug, and a fix for one couldn't be proven.
+            # LocMemCache keeps its entries in a plain dict, so walk it.
+            entries = getattr(cache, '_cache', None)
+            if entries is None:
+                logger.debug(f"No pattern invalidation available for prefix: {prefix}")
+                return
+            expiry = getattr(cache, '_expire_info', {})
+            # make_key applies KEY_PREFIX and the version, matching how the
+            # keys were actually stored (e.g. ':1:products:').
+            target = cache.make_key(f'{prefix}:')
+            doomed = [k for k in list(entries) if k.startswith(target)]
+            lock = getattr(cache, '_lock', None)
+            if lock is not None:
+                with lock:
+                    for key in doomed:
+                        entries.pop(key, None)
+                        expiry.pop(key, None)
+            else:
+                for key in doomed:
+                    entries.pop(key, None)
+                    expiry.pop(key, None)
+            logger.info(f"Cache invalidated (locmem): {prefix}:* ({len(doomed)} keys)")
     except Exception as e:
         logger.error(f"Cache invalidation failed for prefix {prefix}: {e}")
 

@@ -9,7 +9,7 @@ import pytest
 from django.core.management import call_command
 
 from conftest import create_test_image
-from products.models import Category, Product
+from products.models import Category, Product, ProductVariant, default_variant_for
 from products.recommendations import SpiceSearchEngine
 
 NS = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
@@ -76,6 +76,71 @@ class TestBulkApply:
         assert resp.status_code == 400
         assert resp.data['applied'] == 0
 
+    def test_variant_id_edits_that_size_only(self, admin_client, test_product):
+        """Editing a non-default size must land on that size and leave the
+        legacy Product columns alone.
+
+        This is the regression the whole variant rollout exists for: the bulk
+        editor used to write Product.price, which checkout never reads and which
+        the mirror signal overwrites on the next variant save — so the edit
+        looked applied and then silently vanished.
+        """
+        default = default_variant_for(test_product.pk)  # auto-created 250g
+        variant = ProductVariant.objects.create(
+            product=test_product, weight=500, unit='g',
+            price=Decimal('100.00'), stock=10,
+        )
+        resp = admin_client.post('/api/admin/bulk-products/apply/', {
+            'changes': [{'id': test_product.id, 'variant_id': variant.id,
+                         'price': '175.00', 'stock': 7}],
+        }, format='json')
+        assert resp.status_code == 200
+        variant.refresh_from_db()
+        assert variant.price == Decimal('175.00')
+        assert variant.stock == 7
+        # The 500g edit must not leak onto the product, whose legacy columns
+        # mirror the DEFAULT size only.
+        test_product.refresh_from_db()
+        assert test_product.price == default.price
+
+    def test_variant_id_edit_of_default_updates_mirror(self, admin_client, test_product):
+        """Editing the DEFAULT size does propagate to the legacy columns, so
+        list cards and variant-less cart fallbacks stay truthful."""
+        default = default_variant_for(test_product.pk)
+        resp = admin_client.post('/api/admin/bulk-products/apply/', {
+            'changes': [{'id': test_product.id, 'variant_id': default.id,
+                         'price': '175.00', 'stock': 7}],
+        }, format='json')
+        assert resp.status_code == 200
+        default.refresh_from_db()
+        assert default.price == Decimal('175.00')
+        test_product.refresh_from_db()
+        assert test_product.price == Decimal('175.00')
+        assert test_product.stock == 7
+
+    def test_variant_of_another_product_rejected(self, admin_client, test_product, test_product2):
+        variant = ProductVariant.objects.create(
+            product=test_product2, weight=100, unit='g', price=Decimal('50.00'),
+        )
+        resp = admin_client.post('/api/admin/bulk-products/apply/', {
+            'changes': [{'id': test_product.id, 'variant_id': variant.id, 'price': '9'}],
+        }, format='json')
+        assert resp.status_code == 400
+        assert resp.data['applied'] == 0
+
+    def test_bulk_products_lists_variants(self, admin_client, test_product):
+        # The product already owns one auto-created default size; edit it
+        # rather than adding a second 250g row beside it.
+        default = default_variant_for(test_product.pk)
+        default.weight, default.unit = 250, 'g'
+        default.price, default.stock = Decimal('80.00'), 3
+        default.save()
+        resp = admin_client.get('/api/admin/bulk-products/')
+        assert resp.status_code == 200
+        row = next(r for r in resp.data if r['id'] == test_product.id)
+        assert [v['label'] for v in row['variants']] == ['250g']
+        assert row['variants'][0]['is_default'] is True
+
 
 @pytest.mark.django_db
 class TestBulkImportPreview:
@@ -111,6 +176,25 @@ class TestBulkImportPreview:
         resp = authenticated_client.post('/api/admin/bulk-products/import/',
                                          {'file': self._csv('name,price\nx,1\n')}, format='multipart')
         assert resp.status_code == 403
+
+    def test_name_matching_stays_case_insensitive(self, admin_client, test_product):
+        """The one-query name lookup replaced a per-row `name__iexact`; it must
+        still match the way a spreadsheet actually spells things."""
+        csv = f"name,price\n{test_product.name.upper()},175\n"
+        resp = admin_client.post('/api/admin/bulk-products/import/',
+                                 {'file': self._csv(csv)}, format='multipart')
+        assert resp.status_code == 200
+        assert resp.data['ok_count'] == 1
+        assert resp.data['rows'][0]['id'] == test_product.id
+
+    def test_an_oversized_sheet_is_refused(self, admin_client, test_product):
+        """5 MB of CSV is ~100k rows, and every row used to cost its own query."""
+        from products.bulk_views import MAX_BULK_ROWS
+        body = 'name,price\n' + f"{test_product.name},175\n" * (MAX_BULK_ROWS + 1)
+        resp = admin_client.post('/api/admin/bulk-products/import/',
+                                 {'file': self._csv(body)}, format='multipart')
+        assert resp.status_code == 400
+        assert 'Too many rows' in resp.data['error']
 
 
 @pytest.mark.django_db

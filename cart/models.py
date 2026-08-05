@@ -1,9 +1,36 @@
+from decimal import Decimal
+
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db.models import Sum, F, Case, When, DecimalField, Value, IntegerField
+from django.db.models import (
+    Sum, F, Case, When, DecimalField, Value, IntegerField, OuterRef, Subquery,
+)
 from django.db.models.functions import Coalesce
-from products.models import Product, ProductCombo, ProductVariant
+from products.models import Product, ProductCombo, ProductComboItem, ProductVariant
+
+_MONEY = DecimalField(max_digits=12, decimal_places=2)
+
+
+def combo_mrp_subquery(combo_ref='combo'):
+    """Correlated subquery giving a combo's MRP, for use in cart aggregates.
+
+    `ProductCombo.price` is a Python property (the sum of its component sizes),
+    so it cannot appear in an `F()` — but `Cart.total_price` deliberately does
+    its sum in the database. This is the same figure expressed in SQL.
+    """
+    totals = (
+        ProductComboItem.objects
+        .filter(combo=OuterRef(combo_ref))
+        .values('combo')
+        .annotate(total=Sum(F('variant__price') * F('quantity')))
+        .values('total')
+    )
+    return Coalesce(
+        Subquery(totals, output_field=_MONEY),
+        Value(Decimal('0'), output_field=_MONEY),
+        output_field=_MONEY,
+    )
 
 
 class Cart(models.Model):
@@ -36,8 +63,11 @@ class Cart(models.Model):
                     then=Coalesce(F('product__discount_price'), F('product__price'))
                 ),
                 When(
+                    # A combo has no `price` column — its MRP is derived from
+                    # its components (see combo_mrp_subquery), and it sells for
+                    # `discount_price` when the admin set one.
                     item_type='combo',
-                    then=Coalesce(F('combo__discount_price'), F('combo__price'))
+                    then=Coalesce(F('combo__discount_price'), combo_mrp_subquery())
                 ),
                 default=Value(0),
                 output_field=DecimalField(max_digits=10, decimal_places=2)
@@ -68,7 +98,8 @@ class Cart(models.Model):
             'variant__id', 'variant__slug', 'variant__weight', 'variant__unit',
             'variant__price', 'variant__discount_price', 'variant__stock',
             'combo__id', 'combo__name', 'combo__slug', 'combo__image',
-            'combo__price', 'combo__discount_price'
+            # No 'combo__price' — MRP is derived from the components, not a column.
+            'combo__discount_price'
         )
 
 

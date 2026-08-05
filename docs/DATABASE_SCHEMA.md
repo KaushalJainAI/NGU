@@ -21,11 +21,11 @@ standard `created_at`/`updated_at` timestamps are omitted unless notable.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | **Category** | Organizational folder for spices | `name`, `slug`, `image`, `is_active` |
-| **Product** | Individual spice item | `category` (FK, primary shelf), `extra_categories` (M2M — also list under these shelves), `spice_form`, `price`, `discount_price`, `stock`, `low_stock_threshold` (default 5 — warns admin dashboard + daily digest), `weight`, `unit`, `origin_country`, `organic`, `shelf_life`, `ingredients`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `sections` (M2M via `ProductSectionPlacement`) |
+| **Product** | Individual spice item | `category` (FK, primary shelf), `extra_categories` (M2M — also list under these shelves), `spice_form`, `price`, `discount_price`, `stock`, `low_stock_threshold` (default 5 — warns admin dashboard + daily digest), `weight`, `unit`, `origin_country`, `organic`, `shelf_life`, `ingredients`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `sections` (M2M via `ProductSectionPlacement`), `tax_rate` (GST %, default 5, 0 for papad), `hsn_code` (4/6/8 digits, blank = unclassified — `tax_rate` says WHAT is charged, this says WHY; GSTR-1 Table 12 needs both and one cannot be derived from the other. See `products/hsn.py`) |
 | **ProductVariant** | A specific packaging/size of a Product (e.g. 100g, 500g, 1kg) | `product` (FK), `weight`, `unit`, `price`, `discount_price`, `stock`, `sku`, `slug`, `is_default`, `is_active`, `display_order` |
 | **ProductImage** | Gallery images for a product | `product` (FK), `image`, `alt_text` |
-| **ProductCombo** | Bundle of multiple products | `name`, `slug`, `title`, `subtitle`, `price`, `discount_price`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `weight`, `unit`, `sections` (M2M) |
-| **ProductComboItem** | Junction table for combo contents | `combo` (FK), `product` (FK), `quantity` |
+| **ProductCombo** | Bundle of product sizes | `name`, `slug`, `title`, `subtitle`, `discount_price`, `image`, `thumbnail`, `is_active`, `is_featured`, `badge`, `weight`, `unit`, `low_stock_threshold`, `sections` (M2M). **No `price` column** — MRP is a derived property (sum of component sizes; `with_mrp()` annotates it for the DB). **No `tax_rate` column** — GST is per component |
+| **ProductComboItem** | Junction table for combo contents | `combo` (FK), `product` (FK), `variant` (FK to `ProductVariant`, PROTECT — the size bundled), `quantity` |
 | **ProductSection** | Homepage display group (Trending, New, etc.) | `name`, `slug`, `section_type`, `description`, `icon`, `display_order`, `max_products`, `is_active` |
 | **ProductSectionPlacement** | Through model for Product ↔ ProductSection with per-section ordering | `product` (FK), `section` (FK), `position` (lower = first within that section) |
 | **ProductSearchKB** | LLM-generated search synonyms for a product | `product` (OneToOne), `synonyms` (JSONField list), `last_updated` |
@@ -72,8 +72,35 @@ quantity ≥ 1, and no duplicate (cart, variant) or (cart, combo) pairs.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| **Order** | Full invoice | `order_id` (UUIDField, auto-generated), `user` (FK), `status` (pending/confirmed/processing/shipped/delivered/cancelled/delivering), `payment_method` (COD/ONLINE/razorpay), `payment_status`, `subtotal`, `discount_amount`, `shipping_charge`, `tax`, `total_amount`, `coupon` (FK, nullable), `delivery_bill` (FileField, **private storage** — admin-only courier receipt, never a public CDN URL), `delivery_bill_uploaded_at` |
-| **OrderItem** | Line item in an order | `order` (FK), `product` (FK, PROTECT, nullable), `variant` (FK to `ProductVariant`, PROTECT, nullable), `combo` (FK, PROTECT, nullable), `item_type`, `product_name`, `product_weight` (snapshot), `quantity`, `price`, `discounted_price`, `discount_amount`, `tax_amount`, `final_price` |
+| **Order** | Full invoice | `order_id` (UUIDField, auto-generated), `user` (FK), `status` (pending/confirmed/processing/shipped/delivered/cancelled/delivering/**refunded**), `payment_method` (COD/ONLINE/razorpay), `payment_status`, `subtotal`, `discount_amount`, `shipping_charge`, `shipping_cost` (**admin-private** courier cost), `tax`, `tax_inclusive`, `total_amount`, `refunded_amount`, `refunded_tax`, `refunded_at`, `coupon` (FK, nullable), `delivery_bill` (FileField, **private storage** — admin-only courier receipt, never a public CDN URL), `delivery_bill_uploaded_at`, `shipping_state` + `shipping_pincode` (structured destination, as typed), `place_of_supply_state_code` (2-digit GST state code, **frozen at checkout**) |
+| **OrderItem** | Line item in an order | `order` (FK), `product` (FK, PROTECT, nullable), `variant` (FK to `ProductVariant`, PROTECT, nullable), `combo` (FK, PROTECT, nullable), `item_type`, `product_name`, `product_weight` (snapshot), `quantity`, `price`, `discounted_price`, `discount_amount`, `tax_amount`, `tax_rate` (snapshot; for a COMBO line this is the *blended* effective rate, display-only), `hsn_code` (snapshot; blank on combo lines — a bundle has no single heading — and on lines billed before it existed), `final_price` |
+| **OrderItemComponent** | One component of a COMBO line, with its own GST | `order_item` (FK, CASCADE, `related_name='components'`), `variant` (FK, PROTECT), `product_name`/`variant_label`/`quantity`/`tax_rate`/`hsn_code` (snapshots), `allocated_amount`, `tax_amount`. A combo is a mixed supply, so the charged line amount is split linearly by component MRP share and each part taxed at its own product's rate — see `orders.pricing.allocate_combo_components`. `allocated_amount` sums exactly to `OrderItem.final_price`. Absent on orders placed before this shipped; those fall back to `OrderItem.tax_rate` |
+| **OrderRefund** | One refund against an order — the ledger that reverses GST | `order` (FK), `amount`, `tax_amount` (GST reversed), `source` (gateway/admin), `reference` (gateway refund id, unique — idempotency), `note`, `created_at` |
+| **Invoice** | The ISSUED tax invoice for an order — its number, date and frozen contents | `order` (**OneToOne, PROTECT**), `number` (unique, ≤16 chars, e.g. `NM/25-26/000123`), `series`, `sequence` (unique together with `series`), `issued_at` (the tax point), `total_amount`/`total_tax` (denormalised for reporting), `snapshot` (JSON — seller, buyer, lines, totals, GST heads, place of supply). **One invoice per order**: a tax invoice is issued once against a supply and never edited; corrections are a separate document (the credit note on `OrderRefund`). The renderer reads ONLY `snapshot`, so a reprint cannot drift with settings or admin edits. PROTECT means an invoiced order can never be hard-deleted — `purge_recycle_bin` skips it |
+| **InvoiceCounter** | The running number for one invoice series | `series` (unique, one per financial year), `last_number`, `updated_at`. Bumped under `select_for_update` only when an invoice is actually issued, which is what makes the series continuous — `Order.id` has a gap for every abandoned or cancelled order |
+
+Prices are **GST-inclusive**, so `Order.tax` / `OrderItem.tax_amount` are the tax
+*contained in* `subtotal` (`total_amount = subtotal − discount + shipping_charge`),
+not an amount added to it. `Order.shipping_cost` is the courier's charge to the
+store — internal cost data that is stripped from every customer-facing response and
+never enters `total_amount`. `Order.tax_inclusive` is `False` only on orders placed
+before that switch, where `tax` **was** an addend — see `orders/pricing.py` and
+`docs/ORDER_LIFECYCLE.md`.
+
+`Order.place_of_supply_state_code` is the GST state code of the DESTINATION,
+resolved from `shipping_state` (else the address text, else the seller's own
+state) by `orders/place_of_supply.py` and snapshotted at checkout. It decides the
+tax HEADS — equal to `SELLER_STATE_CODE` ⇒ CGST + SGST, anything else ⇒ IGST for
+the same amount — so it never moves a total, only who is credited. **Blank means
+the order predates the column**; `is_interstate('')` is `False`, which keeps
+historical bills reprinting as the intra-state supplies they were filed as, so
+these rows are deliberately not backfilled. It is never re-derived from a later
+address edit; an admin corrects it explicitly.
+
+
+`Invoice` exists because the old scheme rendered `ORD-{order.id}` at PDF-download time and stored nothing: the series had a gap for every cancelled order, reprints changed whenever `SELLER_ADDRESS` did, and any order — including a pending one about to be auto-cancelled — could pull a document headed TAX INVOICE. Issue triggers and numbering live in `orders/invoicing.py`.
+
+`OrderRefund` exists because refunds can be **partial and repeated**, and because GST is reversed in the period the refund happens (a credit note), not the period of the sale. `Order.refunded_amount`/`refunded_tax` are denormalised sums of this ledger, maintained by `orders/refunds.py::record_refund` — never write them directly. Order `status='refunded'` is set only on a FULL refund.
 
 `Order.order_id` is a full UUID (`uuid.uuid4()`), stored as a `UUIDField`.
 `OrderItem` snapshots `product_name` and `product_weight` at order time so historical

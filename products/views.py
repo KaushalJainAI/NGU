@@ -378,14 +378,35 @@ class ProductViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
 
+class MRPOrderingFilter(filters.OrderingFilter):
+    """Lets `?ordering=price` keep working on combos after MRP became derived.
+
+    `ProductCombo.price` is now a property (the sum of its component sizes), so
+    it cannot be handed to `order_by()`. `ProductComboQuerySet.with_mrp()` puts
+    the identical figure in the `_mrp` annotation; this maps the public name
+    onto it *after* DRF has validated the term against `ordering_fields`, so the
+    API contract is unchanged and an unknown field is still rejected.
+    """
+
+    ALIASES = {'price': '_mrp', '-price': '-_mrp'}
+
+    def get_ordering(self, request, queryset, view):
+        ordering = super().get_ordering(request, queryset, view)
+        if not ordering:
+            return ordering
+        return [self.ALIASES.get(term, term) for term in ordering]
+
+
 class ComboProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductComboSerializer
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = None
     lookup_field = 'slug'
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, MRPOrderingFilter]
     filterset_fields = ['is_featured', 'is_active']
     search_fields = ['name', 'description']
+    # `price` stays a public ordering field even though it is no longer a column:
+    # MRPOrderingFilter rewrites it onto the `_mrp` annotation from with_mrp().
     ordering_fields = ['price', 'created_at', 'name']
     ordering = ['-created_at']
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -395,8 +416,16 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
         is_staff = user and user.is_staff
 
-        # Base queryset
-        qs = ProductCombo.objects.all()
+        # Base queryset. `with_mrp()` annotates the derived MRP (sum of the
+        # component sizes' prices) so the serializer doesn't fire one aggregate
+        # per combo, and so ?ordering=price can sort on it.
+        # Same review aggregates as ProductViewSet: without them the combo
+        # serializer falls back to two queries per combo, and `distinct=True`
+        # guards the count against row multiplication from with_mrp()'s joins.
+        qs = ProductCombo.objects.with_mrp().annotate(
+            _average_rating=Avg('reviews__rating', filter=Q(reviews__is_hidden=False)),
+            _reviews_count=Count('reviews', filter=Q(reviews__is_hidden=False), distinct=True),
+        )
 
         # Filter for non-staff users
         if not is_staff:
@@ -407,7 +436,12 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         # weight, unit, thumbnail, sections) and to_representation always
         # serializes productcomboitem_set — both were N+1 on list. Prefetch the
         # items and sections that the serializer walks.
-        qs = qs.prefetch_related('productcomboitem_set__product', 'sections')
+        # `variant` is walked by available_stock / total_weight / the item
+        # serializer, so prefetch it alongside the product used for display.
+        qs = qs.prefetch_related(
+            'productcomboitem_set__product', 'productcomboitem_set__variant',
+            'sections',
+        )
 
         return qs
 
@@ -481,8 +515,8 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     """Admin CRUD for product packaging sizes (variants).
 
     GET is public (so the admin panel can list); writes are staff-only.
-    Filter by ?product=<id>. Ensures a single default per product and never
-    hard-deletes a variant referenced by an order (deactivates instead)."""
+    Filter by ?product=<id>. Ensures a single default per product and NEVER
+    hard-deletes a variant — DELETE retires it (is_active=False) instead."""
     serializer_class = ProductVariantWriteSerializer
     permission_classes = [IsAdminOrReadOnly]
     pagination_class = None
@@ -514,20 +548,84 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def destroy(self, request, *args, **kwargs):
-        from django.db.models import ProtectedError
+        """RETIRE a size. A variant row is NEVER removed from the database.
+
+        A size is a priced, stocked, invoiced thing: it is named on order items,
+        on issued tax invoices, in combos, and in live carts. Deleting the row
+        would either be refused by the DB (order items and combo items are
+        PROTECTed) or succeed and quietly take history and carts with it. One of
+        those outcomes is destructive and neither is what an admin means by
+        "remove this size from the shop", so DELETE just flips `is_active` off:
+
+          * it stops being sellable and leaves the storefront,
+          * every past order, invoice and report still resolves it,
+          * it can be switched back on if it was retired by mistake.
+
+        Two guards still run first, because retiring the wrong size breaks the
+        catalog in ways deactivation alone does not fix:
+
+        1. The last active size cannot go. A product with no sellable size still
+           lists and still shows a (now stale) mirrored price, but nothing can be
+           added to a cart — a silent dead product. Deactivate the product.
+        2. A size a combo is built from cannot go. The combo consumes that exact
+           packaging, so retiring it makes the bundle unbuildable (available
+           stock 0) rather than repricing it. Fix the combos first.
+
+        Live carts holding the size are reported back so the admin knows how many
+        customers are about to hit "no longer available" at checkout. Those rows
+        are left alone — nothing is yanked out of a cart by an admin edit.
+        """
         instance = self.get_object()
-        try:
-            instance.delete()
-        except ProtectedError:
-            # Referenced by historical orders — keep the row, just retire it.
-            instance.is_active = False
-            instance.is_default = False
-            instance.save(update_fields=['is_active', 'is_default'])
+
+        if not instance.is_active:
             return Response(
-                {'detail': 'Variant is used by existing orders; it was deactivated instead of deleted.'},
+                {'detail': 'This size is already retired.',
+                 'carts_affected': 0, 'is_active': False},
                 status=status.HTTP_200_OK,
             )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # 1. Never strand a product without a sellable size.
+        siblings = ProductVariant.objects.filter(
+            product_id=instance.product_id, is_active=True
+        ).exclude(pk=instance.pk).count()
+        if siblings == 0:
+            return Response(
+                {'detail': 'This is the only active size for this product. '
+                           'Add another size first, or deactivate the whole '
+                           'product instead of removing its last size.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # 2. Combos are built from this exact size — retiring it would silently
+        #    make the bundle unbuildable.
+        combo_names = list(
+            ProductCombo.objects.filter(productcomboitem__variant=instance)
+            .values_list('name', flat=True).distinct()
+        )
+        if combo_names:
+            return Response(
+                {'detail': 'This size is part of the combo(s): '
+                           f"{', '.join(combo_names)}. Remove it from them first.",
+                 'combos': combo_names},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Retire, never delete. Dropping is_default lets the post_save signal
+        # promote a surviving sibling as the product's default size.
+        instance.is_active = False
+        instance.is_default = False
+        instance.save(update_fields=['is_active', 'is_default'])
+
+        from cart.models import CartItem
+        affected_carts = CartItem.objects.filter(variant=instance).count()
+        detail = ('Size retired. It is no longer sellable, but past orders and '
+                  'invoices still reference it.')
+        if affected_carts:
+            detail += f' It is still sitting in {affected_carts} customer cart(s).'
+        return Response(
+            {'detail': detail, 'carts_affected': affected_carts, 'is_active': False},
+            status=status.HTTP_200_OK,
+        )
 
 
 from .recommendations import SpiceSearchEngine

@@ -10,6 +10,7 @@ from cart.models import Cart, CartItem
 from conftest import create_test_image
 from orders.models import Order, OrderItem
 from products.models import (
+    default_variant_for,
     Category,
     Product,
     ProductCombo,
@@ -137,8 +138,8 @@ class TestUniqueSlug:
         assert b.slug != a.slug
 
     def test_combo_collision(self, db):
-        a = ProductCombo.objects.create(name="Festive Box", price=Decimal("500.00"), is_active=True)
-        b = ProductCombo.objects.create(name="Festive Box!", price=Decimal("500.00"), is_active=True)
+        a = ProductCombo.objects.create(name="Festive Box", is_active=True)
+        b = ProductCombo.objects.create(name="Festive Box!", is_active=True)
         assert a.slug != b.slug
 
     def test_helper_excludes_self_on_update(self, test_category):
@@ -169,11 +170,17 @@ class TestCartTotal:
 
 @pytest.fixture
 def product_with_variants(db, test_product):
-    default = ProductVariant.objects.create(
-        product=test_product, weight=Decimal('250'), unit='g',
-        price=Decimal('150.00'), discount_price=Decimal('120.00'),
-        stock=100, is_default=True, display_order=0,
-    )
+    # Every product is auto-given one default size (products.signals), so the
+    # admin's first act is to EDIT that size, not add a second one beside it.
+    # Creating a fresh 250g row here would leave the product with four sizes.
+    default = default_variant_for(test_product.pk)
+    default.weight = Decimal('250')
+    default.unit = 'g'
+    default.price = Decimal('150.00')
+    default.discount_price = Decimal('120.00')
+    default.stock = 100
+    default.display_order = 0
+    default.save()
     big = ProductVariant.objects.create(
         product=test_product, weight=Decimal('500'), unit='g',
         price=Decimal('280.00'), discount_price=Decimal('230.00'),
@@ -216,6 +223,29 @@ class TestProductVariantAPI:
 @pytest.mark.django_db
 class TestCartVariants:
     base_url = '/api/cart/'
+
+    def test_legacy_variantless_line_is_still_updatable(
+        self, authenticated_client, test_cart, test_product
+    ):
+        """A cart row added before its product had any size must stay editable.
+
+        Every product now auto-gets a default size, so update_item resolves one
+        and looks for a row carrying it — while the old row has variant=NULL.
+        Without a fallback those rows answer 404 forever and the customer can
+        neither change the quantity nor (via the same id) get rid of it.
+        """
+        from cart.models import CartItem
+        CartItem.objects.create(
+            cart=test_cart, product=test_product, item_type='product', quantity=2
+        )
+        resp = authenticated_client.post(
+            f'{self.base_url}update_item/',
+            {'product_id': test_product.id, 'item_type': 'product', 'quantity': 5},
+            format='json',
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        line = CartItem.objects.get(cart=test_cart, product=test_product)
+        assert line.quantity == 5
 
     def test_add_with_variant_uses_variant_price(self, authenticated_client, product_with_variants):
         product, default, big, huge = product_with_variants

@@ -3,6 +3,12 @@ from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from products.models import Product, ProductCombo
 
+# How many reviews the home page testimonials strip shows, and therefore the
+# most an admin may flag at once. The strip always renders this many: flagged
+# reviews first, topped up with the best recent ones so it is never sparse.
+MAX_FEATURED_REVIEWS = 3
+
+
 class Review(models.Model):
     """Product/Combo Review Model"""
     ITEM_TYPE_CHOICES = [
@@ -17,12 +23,23 @@ class Review(models.Model):
     
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='reviews')
     rating = models.IntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
-    title = models.CharField(max_length=200)
+    # Optional: the storefront form presents the title as optional and only
+    # requires a rating + comment. Without blank=True the serializer inherited
+    # required=True and every title-less submission 400'd on a field the
+    # customer was told they could skip.
+    title = models.CharField(max_length=200, blank=True, default='')
     comment = models.TextField(blank=True, default='')
     is_verified_purchase = models.BooleanField(default=False)
     # Admin moderation: hidden reviews stay in the DB (and the customer can
     # still see their own) but are excluded from public product pages.
     is_hidden = models.BooleanField(default=False)
+    # Homepage placement, chosen by an admin. At most MAX_FEATURED_REVIEWS may
+    # be set at once (enforced in the API, not the DB — a partial unique
+    # constraint can't express "at most N rows"). A hidden review is never
+    # rendered even if flagged, so moderation always wins over placement.
+    is_featured = models.BooleanField(
+        default=False,
+        help_text="Show this review in the home page testimonials strip.")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

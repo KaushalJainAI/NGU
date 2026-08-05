@@ -1,10 +1,14 @@
-from django.db import models
+from decimal import Decimal
+
+from django.db import models, transaction
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
-from django.db.models import Sum, Avg, Count
+from django.db.models import Sum, Avg, Count, Value
+from django.db.models.functions import Coalesce
 from django.core.files.base import ContentFile
 from spices_backend.validators import validate_file_size, validate_image_extension, validate_image_content
+from .hsn import validate_hsn_code
 from PIL import Image
 import io
 import os
@@ -113,12 +117,18 @@ class ProductSection(models.Model):
         )[:self.max_products]
     
     def get_combos(self):
-        """Get combos for this section, limited by max_products - OPTIMIZED"""
+        """Get combos for this section, limited by max_products.
+
+        `with_mrp()` because the serializer renders the MRP strike-through, and
+        without the annotation each combo would fire its own aggregate query.
+        No `.only()`: the MRP is derived from components rather than stored, so
+        deferring columns no longer buys the round-trip it used to, and a
+        deferred field that the serializer touches costs a query per row.
+        """
         return self.combos.filter(
             is_active=True
-        ).only(
-            'id', 'name', 'slug', 'title', 'image', 'price', 'discount_price',
-            'badge', 'weight', 'unit', 'is_featured'
+        ).with_mrp().prefetch_related(
+            'productcomboitem_set__variant'
         )[:self.max_products]
 
 
@@ -221,6 +231,19 @@ class Product(models.Model):
         default=5,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
         help_text='GST percentage charged on this product (e.g. 5 for 5%, 0 for exempt items like papad).'
+    )
+    # HSN classification. `tax_rate` says WHAT we charge; this says WHY, and a
+    # GST return needs both — GSTR-1 Table 12 is an HSN-wise summary and no
+    # amount of rate data can reconstruct it (5% spans 0904, 0909, 0910, …).
+    # Deliberately nullable-as-blank rather than defaulted: an unclassified
+    # product must LOOK unclassified, because a plausible wrong code is far more
+    # expensive than an obviously missing one. See products/hsn.py.
+    hsn_code = models.CharField(
+        max_length=8,
+        blank=True,
+        default='',
+        validators=[validate_hsn_code],
+        help_text='HSN code (4, 6 or 8 digits) for GST returns. Leave blank if not yet classified.'
     )
 
     # Inventory
@@ -325,7 +348,7 @@ class Product(models.Model):
         """Validate discount price is less than regular price"""
         if self.discount_price and self.price and self.discount_price >= self.price:
             raise ValidationError({
-                'discount_price': 'Discount price must be less than regular price.'
+                'discount_price': 'Discounted price must be less than regular price.'
             })
 
     # Slug this instance was loaded from the DB with, so save() can detect a
@@ -531,7 +554,7 @@ class ProductVariant(models.Model):
     def clean(self):
         if self.discount_price and self.price and self.discount_price >= self.price:
             raise ValidationError({
-                'discount_price': 'Discount price must be less than regular price.'
+                'discount_price': 'Discounted price must be less than regular price.'
             })
 
     def save(self, *args, **kwargs):
@@ -540,7 +563,23 @@ class ProductVariant(models.Model):
             self.slug = _generate_unique_slug(
                 type(self), slugify(f"{self.product.name}{weight_part}"),
                 fallback="variant", current_pk=self.pk)
-        super().save(*args, **kwargs)
+        # Claiming default demotes the incumbent. Every product is auto-given a
+        # default size (see signals.auto_update_product_on_save), so without
+        # this any second is_default=True row — from the admin, a script, a
+        # fixture — would collide with one_default_variant_per_product. Done
+        # with .update() so it neither recurses nor touches updated_at.
+        #
+        # Demotion and the save itself are ONE transaction: demoting first and
+        # then failing to write this row (slug collision, a DB-level check)
+        # would leave the product with no default at all, and no post_save fires
+        # to repair it.
+        with transaction.atomic():
+            if self.is_default and self.product_id:
+                (ProductVariant.objects
+                 .filter(product_id=self.product_id, is_default=True)
+                 .exclude(pk=self.pk)
+                 .update(is_default=False))
+            super().save(*args, **kwargs)
 
     @property
     def final_price(self):
@@ -565,6 +604,54 @@ class ProductVariant(models.Model):
                 w = int(w)
             return f"{w}{self.unit}"
         return str(self.weight or "")
+
+
+def default_variant_for(product_id, active_only=True):
+    """The variant that represents a product when no size is specified.
+
+    Single source of truth for "which size does this product mean by default" —
+    used by the legacy-field mirror, the combo write path, and the bulk editor,
+    so they can never disagree. Prefers the flagged default, then the smallest
+    (cheapest packaging) one. Returns None if the product has no such variant.
+    """
+    qs = ProductVariant.objects.filter(product_id=product_id)
+    if active_only:
+        qs = qs.filter(is_active=True)
+    return qs.filter(is_default=True).first() or qs.order_by('weight').first()
+
+
+def ensure_default_variant_for(product):
+    """Like ``default_variant_for``, but never returns None for a real product:
+    if it has no variant at all, one is minted from its legacy price/stock
+    fields — the same shape migrations 0018 and 0038 create.
+
+    Products can still be created without a variant (the product write path
+    doesn't make one, and the cart falls back to the legacy columns), so any
+    caller that *requires* a size — combos above all — has to be able to
+    materialise one rather than fail on a legitimate product.
+
+    A product whose sizes are all DEACTIVATED gets its existing (inactive) size
+    back, never a fresh one. This runs on every product save, so minting here
+    would resurrect a size the admin deliberately switched off — priced from the
+    legacy mirror columns, which by then can be badly stale. Callers that need a
+    *sellable* size check `is_active` themselves (see ProductComboSerializer).
+    """
+    existing = default_variant_for(product.pk)
+    if existing is not None:
+        return existing
+    retired = default_variant_for(product.pk, active_only=False)
+    if retired is not None:
+        return retired
+    return ProductVariant.objects.create(
+        product=product,
+        weight=product.weight,
+        unit=product.unit,
+        price=product.price,
+        discount_price=product.discount_price,
+        stock=product.stock,
+        is_default=True,
+        is_active=True,
+    )
 
 
 class ProductSectionPlacement(models.Model):
@@ -610,8 +697,47 @@ class ProductImage(models.Model):
         return f"{self.product.name} - Image"
 
 
+class ProductComboQuerySet(models.QuerySet):
+    """Adds `with_mrp()`, which pushes the derived MRP into the database.
+
+    `ProductCombo.price` is a Python property summing the components, so without
+    this every serialized combo costs one extra aggregate query, and the API
+    could not sort or filter by price at all. The annotation lands in `_mrp`,
+    which `total_original_price` picks up.
+
+    Deliberately a correlated Subquery rather than a plain `annotate(Sum(...))`:
+    a Sum over the reverse FK adds a JOIN, and any caller that also joins
+    (filtering by `sections`, a M2M) would multiply the component rows and
+    silently inflate the MRP.
+    """
+
+    def with_mrp(self):
+        totals = (
+            ProductComboItem.objects
+            .filter(combo=models.OuterRef('pk'))
+            .values('combo')
+            .annotate(total=Sum(models.F('variant__price') * models.F('quantity')))
+            .values('total')
+        )
+        money = models.DecimalField(max_digits=12, decimal_places=2)
+        return self.annotate(
+            _mrp=Coalesce(
+                models.Subquery(totals, output_field=money),
+                Value(Decimal('0'), output_field=money),
+                output_field=money,
+            )
+        )
+
+
 class ProductCombo(models.Model):
-    """Model to represent a combo/bundle of multiple products"""
+    """A bundle of specific product SIZES sold as one unit.
+
+    Pricing model: the MRP is DERIVED from the components (`price` property) and
+    the admin only types `discount_price`, the amount the bundle actually sells
+    for. GST is likewise per component, at each one's own product rate — the
+    combo has no rate of its own. The split of the charged amount back across
+    components lives in `orders.pricing.allocate_combo_components`.
+    """
     name = models.CharField(max_length=200, unique=True)
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     description = models.TextField(blank=True)
@@ -633,11 +759,11 @@ class ProductCombo(models.Model):
         through='ProductComboItem',
         related_name='combos'
     )
-    price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(0)]
-    )
+    # NOTE: there is no `price` COLUMN. A combo's MRP is by definition the sum of
+    # its components' à-la-carte prices, so it is derived (see the `price`
+    # property below) and can never drift from the sizes actually bundled.
+    # `discount_price` — the admin-entered amount the bundle actually sells for —
+    # is the only price a human types.
     discount_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -645,14 +771,10 @@ class ProductCombo(models.Model):
         null=True,
         validators=[MinValueValidator(0)]
     )
-    # Tax rate (GST %) applied to this combo at checkout. Defaults to 5%.
-    tax_rate = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        default=5,
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text='GST percentage charged on this combo (e.g. 5 for 5%, 0 for exempt).'
-    )
+    # NOTE: there is no `tax_rate` COLUMN either. GST is charged per COMPONENT at
+    # its own product's rate — a bundle mixing 0% papad with 5% spices used to be
+    # billed at one hand-entered blended rate, which is wrong on a tax invoice.
+    # See orders.pricing.allocate_combo_components.
     image = models.ImageField(
         upload_to='combos/',
         blank=True, 
@@ -705,6 +827,8 @@ class ProductCombo(models.Model):
     # purge. NULL while active; stamped on soft-delete, cleared on restore.
     deactivated_at = models.DateTimeField(null=True, blank=True, editable=False)
 
+    objects = ProductComboQuerySet.as_manager()
+
     class Meta:
         ordering = ['-created_at']
         indexes = [
@@ -719,10 +843,25 @@ class ProductCombo(models.Model):
         return self.name
 
     def clean(self):
-        """Validate discount price is less than regular price"""
-        if self.discount_price and self.price and self.discount_price >= self.price:
+        """Validate the selling price does not EXCEED the MRP.
+
+        At or below is fine: a bundle priced exactly at the sum of its parts is
+        a legitimate curation with no discount, and since the MRP is derived,
+        re-pricing a component can move the two together at any time. Only a
+        selling price ABOVE the MRP is wrong — that is a "combo" that costs more
+        than buying the same sizes separately.
+
+        MRP is derived from the components, so a combo being created for the
+        first time has none yet — the serializer writes its ProductComboItem
+        rows only after the combo row exists. A zero MRP therefore means
+        "components not attached yet", not "free": skip the check rather than
+        reject every new combo. Any later save re-runs it for real.
+        """
+        mrp = self.price
+        if self.discount_price and mrp and self.discount_price > mrp:
             raise ValidationError({
-                'discount_price': 'Discount price must be less than regular price.'
+                'discount_price': 'Selling price cannot exceed the combo MRP '
+                                  f'(₹{mrp}, the sum of its components).'
             })
 
     def save(self, *args, **kwargs):
@@ -767,37 +906,64 @@ class ProductCombo(models.Model):
             print(f"Error generating thumbnail for combo {self.name}: {e}")
 
     @property
+    def price(self):
+        """MRP — DERIVED, never stored.
+
+        A combo's list price is by definition what its components cost bought
+        separately, so it is computed from them rather than typed by an admin
+        and left to rot when a component is re-priced. Identical to
+        `total_original_price`; both names are kept because the storefront
+        already renders one as the strike-through and the other as the label.
+        """
+        return self.total_original_price
+
+    @property
     def final_price(self):
-        """Returns final price after discount if applicable"""
+        """What one combo actually sells for: the admin's `discount_price`, or
+        the full MRP if the bundle carries no saving."""
         return self.discount_price if self.discount_price else self.price
 
     @property
     def discount_percentage(self):
         """Calculate discount percentage"""
-        if self.discount_price and self.discount_price < self.price:
-            return round(((self.price - self.discount_price) / self.price) * 100)
+        mrp = self.price
+        if self.discount_price and mrp and self.discount_price < mrp:
+            return round(((mrp - self.discount_price) / mrp) * 100)
         return 0
 
     @property
     def total_original_price(self):
-        """Sum of original prices of products in the combo"""
+        """Sum of the à-la-carte prices of the exact SIZES in this combo — what
+        the customer would pay buying the components separately. This is the
+        combo's MRP (see `price`).
+
+        Prefers the `_mrp` annotation that `with_mrp()` attaches, because
+        evaluating the aggregate per row would fire one query per combo on
+        every list endpoint.
+        """
+        annotated = getattr(self, '_mrp', None)
+        if annotated is not None:
+            return Decimal(str(annotated))
+        # An unsaved combo has no pk to hang the reverse relation off, and by
+        # definition no components yet. `clean()` runs in exactly that state on
+        # the first save, so this has to answer rather than raise.
+        if self.pk is None:
+            return Decimal('0')
         total = self.productcomboitem_set.aggregate(
-            total=Sum(models.F('product__price') * models.F('quantity'))
+            total=Sum(models.F('variant__price') * models.F('quantity'))
         )['total']
-        return total or 0
+        return total or Decimal('0')
 
     @property
     def total_weight(self):
-        """Concat weights of products in the combo"""
-        # Formatted string like "250g, 500g"
-        weights = []
-        for product in self.products.all():
-            if product.weight and product.unit:
-                # Format to remove trailing zeros if it's an integer
-                w = float(product.weight)
-                if w.is_integer():
-                    w = int(w)
-                weights.append(f"{w}{product.unit}")
+        """Concat the weights of the exact sizes in the combo, e.g. '250g, 500g'."""
+        # .all() so the list endpoint's `productcomboitem_set__variant` prefetch
+        # is reused — no N+1 on list.
+        weights = [
+            item.variant.formatted_weight
+            for item in self.productcomboitem_set.all()
+            if item.variant_id and item.variant.formatted_weight
+        ]
         return ', '.join(weights) if weights else ''
     
     @property
@@ -808,30 +974,71 @@ class ProductCombo(models.Model):
     @property
     def available_stock(self):
         """How many of this combo can still be built, limited by the scarcest
-        component (min of each component's stock // its required quantity).
-        Returns 0 for an empty combo."""
+        component SIZE (min of each variant's stock // its required quantity).
+        An inactive component size makes the combo unbuildable. Returns 0 for an
+        empty combo."""
         # .all() (not .select_related) so the list endpoint's existing
-        # `productcomboitem_set__product` prefetch is reused — no N+1 on list.
+        # `productcomboitem_set__variant` prefetch is reused — no N+1 on list.
         items = list(self.productcomboitem_set.all())
         if not items:
             return 0
-        return min(
-            (item.product.stock // item.quantity) if item.quantity else 0
-            for item in items
-        )
+        counts = []
+        for item in items:
+            variant = item.variant
+            if variant is None or not variant.is_active or not item.quantity:
+                return 0
+            counts.append(variant.stock // item.quantity)
+        return min(counts)
 
 
 class ProductComboItem(models.Model):
-    """Intermediate model for combo items with quantity"""
+    """One component line of a combo: a specific SIZE of a product, times a qty.
+
+    The unit of sale is the VARIANT, not the product — a combo means "1 x 500g
+    Turmeric", never "1 x Turmeric, whichever size is default today". All price
+    and stock math reads `variant`; `product` is retained only as the target of
+    the `ProductCombo.products` M2M (so `combo.products` / `product.combos` keep
+    working) and is kept in sync with `variant.product` on save.
+
+    `variant` is PROTECTed: a size that a combo is built from cannot be deleted
+    out from under it. See ProductVariantViewSet.destroy.
+    """
     combo = models.ForeignKey(ProductCombo, on_delete=models.CASCADE)
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)  # Direct reference
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)  # M2M through target
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.PROTECT, related_name='combo_items',
+        help_text='The exact packaging/size of the product this combo consumes.'
+    )
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
 
     class Meta:
-        unique_together = ('combo', 'product')
+        # Keyed on the variant, so one combo may hold two different sizes of the
+        # same spice (e.g. 100g + 500g Turmeric) as separate lines.
+        unique_together = ('combo', 'variant')
+
+    def clean(self):
+        if self.variant_id and self.product_id and self.variant.product_id != self.product_id:
+            raise ValidationError({
+                'variant': 'Selected size does not belong to the selected product.'
+            })
+
+    def save(self, *args, **kwargs):
+        # Callers that know only the product (Django admin inlines, fixtures,
+        # data migrations) get the product's default size resolved for them —
+        # the same choice migration 0038 made for pre-existing rows. The API
+        # write path asks for the size explicitly; this is the fallback, not the
+        # normal route.
+        if not self.variant_id and self.product_id:
+            # Bind to a local: reading back an unset non-nullable FK raises
+            # RelatedObjectDoesNotExist rather than returning None.
+            self.variant = ensure_default_variant_for(self.product)
+        # `product` is derived — never let it drift from the variant it mirrors.
+        if self.variant_id:
+            self.product_id = self.variant.product_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.quantity} x {self.product.name} in {self.combo.name}"
+        return f"{self.quantity} x {self.variant} in {self.combo.name}"
 
 
 class ProductSearchKB(models.Model):

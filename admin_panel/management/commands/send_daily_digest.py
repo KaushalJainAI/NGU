@@ -15,6 +15,8 @@ from django.core.management.base import BaseCommand
 from django.db.models import F, Q, Sum
 from django.utils import timezone
 
+from spices_backend.timeranges import range_filter
+
 
 class Command(BaseCommand):
     help = "Email the store owner a plain-language daily digest."
@@ -31,14 +33,31 @@ class Command(BaseCommand):
             return
 
         now = timezone.now()
-        yesterday = (now - timedelta(days=1)).date()
+        # localdate(), NOT .date() — see admin_panel/views.py dashboard_stats.
+        # `now` is UTC-aware, so .date() gives the UTC day; the digest runs at
+        # 08:00 IST where the two happen to agree, but the bug bites instantly
+        # if the cron time or server timezone ever moves.
+        yesterday = timezone.localdate() - timedelta(days=1)
 
         y_orders = Order.objects.filter(
-            is_deleted=False, created_at__date=yesterday,
+            is_deleted=False, **range_filter('created_at', yesterday, yesterday),
         ).exclude(status='cancelled')
-        y_stats = y_orders.aggregate(revenue=Sum('total_amount'))
+        # Revenue is GROSS (what was collected). GST and delivery are reported
+        # alongside it, not deducted — see admin_panel/views.py dashboard_stats.
+        y_stats = y_orders.aggregate(
+            # Output tax = goods GST + the 18% on delivery.
+            revenue=Sum('total_amount'), gst=Sum(F('tax') + F('shipping_tax')),
+            shipping_collected=Sum('shipping_charge'), shipping_cost=Sum('shipping_cost'),
+        )
         y_count = y_orders.count()
         y_revenue = y_stats['revenue'] or 0
+        y_gst = y_stats['gst'] or 0
+        y_ship_in = y_stats['shipping_collected'] or 0
+        y_ship_out = y_stats['shipping_cost'] or 0
+        # Refunds are counted on the day they happened — the order they reverse
+        # may be much older, and its GST was reported in that earlier period.
+        from orders.refunds import refunded_totals_between
+        y_gst_refunded = refunded_totals_between(yesterday, yesterday)['tax'] or 0
 
         waiting = Order.objects.filter(
             is_deleted=False, status='pending',
@@ -58,6 +77,14 @@ class Command(BaseCommand):
             f"Good morning! Here's your Nidhi Masala update for {now.strftime('%d %b %Y')}.",
             "",
             f"Yesterday: {y_count} order{'s' if y_count != 1 else ''}, Rs. {y_revenue} in sales.",
+            f"  Sold excl. GST: Rs. {y_revenue - y_gst}"
+            f" | GST collected from customers: Rs. {y_gst}"
+            + (f" | GST reversed by refunds: Rs. {y_gst_refunded}"
+               f" | net GST held: Rs. {y_gst - y_gst_refunded}" if y_gst_refunded else "")
+            + " (tax taken, not tax owed — input credit lives in your books)",
+            f"  Delivery collected: Rs. {y_ship_in}"
+            + (f" | courier cost: Rs. {y_ship_out} | margin: Rs. {y_ship_in - y_ship_out}"
+               if y_ship_out else " | courier cost not recorded"),
             "",
         ]
 

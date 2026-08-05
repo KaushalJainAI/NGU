@@ -12,7 +12,8 @@ Architecture:
 Order Creation Flow:
 1. Validate cart exists and has items
 2. Validate coupon if provided (checks is_active, valid_until)
-3. Calculate totals: subtotal, discount, env-configured shipping, per-line tax
+3. Calculate totals: subtotal, discount, env-configured shipping, and the
+   per-line GST contained in the (inclusive) prices — see orders/pricing.py
 4. Create Order + OrderItems in atomic transaction
 5. Reduce product stock within transaction
 6. Clear cart depending on completion (see Key Design Decision 1)
@@ -47,15 +48,22 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from decimal import Decimal, InvalidOperation
 import logging
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderItemComponent
+from .pricing import (
+    allocate_combo_components, blended_rate, combo_line_tax, extract_tax,
+    hsn_code_for, shipping_tax_for, tax_rate_for,
+)
+from .place_of_supply import place_of_supply_for, state_name
+from .refunds import record_refund, refundable_balance
 from .serializers import OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
 from cart.models import Cart
 from admin_panel.models import Coupon
 from spices_backend.limits import (
     MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL, MAX_ONLINE_ORDER_TOTAL,
-    SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
+    SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD,
 )
 from spices_backend.abuse import flag_suspicious
+from spices_backend.timeranges import range_filter
 from .emails import (
     send_order_confirmation, send_order_status_email, send_new_order_admin_alert,
     send_low_stock_alert, send_coupon_usage_alert,
@@ -70,25 +78,64 @@ def restore_order_stock(order):
 
     MUST be called inside a `transaction.atomic()` block with `order` already
     locked (``select_for_update``). This is the single source of truth for
-    restocking so every cancel path — the customer `cancel` action and the admin
-    status change — restores inventory identically. The caller is responsible for
-    setting ``order.status``/``cancelled_at`` afterwards.
+    restocking so every path — the customer `cancel` action, the admin status
+    change, L3's stuck-payment auto-cancel and a recorded refund — restores
+    inventory identically. The caller is responsible for setting
+    ``order.status``/``cancelled_at`` afterwards.
+
+    IDEMPOTENT. More than one of those paths can run against the same order (an
+    admin cancels a paid order and then records the refund; L3 auto-cancels and
+    an admin refunds afterwards), and crediting the same units twice invents
+    stock that never existed. The first call stamps ``stock_restored_at`` and
+    every later one is a no-op. Returns True if it actually restocked.
     """
     from products.models import Product, ProductVariant, ProductComboItem
+
+    if order.stock_restored_at is not None:
+        logger.info("Stock already restored for order %s at %s — skipping.",
+                    order.pk, order.stock_restored_at)
+        return False
 
     variant_updates = {}
     product_updates = {}
 
-    for item in order.items.select_related('product', 'combo', 'variant').all():
+    items = (order.items
+             .select_related('product', 'combo', 'variant')
+             .prefetch_related('components')
+             .all())
+    for item in items:
         if item.item_type == 'product' and item.variant:
             variant_updates[item.variant.pk] = variant_updates.get(item.variant.pk, 0) + item.quantity
         elif item.product:
             product_updates[item.product.pk] = product_updates.get(item.product.pk, 0) + item.quantity
         elif item.combo:
-            # G2 symmetry: a combo consumed its component products at checkout,
-            # so cancelling must give that inventory back.
-            for ci in ProductComboItem.objects.filter(combo=item.combo).select_related('product'):
-                product_updates[ci.product_id] = product_updates.get(ci.product_id, 0) + ci.quantity * item.quantity
+            # G2 symmetry: a combo consumed its component SIZES at checkout, so
+            # cancelling must give that same inventory back. It MUST be the
+            # variant, not the product: checkout debits `variant.stock`, and
+            # crediting Product.stock here instead would destroy the sellable
+            # stock while inflating the legacy display mirror nothing sells from.
+            #
+            # Restore from the ORDER'S SNAPSHOT, never the live recipe. An admin
+            # who swaps a component size, changes a per-combo quantity, or adds a
+            # component between placement and cancellation would otherwise make us
+            # credit variants the order never consumed — phantom stock on one SKU
+            # and permanently lost stock on another, silently. `components` is
+            # written at checkout from exactly what was drawn from stock.
+            components = list(item.components.all())
+            if components:
+                for comp in components:
+                    # `comp.quantity` is ALREADY per-combo x line quantity (see the
+                    # model docstring) — multiplying by item.quantity again would
+                    # over-credit every combo line ordered in quantity > 1.
+                    variant_updates[comp.variant_id] = (
+                        variant_updates.get(comp.variant_id, 0) + comp.quantity)
+            else:
+                # Historical lines placed before the snapshot shipped. The live
+                # recipe is the only record of what they consumed — wrong if the
+                # combo has since been edited, but it is all there is.
+                for ci in ProductComboItem.objects.filter(combo=item.combo).select_related('variant'):
+                    variant_updates[ci.variant_id] = (
+                        variant_updates.get(ci.variant_id, 0) + ci.quantity * item.quantity)
 
     # Batch restore stock for variants (+ mirror default to product)
     if variant_updates:
@@ -100,22 +147,70 @@ def restore_order_stock(order):
                 product_updates[variant.product_id] = product_updates.get(variant.product_id, 0) + restore_by
         ProductVariant.objects.bulk_update(variants, ['stock'])
 
-    # Batch restore stock for products (legacy lines + default mirror + combo components)
+    # Batch restore stock for products (variant-less legacy lines + default mirror)
     if product_updates:
         products = list(Product.objects.select_for_update().filter(pk__in=product_updates.keys()))
         for product in products:
             product.stock += product_updates[product.pk]
         Product.objects.bulk_update(products, ['stock'])
 
+    # Close the door behind us. Written with .update() AND onto the in-memory
+    # instance: callers that never save the order still get the flag persisted,
+    # and callers that do a full `order.save()` afterwards don't write a stale
+    # None back over it.
+    order.stock_restored_at = timezone.now()
+    Order.objects.filter(pk=order.pk).update(stock_restored_at=order.stock_restored_at)
+    return True
+
 
 class OrderViewSet(viewsets.ModelViewSet):
     # Fields an admin may edit via PATCH/PUT. Everything else on an order
     # (money, items, user…) is immutable through the API.
+    # `shipping_cost` is the courier's charge to US — internal cost data, not part
+    # of what the customer was billed, so editing it never alters `total_amount`.
+    # `place_of_supply_state_code` is editable so a misdetected destination can be
+    # corrected BEFORE the return is filed — the resolver falls back to the
+    # seller's state on an address it can't place, and that guess has to be
+    # fixable. It is deliberately NOT recomputed when an admin edits
+    # `shipping_address`: silently re-heading an already-issued invoice off a
+    # courier-detail correction is precisely the failure this guards against.
     ADMIN_EDITABLE_FIELDS = {'status', 'tracking_number', 'shipping_address',
-                             'phone_number', 'payment_status'}
-    # Statuses from which an order can no longer be cancelled.
-    UNCANCELLABLE_STATUSES = {'delivered', 'delivering', 'cancelled'}
+                             'phone_number', 'payment_status', 'shipping_cost',
+                             'cod_paid', 'place_of_supply_state_code'}
+    # Statuses from which an order can no longer be cancelled. 'refunded' is
+    # terminal — the money is already back with the customer.
+    UNCANCELLABLE_STATUSES = {'delivered', 'delivering', 'cancelled', 'refunded'}
+    # Payment methods whose money moved through the gateway.
+    ONLINE_PAYMENT_METHODS = {'ONLINE', 'razorpay'}
     permission_classes = [IsAuthenticated]
+
+    @classmethod
+    def _is_refundable_payment(cls, order):
+        """True when this order took money we could actually give back.
+
+        Two ways that happens:
+
+        * **Online**, captured through Razorpay.
+        * **COD**, once an admin has ticked "Paid in cash" — `cod_paid_at` is the
+          proof the money was received. Before that tick a COD order has taken
+          nothing, and recording a refund against it would write a ledger row and
+          reverse GST on cash that never arrived.
+
+        Until COD collection was tracked this method demanded an ONLINE method
+        outright, which meant a genuine COD return could not be recorded AT ALL —
+        the cash went back and its GST stayed on the books forever. The tick is
+        what closes that hole.
+
+        `payment_status == 'refunded'` counts as well as 'paid': an order being
+        settled in instalments has already flipped to 'refunded' but may still
+        have a balance outstanding, and blocking it would strand the remainder.
+        """
+        paid_flag = order.payment_status in ('paid', 'refunded')
+        if order.payment_method in cls.ONLINE_PAYMENT_METHODS:
+            return paid_flag
+        if order.payment_method == 'COD':
+            return order.cod_paid_at is not None and paid_flag
+        return False
 
     def get_throttles(self):
         # Rate-limit order placement (per-minute + daily); other actions are
@@ -182,9 +277,16 @@ class OrderViewSet(viewsets.ModelViewSet):
         # the unconditional staff scope — they address one known order and are
         # what the admin panel's row actions rely on.
         if is_admin and (self.action != 'list' or self._wants_admin_list()):
+            # `items__components` and `refunds` are NOT optional here: both order
+            # serializers render `tax_breakdown` (which walks each line's combo
+            # components) and the nested `refunds` list, so without them every
+            # row on a paginated list costs three extra round-trips. `invoice` is
+            # select_related for the same reason — the serializer reads it on
+            # every row to decide whether a "Download invoice" button applies.
             qs = Order.objects.all().prefetch_related(
-                'items__product', 'items__combo', 'items__variant'
-            ).select_related('user', 'payment')
+                'items__product', 'items__combo', 'items__variant',
+                'items__components', 'refunds',
+            ).select_related('user', 'payment', 'invoice')
             # Recycle Bin: only the `list` action honours the ?deleted flag, so
             # detail actions (restore/retrieve/update) can still reach a
             # soft-deleted order. Default list hides deleted orders; ?deleted=true
@@ -201,8 +303,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             return qs
         # Customer scope — only their own, non-deleted orders. Staff land here too
         # when they browse the storefront.
-        return Order.objects.filter(user=user, is_deleted=False).prefetch_related(
-            'items__product', 'items__combo', 'items__variant')
+        # Same prefetches as the admin scope — "My Orders" renders the very same
+        # GST breakup and refund list, so it needs them just as much. `user` is
+        # select_related for `customer_name`/`customer_email`, which the list
+        # serializer renders on every row.
+        return (Order.objects.filter(user=user, is_deleted=False)
+                .select_related('user', 'payment', 'invoice')
+                .prefetch_related('items__product', 'items__combo', 'items__variant',
+                                  'items__components', 'refunds'))
 
     def _apply_admin_filters(self, qs):
         """Apply status / payment-method / amount / search / sort query params to
@@ -226,13 +334,16 @@ class OrderViewSet(viewsets.ModelViewSet):
                     pass  # ignore an unparseable amount rather than 500
 
         # Date range on the order's creation date (inclusive). Dates arrive as
-        # ISO YYYY-MM-DD from the admin panel's date inputs.
-        for key, lookup in (('date_from', 'created_at__date__gte'), ('date_to', 'created_at__date__lte')):
+        # ISO YYYY-MM-DD from the admin panel's date inputs. Translated to a
+        # half-open datetime range so the filter stays on the bare column and
+        # can use the created_at indexes — see spices_backend/timeranges.py.
+        bounds = {}
+        for key in ('date_from', 'date_to'):
             raw = (params.get(key) or '').strip()
             if raw:
-                parsed = parse_date(raw)
-                if parsed:
-                    qs = qs.filter(**{lookup: parsed})
+                bounds[key] = parse_date(raw)  # None if unparseable → ignored
+        qs = qs.filter(**range_filter('created_at', bounds.get('date_from'),
+                                      bounds.get('date_to')))
 
         search = (params.get('search') or '').strip()
         if search:
@@ -276,12 +387,25 @@ class OrderViewSet(viewsets.ModelViewSet):
         return coupon, None
 
     def _cart_line_tax_rate(self, cart_item):
-        """GST rate (%) for a cart line, taken from its product or combo."""
+        """GST rate (%) for a PRODUCT cart line.
+
+        Combo lines have no single rate — each component is taxed at its own
+        product's rate — so they go through `_cart_line_tax` instead.
+        """
+        return tax_rate_for(cart_item.product)
+
+    def _cart_line_tax(self, cart_item, discounted_total):
+        """GST contained in a cart line's discounted total.
+
+        Routes combo lines through the same component allocator the order write
+        path uses. Both surfaces MUST agree to the paisa: the cart quotes this
+        figure before payment and the placed order recomputes it, and the two
+        drifting apart is exactly the class of bug `orders.pricing` exists to
+        prevent.
+        """
         if cart_item.item_type == 'combo' and cart_item.combo:
-            source = cart_item.combo
-        else:
-            source = cart_item.product
-        return Decimal(str(getattr(source, 'tax_rate', DEFAULT_TAX_RATE) or 0))
+            return combo_line_tax(cart_item.combo, discounted_total)
+        return extract_tax(discounted_total, self._cart_line_tax_rate(cart_item))
 
     def _cart_line_price(self, cart_item):
         """Unit final price for a cart line (variant-aware)."""
@@ -294,10 +418,12 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Decimal(str(price if price is not None else getattr(item, 'price', 0)))
 
     def _compute_cart_tax(self, cart, subtotal, total_discount):
-        """Sum of per-line GST after distributing the order discount proportionally.
+        """Sum of per-line GST CONTAINED IN the discounted line totals.
 
-        Mirrors the per-line math used when an order is actually created, so the
-        coupon preview and the placed order show the same tax figure.
+        Prices are GST-inclusive, so this is a disclosure figure carved out of
+        the amount payable, not a charge added to it. Mirrors the per-line math
+        used when an order is actually created, so the coupon preview and the
+        placed order show the same tax figure.
         """
         tax = Decimal('0')
         for cart_item in cart.items.select_related('product', 'combo', 'variant').all():
@@ -309,8 +435,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             else:
                 line_discount = Decimal('0')
             discounted_total = (line_total - line_discount).quantize(Decimal('0.01'))
-            rate = self._cart_line_tax_rate(cart_item)
-            tax += (discounted_total * rate / Decimal('100')).quantize(Decimal('0.01'))
+            tax += self._cart_line_tax(cart_item, discounted_total)
         return tax
 
     def _calculate_discount(self, price, coupon):
@@ -350,19 +475,26 @@ class OrderViewSet(viewsets.ModelViewSet):
         # Absolute ₹ discount (percent or fixed, clamped to subtotal).
         total_discount = self._calculate_discount(subtotal, coupon)
 
-        # Calculate order breakdown (per-product GST, summed across lines).
+        # Calculate order breakdown (per-product GST contained in each line).
         discounted_subtotal = subtotal - total_discount
         if discounted_subtotal <= 0:
-            # Full-value coupon → zero-total order: shipping + tax are waived so
-            # the total is genuinely ₹0 (mirrors the placed-order path, §14.3).
+            # Full-value coupon → zero-total order: shipping is waived and there
+            # is no price left to carve tax out of, so the total is genuinely ₹0
+            # (mirrors the placed-order path, §14.3).
             discounted_subtotal = Decimal('0')
             shipping_charge = Decimal('0')
+            shipping_tax = Decimal('0')
             tax = Decimal('0')
             total_amount = Decimal('0')
         else:
             shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
+            # GST-inclusive pricing: `tax` is already part of discounted_subtotal
+            # and must NOT be added again.
             tax = self._compute_cart_tax(cart, subtotal, total_discount)
-            total_amount = discounted_subtotal + shipping_charge + tax
+            # Delivery is the one EXCLUSIVE-priced component: its GST is added on
+            # top of the net fee, so unlike `tax` it IS an addend of the total.
+            shipping_tax = shipping_tax_for(shipping_charge)
+            total_amount = discounted_subtotal + shipping_charge + shipping_tax
 
         return Response({
             'valid': True,
@@ -373,7 +505,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             'discount_amount': float(total_discount),
             'discounted_subtotal': float(discounted_subtotal),
             'shipping_charge': float(shipping_charge),
+            'shipping_tax': float(shipping_tax),
             'tax': float(tax),
+            # All output GST on the order — goods + delivery. The cart summary
+            # must quote this, or it shows a smaller GST than the invoice.
+            'total_tax': float(tax + shipping_tax),
             'total_amount': float(total_amount),
             'savings': float(total_discount),
             'is_zero_total': total_amount == 0,
@@ -455,16 +591,24 @@ class OrderViewSet(viewsets.ModelViewSet):
                     item_weight = "Combo"
 
                 # G2: a combo's availability is governed by its COMPONENT stock,
-                # and ordering it must consume that component inventory. Validate
-                # every component up front and remember how many units to draw.
-                for ci in ProductComboItem.objects.filter(combo=item).select_related('product'):
+                # and ordering it must consume that component inventory. The
+                # component is a specific SIZE, so both the check and the draw
+                # are against the variant — the legacy Product.stock mirror is
+                # not what any sale reads.
+                for ci in ProductComboItem.objects.filter(combo=item).select_related(
+                        'variant', 'variant__product'):
                     required = ci.quantity * cart_item.quantity
-                    if ci.product.stock < required:
+                    label = f'{ci.variant.product.name} ({ci.variant.formatted_weight})'
+                    if not ci.variant.is_active:
                         return Response({
-                            'error': f'Insufficient stock for {ci.product.name} (in {item_name}). '
-                                     f'Available: {ci.product.stock}'
+                            'error': f'{label} (in {item_name}) is no longer available'
                         }, status=status.HTTP_400_BAD_REQUEST)
-                    components.append((ci.product_id, required))
+                    if ci.variant.stock < required:
+                        return Response({
+                            'error': f'Insufficient stock for {label} (in {item_name}). '
+                                     f'Available: {ci.variant.stock}'
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    components.append((ci.variant_id, required))
 
                 item_stock = cart_item.quantity  # component checks above are authoritative
                 item_price = cart_item.combo.final_price if hasattr(cart_item.combo, 'final_price') else cart_item.combo.price
@@ -499,7 +643,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 'quantity': cart_item.quantity,
                 'item_price': item_price,
                 # Per-product GST rate (%). Papad/papad katran are 0; default 5.
-                'tax_rate': Decimal(str(getattr(item, 'tax_rate', DEFAULT_TAX_RATE) or 0)),
+                'tax_rate': tax_rate_for(item),
+                # Snapshotted for the same reason as the rate: the HSN summary on
+                # a GST return is built from the lines BILLED in that period, so
+                # re-classifying a product later must not rewrite past invoices.
+                # '' for combos — a bundle has no single code; its components
+                # carry theirs on the OrderItemComponent rows.
+                'hsn_code': hsn_code_for(item),
                 'components': components,  # combo component draws (empty for products)
             })
             subtotal += item_price * cart_item.quantity
@@ -509,19 +659,20 @@ class OrderViewSet(viewsets.ModelViewSet):
         discounted_subtotal = subtotal - total_discount
 
         # A full-value coupon that covers the whole subtotal produces a ZERO-TOTAL
-        # order: shipping + tax are waived and it is placed straight as paid with
-        # no gateway call (PAYMENT_INTEGRATION_PLAN.md §4.4/§14.3).
+        # order: shipping is waived, there is no price left to carve tax out of,
+        # and it is placed straight as paid with no gateway call
+        # (PAYMENT_INTEGRATION_PLAN.md §4.4/§14.3).
         is_zero_total = bool(coupon) and discounted_subtotal <= 0
 
-        # Per-line money (proportional discount + per-product tax). Computed once
-        # here so the OrderItem rows, the order header tax, and the grand total
-        # all agree exactly — the header tax is the SUM of the line taxes, which
-        # also fixes the old paisa-level mismatch from a flat order-level tax.
+        # Per-line money (proportional discount + the per-product GST CONTAINED
+        # IN each discounted line total — prices are GST-inclusive). Computed
+        # once here so the OrderItem rows and the order header tax agree exactly.
         tax = Decimal('0')
         for item_data in cart_items_data:
             item_price = item_data['item_price']
             quantity = item_data['quantity']
             item_total = item_price * quantity
+            components = []
 
             if is_zero_total:
                 # The whole line is discounted away — no tax, nothing to pay.
@@ -537,12 +688,28 @@ class OrderViewSet(viewsets.ModelViewSet):
 
                 discounted_item_price = (item_price - (item_discount / quantity)).quantize(Decimal('0.01'))
                 discounted_item_total = (discounted_item_price * quantity).quantize(Decimal('0.01'))
-                item_tax = (discounted_item_total * item_data['tax_rate'] / Decimal('100')).quantize(Decimal('0.01'))
+
+                if item_data['item_type'] == 'combo':
+                    # A combo is a mixed supply: split the FINAL line amount back
+                    # across its components and tax each at its own product's
+                    # rate. Done after both discounts precisely because the split
+                    # is linear in the same weights, so one pass on the final
+                    # figure is exact and its parts sum to what was charged.
+                    components = allocate_combo_components(
+                        item_data['item'], discounted_item_total, quantity)
+                    item_tax = sum((c['tax'] for c in components), Decimal('0.00'))
+                    # The line's stored rate becomes the BLENDED effective rate —
+                    # display only. The per-slab breakup reads the component rows,
+                    # never this.
+                    item_data['tax_rate'] = blended_rate(discounted_item_total, item_tax)
+                else:
+                    item_tax = extract_tax(discounted_item_total, item_data['tax_rate'])
 
             item_data['item_discount'] = item_discount
             item_data['discounted_item_price'] = discounted_item_price
             item_data['discounted_item_total'] = discounted_item_total
             item_data['item_tax'] = item_tax
+            item_data['tax_components'] = components
             tax += item_tax
 
         # Calculate shipping and total
@@ -550,11 +717,18 @@ class OrderViewSet(viewsets.ModelViewSet):
             total_discount = subtotal            # record the full waiver
             discounted_subtotal = Decimal('0')
             shipping_charge = Decimal('0')
+            shipping_tax = Decimal('0')
             tax = Decimal('0')
             total_amount = Decimal('0.00')
         else:
             shipping_charge = Decimal('0') if discounted_subtotal >= FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
-            total_amount = (discounted_subtotal + shipping_charge + tax).quantize(Decimal('0.01'))
+            # Two OPPOSITE tax conventions meet here, so read carefully:
+            #   * goods `tax` is already INSIDE discounted_subtotal (MRP is
+            #     GST-inclusive) — adding it would double-charge.
+            #   * delivery is quoted NET, so its GST is a genuine addend.
+            shipping_tax = shipping_tax_for(shipping_charge)
+            total_amount = (discounted_subtotal + shipping_charge
+                            + shipping_tax).quantize(Decimal('0.01'))
 
         # Belt-and-suspenders: refuse an order whose computed money values would
         # overflow the numeric(10,2) columns, returning a clean 400 instead of a
@@ -623,17 +797,30 @@ class OrderViewSet(viewsets.ModelViewSet):
                 order_status = 'confirmed' if is_zero_total else 'pending'
                 order_payment_status = 'paid' if is_zero_total else 'pending'
 
+                # GST place of supply, resolved from the destination and frozen
+                # onto the order. It decides the tax HEADS (CGST+SGST vs IGST)
+                # for the identical amount, so it must be settled at placement
+                # and never re-derived: an admin correcting the address later
+                # would otherwise silently re-head an invoice already filed.
+                # Unresolvable addresses fall back to the seller's own state.
+                place_of_supply = place_of_supply_for(
+                    state=serializer.validated_data.get('shipping_state'),
+                    address=serializer.validated_data.get('shipping_address'),
+                )
+
                 # Create order
                 order = Order.objects.create(
                     user=request.user,
                     subtotal=subtotal,
                     discount_amount=total_discount,
                     shipping_charge=shipping_charge,
+                    shipping_tax=shipping_tax,
                     tax=tax,
                     total_amount=total_amount,
                     coupon=coupon,
                     status=order_status,
                     payment_status=order_payment_status,
+                    place_of_supply_state_code=place_of_supply,
                     **serializer.validated_data
                 )
 
@@ -659,6 +846,10 @@ class OrderViewSet(viewsets.ModelViewSet):
                         'discount_amount': item_discount,
                         'discounted_price': discounted_item_price,
                         'tax_amount': item_tax,
+                        # Snapshot the rate too, so the bill can always reproduce
+                        # the per-slab breakup even if the product is re-rated later.
+                        'tax_rate': item_data['tax_rate'],
+                        'hsn_code': item_data['hsn_code'],
                         'final_price': discounted_item_total,
                     }
                     
@@ -669,13 +860,39 @@ class OrderViewSet(viewsets.ModelViewSet):
                     elif item_data['item_type'] == 'combo':
                         order_item_data['combo'] = item_data['item']
 
-                    OrderItem.objects.create(**order_item_data)
-                    
+                    order_item = OrderItem.objects.create(**order_item_data)
+
+                    # Persist a combo line's per-component GST split. This is what
+                    # makes the tax invoice's per-slab summary reproducible: the
+                    # combo's composition and its components' rates can both
+                    # change later, so the bill cannot be rebuilt from the
+                    # catalogue. Products need no such rows — their single line
+                    # already carries its own rate.
+                    if item_data.get('tax_components'):
+                        OrderItemComponent.objects.bulk_create([
+                            OrderItemComponent(
+                                order_item=order_item,
+                                variant=c['variant'],
+                                product_name=c['variant'].product.name,
+                                variant_label=c['variant'].formatted_weight or '',
+                                quantity=c['quantity'],
+                                tax_rate=c['tax_rate'],
+                                hsn_code=c['hsn_code'],
+                                allocated_amount=c['allocated'],
+                                tax_amount=c['tax'],
+                            )
+                            for c in item_data['tax_components']
+                        ])
+
+
                 # Gather quantities for batch stock update. Stock lives on the
-                # variant; the legacy Product.stock is kept in sync for the
-                # default variant. We track two kinds of Product.stock decrement:
-                #   hard_updates   — must NOT oversell (legacy lines + G2 combo
-                #                    components); raise if stock is insufficient.
+                # VARIANT — for plain product lines and for combo components
+                # alike — and both are decremented under a row lock that
+                # re-checks availability, so neither can oversell (G4).
+                # The legacy Product.stock is only a mirror of the default
+                # variant, tracked separately:
+                #   hard_updates   — must NOT oversell (variant-less legacy
+                #                    lines only); raise if stock is insufficient.
                 #   mirror_updates — default-variant mirror; clamp at 0 because a
                 #                    drifted legacy mirror should not fail an order.
                 variant_updates = {}
@@ -692,14 +909,18 @@ class OrderViewSet(viewsets.ModelViewSet):
                             pk = item_data['product'].pk
                             hard_updates[pk] = hard_updates.get(pk, 0) + quantity
                     elif item_data['item_type'] == 'combo':
-                        # G2: draw down each component product's real inventory.
-                        for product_id, units in item_data.get('components', []):
-                            hard_updates[product_id] = hard_updates.get(product_id, 0) + units
+                        # G2: draw down each component SIZE's real inventory.
+                        for variant_id, units in item_data.get('components', []):
+                            variant_updates[variant_id] = variant_updates.get(variant_id, 0) + units
 
                 from products.models import Product, ProductVariant
 
                 # Batch reduce stock for variants (+ mirror default to product)
                 low_stock_alerts = []
+                # Per-variant stock before/after this order — used to detect
+                # threshold crossings and, below, combo buildable counts.
+                variant_before = {}
+                variant_after = {}
                 if variant_updates:
                     variants = list(ProductVariant.objects.select_for_update().filter(pk__in=variant_updates.keys()))
                     for variant in variants:
@@ -708,6 +929,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                             raise ValueError(f'Insufficient stock for {variant.product.name}. Available: {variant.stock}')
                         before = variant.stock
                         variant.stock -= reduce_by
+                        variant_before[variant.pk] = before
+                        variant_after[variant.pk] = variant.stock
                         if variant.is_default:
                             mirror_updates[variant.product_id] = mirror_updates.get(variant.product_id, 0) + reduce_by
                         # Alert on a per-size threshold crossing. For a default
@@ -764,6 +987,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # its *buildable count* (min over components of stock // per-combo
                 # qty) crossing the combo's threshold. Only combos in THIS order can
                 # have moved, and their components were all just locked above.
+                #
+                # The maps consulted MUST be the per-VARIANT ones: `components`
+                # holds variant ids (checkout draws component stock from the
+                # variant, not the legacy Product mirror). Reading the
+                # product-keyed maps here made every lookup miss, so `before` was
+                # always 0, the `before > threshold` guard was never true, and no
+                # combo alert could ever fire.
                 for item_data in cart_items_data:
                     if item_data['item_type'] != 'combo':
                         continue
@@ -773,16 +1003,16 @@ class OrderViewSet(viewsets.ModelViewSet):
                     if not components:
                         continue
 
-                    def _buildable(stock_map):
+                    def _buildable(stock_map, components=components, line_qty=line_qty):
                         counts = []
-                        for pid, units in components:
+                        for variant_id, units in components:
                             per_combo = (units // line_qty) or 1  # units is line total
-                            counts.append(stock_map.get(pid, 0) // per_combo)
+                            counts.append(stock_map.get(variant_id, 0) // per_combo)
                         return min(counts) if counts else 0
 
                     threshold = combo.low_stock_threshold
-                    avail_before = _buildable(stock_before)
-                    avail_after = _buildable(stock_after)
+                    avail_before = _buildable(variant_before)
+                    avail_after = _buildable(variant_after)
                     if avail_before > threshold and avail_after <= threshold:
                         low_stock_alerts.append({
                             'name': f"{combo.name} (combo)",
@@ -834,6 +1064,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # the reserved stock from leaking across retries.
                 if order.payment_method == 'COD' or order.payment_status == 'paid':
                     locked_cart.items.all().delete()
+
+                # A zero-total (fully coupon-waived) order is placed already
+                # 'paid', so its supply is committed here and its invoice is due
+                # now — there is no capture event coming to raise one later. A COD
+                # order is NOT invoiced here: it is invoiced at dispatch.
+                from .invoicing import maybe_issue_invoice
+                maybe_issue_invoice(order)
 
                 # Transaction complete - prepare response data
                 order_data = OrderDetailSerializer(order).data
@@ -893,8 +1130,32 @@ class OrderViewSet(viewsets.ModelViewSet):
         adding tracking) is an admin power.
         """
         from rest_framework.exceptions import PermissionDenied
+        from rest_framework.exceptions import ValidationError as DRFValidationError
         if not (request.user.is_staff or request.user.is_superuser):
             raise PermissionDenied("You do not have permission to modify this order.")
+
+        # Parse `refund_amount` BEFORE the transaction: a malformed number must
+        # 400 without having written anything, and the format check needs no lock.
+        # Absent/blank means "refund everything outstanding" — the old behaviour,
+        # so a client that never sends the field keeps working unchanged.
+        raw_refund = request.data.get('refund_amount', None)
+        refund_amount_given = raw_refund is not None and str(raw_refund).strip() != ''
+        refund_amount = None
+        if refund_amount_given:
+            try:
+                refund_amount = Decimal(str(raw_refund).strip()).quantize(Decimal('0.01'))
+            except (InvalidOperation, ValueError):
+                return Response({'error': 'refund_amount must be a number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            # quantize() RAISES on Infinity but passes NaN through quietly, and
+            # `NaN <= 0` then raises InvalidOperation — a 500 on the refund path.
+            # The finite check has to be its own step for that reason.
+            if not refund_amount.is_finite():
+                return Response({'error': 'refund_amount must be a number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if refund_amount <= 0:
+                return Response({'error': 'refund_amount must be greater than zero.'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             obj = self.get_object()  # 404s if outside the caller's queryset
@@ -922,11 +1183,25 @@ class OrderViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Restock BEFORE flipping status, once, only on the transition into
-            # 'cancelled' (never on a no-op re-cancel).
-            if cancelling:
-                restore_order_stock(order)
-                order.cancelled_at = timezone.now()
+            # A refund is only ever recorded against money we actually took —
+            # captured online, or COD cash confirmed with the "Paid in cash"
+            # tick. An unpaid, failed or rejected order has nothing to give back,
+            # and recording one would write a ledger row and reverse GST that was
+            # never collected, understating what is owed to the government.
+            # Re-sending an amount on an already-'refunded' order is an
+            # instalment, so that case is included. Checked BEFORE anything is
+            # written, so it is a clean 400 with no rollback.
+            recording_refund = new_status == 'refunded' and (
+                old_status != 'refunded' or refund_amount_given)
+            if recording_refund and not self._is_refundable_payment(order):
+                hint = (' Tick "Paid in cash" first to record a COD return.'
+                        if order.payment_method == 'COD' else '')
+                return Response(
+                    {'error': 'Only orders whose payment was received can be '
+                              f'refunded (this one is {order.payment_method or "unknown"} / '
+                              f'{order.payment_status or "unknown"}).{hint}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             # Apply the editable fields.
             if 'shipping_address' in data:
@@ -935,13 +1210,155 @@ class OrderViewSet(viewsets.ModelViewSet):
                 order.phone_number = data['phone_number']
             if 'payment_status' in data:
                 order.payment_status = data['payment_status']
+            if 'place_of_supply_state_code' in data:
+                # Correcting where the supply was made. Validated against the
+                # published GST state-code list rather than trusted: a code that
+                # isn't a real state would put the order in a GSTR-1 bucket that
+                # doesn't exist, and blanking it would silently reclassify the
+                # order as historical/intra-state.
+                code = str(data['place_of_supply_state_code'] or '').strip().zfill(2)
+                if not state_name(code):
+                    return Response(
+                        {'error': 'place_of_supply_state_code must be a valid '
+                                  'two-digit GST state code.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+                if code != (order.place_of_supply_state_code or ''):
+                    logger.info(
+                        "Place of supply on order %s corrected %s -> %s by %s.",
+                        order.pk, order.place_of_supply_state_code or '(unset)',
+                        code, getattr(request.user, 'email', request.user.pk))
+                order.place_of_supply_state_code = code
+            if 'shipping_cost' in data:
+                # Admin-entered courier cost. Validated here rather than trusted:
+                # a blank field means "not recorded" (0), and a garbage value must
+                # 400 instead of raising deep inside the ORM.
+                raw = data['shipping_cost']
+                try:
+                    cost = Decimal(str(raw).strip() or '0')
+                except (InvalidOperation, ValueError):
+                    return Response({'error': 'shipping_cost must be a number.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                # NaN and Infinity are valid Decimals but not valid money, and a
+                # NaN comparison RAISES InvalidOperation rather than returning
+                # False — so `cost < 0` below would 500 instead of 400. Reject
+                # them here, matching products/bulk_views.py::_parse_decimal.
+                if not cost.is_finite():
+                    return Response({'error': 'shipping_cost must be a number.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                if cost < 0 or cost > MAX_ORDER_TOTAL:
+                    return Response({'error': 'shipping_cost is out of range.'},
+                                    status=status.HTTP_400_BAD_REQUEST)
+                order.shipping_cost = cost.quantize(Decimal('0.01'))
+            if 'cod_paid' in data:
+                # The "Paid in cash" tick. Only meaningful on a COD order — an
+                # ONLINE order's money came through the gateway and its
+                # payment_status is owned by the payments app, so accepting the
+                # tick there would let an admin hand-mark an unpaid online order
+                # as settled and bypass verification entirely.
+                if order.payment_method != 'COD':
+                    return Response(
+                        {'error': 'cod_paid applies only to COD orders.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+                want_paid = str(data['cod_paid']).lower() not in ('false', '0', 'none', '')
+                if want_paid and order.cod_paid_at is None:
+                    order.cod_paid_at = timezone.now()
+                    order.cod_confirmed_by = request.user
+                    order.payment_status = 'paid'
+                    logger.info(
+                        "COD cash confirmed on order %s by %s (%s).",
+                        order.pk, getattr(request.user, 'email', request.user.pk),
+                        order.total_amount)
+                elif not want_paid and order.cod_paid_at is not None:
+                    # Un-tick, for the misclick. Refusing to reverse would leave
+                    # a permanent false record of cash received, which is worse
+                    # than allowing the correction — but it is logged loudly,
+                    # because un-ticking is how a genuine receipt would be hidden.
+                    if order.refunded_amount and order.refunded_amount > 0:
+                        return Response(
+                            {'error': 'Cannot un-tick: a refund has already been '
+                                      'recorded against this payment.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+                    logger.warning(
+                        "COD cash confirmation REVERSED on order %s by %s (was "
+                        "confirmed by %s at %s).",
+                        order.pk, getattr(request.user, 'email', request.user.pk),
+                        getattr(order.cod_confirmed_by, 'email', None), order.cod_paid_at)
+                    order.cod_paid_at = None
+                    order.cod_confirmed_by = None
+                    order.payment_status = 'pending'
             if 'tracking_number' in data:
                 order.tracking_number = (data['tracking_number'] or '').strip()
+
+            # Restock on the transition into 'cancelled', once (never on a no-op
+            # re-cancel).
+            #
+            # ⚠ THIS MUST STAY BELOW EVERY `return Response(400)` ABOVE. Returning
+            # from inside `transaction.atomic()` exits the context manager without
+            # an exception, so the transaction COMMITS — a validation failure that
+            # returns after this point would credit the stock back and then leave
+            # the order live and unsaved (`order.save()` is never reached), so the
+            # parcel still ships and `stock_restored_at` makes the eventual real
+            # cancel a no-op. Inventory ends up permanently inflated. The refund
+            # branch below raises instead of returning for the same reason.
+            if cancelling:
+                restore_order_stock(order)
+                order.cancelled_at = timezone.now()
+
             order.status = new_status
             if new_status == 'delivered' and order.delivered_at is None:
                 order.delivered_at = timezone.now()
 
             order.save()
+
+            # Raise the tax invoice if this edit is the event that makes one due.
+            # In practice that means a COD order reaching DISPATCH — the bill has
+            # to travel with the goods, and COD cash is remitted by the courier
+            # days later, so waiting for the "Paid in cash" tick would leave
+            # delivered goods uninvoiced. (An online order is normally invoiced at
+            # capture; this also covers an admin hand-setting payment_status.)
+            # No-op when one already exists — an invoice is issued once, and
+            # advancing shipped → delivered must not raise a second.
+            from .invoicing import maybe_issue_invoice
+            maybe_issue_invoice(order)
+
+            # Flipping an order to 'refunded' by hand must reverse its GST and
+            # give the goods back to stock, or the tax owed stays overstated and
+            # inventory silently drains. Since refunds are manual-only (the
+            # gateway webhook branch is disabled), this is the ONLY path that
+            # records one. Eligibility was checked above.
+            #
+            # `refund_amount` is optional and defaults to the whole outstanding
+            # balance. A partial IS allowed and still marks the order 'refunded'
+            # (mark_refunded=True) — an amount a human deliberately typed is a
+            # settled outcome. `refunded_amount` on the response is what says how
+            # much; the flag alone no longer means "all of it".
+            #
+            # Re-sending an explicit amount on an already-'refunded' order records
+            # a FURTHER partial, so a refund can be settled in instalments.
+            if recording_refund:
+                outstanding = refundable_balance(order)
+                amount = refund_amount if refund_amount_given else outstanding
+                # RAISE, don't return: `order.save()` above has already written
+                # status='refunded' inside this transaction. A plain 400 response
+                # would commit that write and leave the order marked refunded with
+                # no ledger row behind it. The exception rolls the whole thing back
+                # and DRF still renders it as a 400.
+                if outstanding <= 0:
+                    # Nothing left to give back. Silently accepting this used to
+                    # leave the order reading 'refunded' with an empty ledger —
+                    # a refund that shows on every screen but never happened.
+                    raise DRFValidationError(
+                        {'error': 'This order has nothing left to refund '
+                                  f'(already refunded {order.refunded_amount} '
+                                  f'of {order.total_amount}).'})
+                if refund_amount_given and amount > outstanding:
+                    raise DRFValidationError(
+                        {'error': f'refund_amount exceeds the refundable balance '
+                                  f'({outstanding}).'})
+                record_refund(
+                    order, amount, source='admin', mark_refunded=True,
+                    note=(request.data.get('refund_note') or '')[:255])
+                order.refresh_from_db()
 
         # Side-effect notifications, outside the transaction.
         # Product decision: routine status changes (confirmed → processing →
@@ -1057,17 +1474,35 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def invoice(self, request, pk=None):
-        """
-        Generate and return a PDF tax invoice / bill for the order.
-        Filled dynamically from the order, its user, and its line items.
+        """Return the PDF tax invoice for this order, if one has been ISSUED.
+
+        Downloading is a reprint, never an issue event: the document is rendered
+        from `Invoice.snapshot`, frozen when it was raised (see
+        orders/invoicing.py). An order with no invoice therefore has nothing to
+        serve and gets a 409 — which is the point. Previously this endpoint
+        rendered a page headed TAX INVOICE for ANY order, including a pending
+        unpaid one that L3 would auto-cancel fifteen minutes later.
+
         get_object() enforces ownership (or staff access) via get_queryset().
         """
         from django.http import HttpResponse
+        from .models import Invoice
 
         order = self.get_object()
+        invoice = Invoice.objects.filter(order_id=order.pk).first()
+        if invoice is None:
+            return Response(
+                {'error': 'No tax invoice has been issued for this order yet.',
+                 'code': 'invoice_not_issued',
+                 # Say WHICH event is awaited — "not yet" alone sends an admin
+                 # hunting for a broken download.
+                 'detail': ('An invoice is issued once payment is confirmed '
+                            '(online) or the order is dispatched (COD).')},
+                status=status.HTTP_409_CONFLICT,
+            )
         try:
             from .invoice import generate_invoice_pdf
-            pdf_bytes = generate_invoice_pdf(order)
+            pdf_bytes = generate_invoice_pdf(invoice)
         except ImportError:
             logger.error("reportlab is not installed; cannot generate invoice PDF")
             return Response(
@@ -1075,13 +1510,72 @@ class OrderViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         except Exception as e:
-            logger.error(f"Invoice generation failed for order {order.id}: {e}")
+            logger.error(f"Invoice rendering failed for invoice {invoice.number}: {e}")
             return Response(
                 {'error': 'Failed to generate invoice'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        filename = f"invoice-ORD-{order.id:06d}.pdf"
+        # Named by the INVOICE number, not the order id — that is the serial the
+        # customer and their accountant will look for. '/' is not filename-safe.
+        filename = f"invoice-{invoice.number.replace('/', '-')}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=['get'], url_path='credit-note')
+    def credit_note(self, request, pk=None):
+        """PDF credit note for one refund on this order — `?refund=<id>`.
+
+        Defaults to the most recent refund, which is what a "download the credit
+        note" button on a just-refunded order wants. Each instalment has its own
+        document, so the id is how you reach the earlier ones; the number to ask
+        for is on every refund in the order response (`credit_note_number`).
+
+        get_object() enforces ownership (or staff access) via get_queryset(), and
+        the refund is looked up WITHIN that order, so an id belonging to someone
+        else's order 404s rather than rendering their money back to a stranger.
+        """
+        from django.http import HttpResponse
+
+        order = self.get_object()
+        raw_refund_id = request.query_params.get('refund')
+        refunds = order.refunds.all()
+        if raw_refund_id:
+            # Coerce before querying: `filter(pk='abc')` raises ValueError from
+            # inside the ORM, which surfaces as a 500 on a request that is simply
+            # malformed. A non-numeric id is a bad request, not a server fault.
+            try:
+                refund_id = int(raw_refund_id)
+            except (TypeError, ValueError):
+                return Response({'error': 'refund must be a refund id.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            refund = refunds.filter(pk=refund_id).first()
+        else:
+            refund = refunds.first()
+        if refund is None:
+            return Response(
+                {'error': 'No refund has been recorded on this order.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            from .invoice import credit_note_number, generate_credit_note_pdf
+            pdf_bytes = generate_credit_note_pdf(refund)
+        except ImportError:
+            logger.error("reportlab is not installed; cannot generate credit note PDF")
+            return Response(
+                {'error': 'Credit note generation is not available on the server.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception as e:
+            logger.error(f"Credit note generation failed for refund {refund.id}: {e}")
+            return Response(
+                {'error': 'Failed to generate credit note'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        filename = f"credit-note-{credit_note_number(refund)}.pdf"
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
@@ -1243,8 +1737,19 @@ class OrderViewSet(viewsets.ModelViewSet):
         header = [
             'Order Number', 'Date', 'Customer Name', 'Customer Email', 'Phone',
             'Status', 'Payment Method', 'Payment Status',
-            'Subtotal', 'Discount', 'Coupon', 'Taxable Amount', 'GST', 'Shipping',
-            'Total', 'Items', 'Shipping Address',
+            'Subtotal', 'Discount', 'Coupon', 'Taxable Amount', 'GST (Goods)', 'GST Rates',
+            'Shipping Charged (Net)', 'GST on Shipping', 'Total GST',
+            # Place of supply and the heads that follow from it. GSTR-1 Table 7
+            # (B2C others) is bucketed BY place of supply, so without these
+            # columns the return can't be built from this export at all. CGST +
+            # SGST + IGST always sum back to Total GST — this is the same money
+            # re-headed, never extra tax.
+            'Place of Supply', 'POS Code', 'CGST', 'SGST', 'IGST',
+            'Courier Cost', 'Delivery Margin',
+            'Total', 'Refunded', 'GST Reversed', 'Net GST',
+            'COD Paid At', 'COD Confirmed By',
+            'Gateway Fee', 'Gateway GST (ITC)', 'Net Settlement',
+            'Items', 'Shipping Address',
         ]
 
         def rows():
@@ -1255,11 +1760,32 @@ class OrderViewSet(viewsets.ModelViewSet):
                 name = (getattr(user, 'name', '') or
                         f"{user.first_name} {user.last_name}".strip() or
                         getattr(user, 'email', '')) if user else 'Guest'
-                # Taxable amount = discounted subtotal (tax is charged on it).
+                # Taxable value = the NET (pre-GST) amount, which is what a GST
+                # return wants. Prices are GST-inclusive, so the discounted
+                # subtotal still CONTAINS the tax and must have it removed.
+                # Legacy (tax_inclusive=False) orders had GST added on top, so
+                # their discounted subtotal is already net — don't subtract twice.
                 taxable = (o.subtotal or 0) - (o.discount_amount or 0)
+                if getattr(o, 'tax_inclusive', True):
+                    taxable -= (o.tax or 0)
+                # Which slabs made up the GST, e.g. "0%, 5%" — lets the accountant
+                # spot mixed-rate orders without opening each invoice.
+                rates = sorted({
+                    Decimal(str(i.tax_rate or 0)) for i in o.items.all()
+                    if (i.tax_amount or 0) > 0 or (i.tax_rate or 0) > 0
+                })
+                rate_label = ', '.join(f"{r:g}%" for r in rates)
+                margin = (o.shipping_charge or 0) - (o.shipping_cost or 0)
+                pay = getattr(o, 'payment', None)
+                gw_fee = pay.gateway_fee if pay else ''
+                gw_tax = pay.gateway_tax if pay else ''
+                gw_net = pay.net_settlement if pay else ''
                 items = '; '.join(
                     f"{i.product_name} x{i.quantity}" for i in o.items.all()
                 )
+                # Heads for the WHOLE order's output tax (goods + delivery),
+                # which is what `Total GST` two columns to the left reports.
+                heads = o.gst_heads
                 yield [
                     f"ORD-{o.id:06d}",
                     o.created_at.strftime('%Y-%m-%d %H:%M'),
@@ -1270,7 +1796,24 @@ class OrderViewSet(viewsets.ModelViewSet):
                     o.payment_method or '',
                     o.payment_status or '',
                     o.subtotal, o.discount_amount, (o.coupon_code or ''),
-                    taxable, o.tax, o.shipping_charge, o.total_amount,
+                    taxable, o.tax, rate_label,
+                    # Shipping is billed NET + its own 18% GST, so the fee and
+                    # its tax are separate columns. "Total GST" is the figure
+                    # that belongs on the return — goods plus delivery.
+                    o.shipping_charge, o.shipping_tax, o.total_tax,
+                    o.place_of_supply_name,
+                    o.place_of_supply_state_code or '',
+                    heads['cgst'], heads['sgst'], heads['igst'],
+                    o.shipping_cost, margin,
+                    o.total_amount,
+                    o.refunded_amount, o.refunded_tax,
+                    o.total_tax - (o.refunded_tax or 0),
+                    (o.cod_paid_at.strftime('%Y-%m-%d %H:%M') if o.cod_paid_at else ''),
+                    (getattr(o.cod_confirmed_by, 'email', '') or '') if o.cod_confirmed_by else '',
+                    # Razorpay's cut. `Gateway GST` is input tax credit — GST we
+                    # PAID on a service, deductible from the output tax above.
+                    # Blank for COD (no Payment row) rather than a misleading 0.
+                    gw_fee, gw_tax, gw_net,
                     items,
                     (o.shipping_address or '').replace('\n', ', '),
                 ]

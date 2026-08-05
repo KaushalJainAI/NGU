@@ -1,8 +1,16 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 from .models import Cart, CartItem, Favorite
 from products.serializers import ProductListSerializer
 from admin_panel.serializers import CouponSerializer
-from spices_backend.limits import SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE
+from orders.pricing import (
+    allocate_combo_components, blended_rate, combo_line_tax, extract_tax,
+    group_tax_by_rate, shipping_tax_for, tax_rate_for,
+)
+from spices_backend.limits import (
+    SHIPPING_CHARGE, SHIPPING_TAX_RATE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +68,17 @@ class CartItemResponseSerializer(serializers.Serializer):
         return None
 
     def get_tax_rate(self, obj):
-        """GST rate (%) for this line, from its product/combo (default 5)."""
+        """GST rate (%) for this line.
+
+        Product lines carry their product's rate. A COMBO has none of its own —
+        each component is taxed at its own product's rate — so it reports the
+        blended effective rate implied by the split. That keeps the field
+        populated for display without pretending a mixed supply has one rate;
+        the per-slab truth is in the cart summary's `tax_breakdown`.
+        """
+        item_type = getattr(obj, 'item_type', 'product') or 'product'
+        if item_type == 'combo' and obj.combo:
+            return float(blended_rate(obj.subtotal, combo_line_tax(obj.combo, obj.subtotal)))
         item = self._get_item(obj)
         return float(getattr(item, 'tax_rate', DEFAULT_TAX_RATE) or 0) if item else 0.0
 
@@ -166,21 +184,58 @@ class CartResponseSerializer(serializers.Serializer):
     def get_summary(self, obj):
         cart = obj['cart']
         subtotal = float(cart.total_price)
-        # Per-product GST: sum each line's subtotal * its tax_rate. Papad lines
-        # (tax_rate=0) contribute nothing; everything else defaults to 5%.
-        tax = 0.0
+        # Prices are GST-INCLUSIVE, so this is the tax already contained in the
+        # subtotal — reported for disclosure, never added to the total. Papad
+        # lines (tax_rate=0) contribute nothing; everything else defaults to 5%.
+        tax = Decimal('0.00')
+        lines = []
         for ci in cart.items.select_related('product', 'combo', 'variant').all():
-            source = ci.combo if (ci.item_type == 'combo') else ci.product
-            rate = float(getattr(source, 'tax_rate', DEFAULT_TAX_RATE) or 0)
-            tax += float(ci.subtotal) * rate / 100
-        tax = round(tax, 2)
+            if ci.item_type == 'combo' and ci.combo:
+                # A combo is a mixed supply — each component is taxed at its own
+                # product's rate, so it contributes one breakdown line PER
+                # COMPONENT rather than one blended line. Same allocator the
+                # order write path uses, so the cart's quoted GST and the placed
+                # order's agree to the paisa.
+                for row in allocate_combo_components(ci.combo, ci.subtotal, ci.quantity):
+                    tax += row['tax']
+                    lines.append((row['allocated'], row['tax_rate']))
+                continue
+            rate = tax_rate_for(ci.product)
+            tax += extract_tax(ci.subtotal, rate)
+            lines.append((ci.subtotal, rate))
+        tax = float(tax)
+        # Per-slab breakdown so the cart can show WHAT was taxed, not just how
+        # much — a cart mixing papad (0%) with spices (5%) is the normal case.
         discount = 0
         shipping = 0 if subtotal >= float(FREE_SHIPPING_THRESHOLD) or subtotal == 0 else float(SHIPPING_CHARGE)
-        total = round(subtotal + tax + shipping - discount, 2)
+        # Delivery is priced NET and taxed on top (SAC 9968, 18%) — the opposite
+        # convention to goods, whose MRP already contains their GST. So this one
+        # slab is a real addend to the total, and it joins the breakdown as its
+        # own row rather than being merged into a goods slab.
+        shipping_tax = float(shipping_tax_for(Decimal(str(shipping))))
+        if shipping > 0:
+            lines.append((Decimal(str(shipping + shipping_tax)), SHIPPING_TAX_RATE))
+        # Per-slab breakdown so the cart can show WHAT was taxed, not just how
+        # much — a cart mixing papad (0%) with spices (5%) is the normal case.
+        # Built AFTER shipping is appended so the delivery slab appears too.
+        tax_breakdown = group_tax_by_rate(lines)
+        # `tax` (goods) is a component of `subtotal` and does NOT appear in this
+        # sum; `shipping_tax` sits outside it and does.
+        total = round(subtotal + shipping + shipping_tax - discount, 2)
         return {
             'subtotal': subtotal,
             'tax': tax,
+            'tax_breakdown': tax_breakdown,
+            # Net of the GST contained in it — the "goods value" the customer is
+            # actually paying for, shown above the GST lines on the breakup.
+            'taxable_value': round(subtotal - tax, 2),
             'shipping': shipping,
+            'shipping_tax': shipping_tax,
+            # Everything the customer pays as GST: inside the goods price plus on
+            # the delivery fee. The cart must quote this or it under-states the
+            # GST the invoice will show.
+            'total_tax': round(tax + shipping_tax, 2),
+            'free_shipping_threshold': float(FREE_SHIPPING_THRESHOLD),
             'discount': discount,
             'total': total,
         }

@@ -16,6 +16,8 @@ from django.core.management.base import BaseCommand
 from django.db.models import F, Sum, Count
 from django.utils import timezone
 
+from spices_backend.timeranges import range_filter
+
 
 class Command(BaseCommand):
     help = "Email the store owner a plain-language weekly summary."
@@ -31,18 +33,32 @@ class Command(BaseCommand):
             self.stdout.write("ADMIN_ALERT_EMAIL not configured — skipping weekly summary.")
             return
 
-        today = timezone.now().date()
+        # localdate(), NOT now().date() — see admin_panel/views.py
+        # dashboard_stats. `now()` is UTC-aware, so .date() gives the UTC day
+        # while range_filter reads its bounds in TIME_ZONE; the mismatch shifts
+        # the whole reporting week by a day for part of every night.
+        today = timezone.localdate()
         this_start = today - timedelta(days=7)   # last 7 days [this_start, today)
         prev_start = today - timedelta(days=14)  # the 7 days before that
 
         def sales_between(start, end):
             agg = DailySalesRollup.objects.filter(
                 date__gte=start, date__lt=end
-            ).aggregate(revenue=Sum('revenue'), orders=Sum('orders'))
-            return (agg['revenue'] or 0, agg['orders'] or 0)
+            ).aggregate(
+                revenue=Sum('revenue'), orders=Sum('orders'),
+                gst=Sum('gst_collected'), gst_refunded=Sum('gst_refunded'),
+                ship_in=Sum('shipping_collected'), ship_out=Sum('shipping_cost'),
+            )
+            return agg
 
-        this_rev, this_orders = sales_between(this_start, today)
-        prev_rev, _ = sales_between(prev_start, this_start)
+        this_agg = sales_between(this_start, today)
+        prev_agg = sales_between(prev_start, this_start)
+        this_rev, this_orders = this_agg['revenue'] or 0, this_agg['orders'] or 0
+        prev_rev = prev_agg['revenue'] or 0
+        this_gst = this_agg['gst'] or 0
+        this_gst_refunded = this_agg['gst_refunded'] or 0
+        this_ship_in = this_agg['ship_in'] or 0
+        this_ship_out = this_agg['ship_out'] or 0
 
         # Revenue trend sentence.
         if prev_rev > 0:
@@ -62,8 +78,9 @@ class Command(BaseCommand):
         best = (
             OrderItem.objects.filter(
                 order__is_deleted=False,
-                order__created_at__date__gte=this_start,
-                order__created_at__date__lt=today,
+                # `today` is exclusive here — the week is [this_start, today).
+                **range_filter('order__created_at', this_start,
+                               today - timedelta(days=1)),
             ).exclude(order__status='cancelled')
             .values('product_name')
             .annotate(units=Sum('quantity'))
@@ -86,6 +103,16 @@ class Command(BaseCommand):
             f"Here's your Nidhi Masala week: {this_start.strftime('%d %b')} – {(today - timedelta(days=1)).strftime('%d %b %Y')}.",
             "",
             f"You made Rs. {this_rev} from {this_orders} order{'s' if this_orders != 1 else ''} — {trend}.",
+            f"Of that, Rs. {this_gst} was GST you collected from customers"
+            + (f", less Rs. {this_gst_refunded} reversed by refunds "
+               f"— Rs. {this_gst - this_gst_refunded} net" if this_gst_refunded else "")
+            + f", on sales of Rs. {this_rev - this_gst} excluding GST.",
+            "That's what you took, not what you owe — what you pay is that less "
+            "the input credit on your purchases, which your books have and we don't.",
+            f"Delivery: Rs. {this_ship_in} collected"
+            + (f", Rs. {this_ship_out} paid to couriers "
+               f"(margin Rs. {this_ship_in - this_ship_out})."
+               if this_ship_out else " — courier costs not recorded."),
             "",
         ]
 
