@@ -59,7 +59,7 @@ Applied to the collected `subtotal`:
 
 ```
 subtotal            = Σ (item_price × quantity)
-total_discount      = subtotal × (coupon.discount_percent / 100)
+total_discount      = coupon.discount_for(subtotal)      # percent OR flat ₹, clamped to subtotal
 discounted_subtotal = subtotal − total_discount
 shipping_charge     = ₹0   if discounted_subtotal ≥ FREE_SHIPPING_THRESHOLD
                     = SHIPPING_CHARGE  otherwise            # NET, GST-exclusive
@@ -87,7 +87,7 @@ total_amount        = discounted_subtotal + shipping_charge + shipping_tax
 - Free shipping threshold is checked against the **post-discount** subtotal;
   free shipping carries no `shipping_tax`.
 - `SHIPPING_CHARGE` (default ₹59, **net**), `SHIPPING_TAX_RATE` (default 18),
-  `FREE_SHIPPING_THRESHOLD` (default ₹500), and `DEFAULT_TAX_RATE` (default 5%,
+  `FREE_SHIPPING_THRESHOLD` (default ₹499, `>=` so ₹499 itself ships free), and `DEFAULT_TAX_RATE` (default 5%,
   used only when a product/combo has no `tax_rate`) are env-configurable — see
   `spices_backend/limits.py`. ⚠ An existing `.env` that still pins
   `SHIPPING_CHARGE=69` overrides the default and will bill ₹69 + 18%.
@@ -185,15 +185,26 @@ total_amount        = discounted_subtotal + shipping_charge + shipping_tax
   order records a further partial, so a refund can be settled in instalments. An
   unattended **gateway** partial still leaves the order's status alone
   (`record_refund(mark_refunded=False)`) so it stays visible as needing a human.
-- **Only an order paid ONLINE can be refunded (2026-08-02).**
-  `OrderViewSet._is_online_paid` gates the admin PATCH: `payment_method` in
-  `{ONLINE, razorpay}` **and** `payment_status` in `{paid, refunded}` (the latter so
-  an instalment on an already-refunded order isn't stranded). Everything else 400s
-  **before anything is written**. Rationale: a ledger row reverses GST, so recording
-  one against COD cash that never passed through us — or against a pending/failed/
-  rejected order — would understate what is owed to the government. An order with
-  nothing left to give back is likewise a 400, not a silent success; accepting it
-  used to leave the order reading `refunded` with an empty ledger.
+- **Only an order whose money was actually received can be refunded**
+  (2026-08-02, widened 2026-08-04). `OrderViewSet._is_refundable_payment` gates the
+  admin PATCH. Two ways an order qualifies, and `payment_status` must be in
+  `{paid, refunded}` either way (`refunded` included so an instalment on an
+  already-refunded order isn't stranded):
+
+  | `payment_method` | Refundable when |
+  |---|---|
+  | `ONLINE` / `razorpay` | `payment_status` in `{paid, refunded}` |
+  | `COD` | **`cod_paid_at` is set** (the "Paid in cash" tick) *and* `payment_status` in `{paid, refunded}` |
+
+  Everything else 400s **before anything is written** (the COD branch adds a hint
+  telling the admin to tick "Paid in cash" first). Rationale: a ledger row reverses
+  GST, so recording one against money that never reached us — COD cash still with
+  the courier, or a pending/failed/rejected order — would understate what is owed to
+  the government. ⚠ Do **not** re-narrow this to ONLINE-only: until the COD tick
+  existed, a genuine COD return could not be recorded at all and its GST stayed owed
+  forever. That was the bug the tick closes (see the COD bullet above).
+  An order with nothing left to give back is likewise a 400, not a silent success;
+  accepting it used to leave the order reading `refunded` with an empty ledger.
 - **A refund restocks (2026-08-02).** Money back means goods back, so
   `record_refund` calls `restore_order_stock`. Without it every return silently
   ratcheted inventory down — the refund path could not restock afterwards either,

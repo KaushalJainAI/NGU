@@ -85,17 +85,20 @@ real — a well-formed but wrong `rzp_live_` key still boots.
 
 ## Pricing Rules (applied during order creation)
 
-```
-subtotal            = Σ (item_price × quantity)
-total_discount      = subtotal × (coupon.discount_percent / 100)   [0 if no coupon]
-discounted_subtotal = subtotal − total_discount
-shipping_charge     = ₹0   if discounted_subtotal ≥ FREE_SHIPPING_THRESHOLD else SHIPPING_CHARGE
-tax                 = discounted_subtotal × DEFAULT_TAX_RATE% (per-line tax_rate if set)
-total_amount        = discounted_subtotal + shipping_charge + tax
-```
+⚠ **The authoritative formula lives in `ORDER_LIFECYCLE.md` § "Pricing calculation".**
+It is deliberately NOT repeated here — this section used to carry its own copy and
+drifted into teaching the *opposite* GST convention after the 2026-08-04 change.
+The two facts a payments reader needs:
 
-`SHIPPING_CHARGE` (default ₹69), `FREE_SHIPPING_THRESHOLD` (default ₹500), and `DEFAULT_TAX_RATE`
-(default 5%) are configurable env vars — see `spices_backend/limits.py`.
+- **Goods prices are GST-INCLUSIVE (MRP).** `tax` is *extracted* from the subtotal
+  for disclosure and is **not** a term in `total_amount`. Charging it on top
+  double-bills the customer.
+- **Delivery is the exception**: quoted net (`SHIPPING_CHARGE`, default ₹59) and
+  taxed **on top** at `SHIPPING_TAX_RATE` (18%, SAC 9968), so `shipping_tax` *is* a
+  term in `total_amount`. The customer pays ₹69.62 when delivery applies.
+
+The amount handed to Razorpay is `Order.total_amount`; the output-tax figure every
+report must read is `Order.total_tax` (= `tax + shipping_tax`), never `tax` alone.
 
 All amounts stored as `Decimal(max_digits=10, decimal_places=2)` to avoid floating-point
 errors. See `ORDER_LIFECYCLE.md` for the full order creation flow.

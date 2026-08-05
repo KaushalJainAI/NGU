@@ -68,6 +68,15 @@ SHIPPING_TAX_RATE = config("SHIPPING_TAX_RATE", default=Decimal("18"), cast=Deci
 # Set when a deployment still carries the pre-2026-08-04 variable, so startup can
 # say so out loud. Read only for the warning — it never affects pricing.
 LEGACY_SHIPPING_CHARGE = config("SHIPPING_CHARGE", default=None)
+# Post-discount subtotal at/above which delivery is free. The comparison is `>=`,
+# so an order of exactly ₹499 ships free.
+#
+# ⚠ Keep this in step with VITE_FREE_SHIPPING_THRESHOLD in the storefront AND with
+# every .env. Until 2026-08-05 the code default was 499 while all six env files and
+# the storefront default said 500, so the cutoff silently moved by ₹1 depending on
+# whether an environment happened to set the variable — invisible until a customer
+# is charged delivery on an order the site had promised was free. 499 is the
+# intended number; the env files were the ones that had drifted.
 FREE_SHIPPING_THRESHOLD = config("FREE_SHIPPING_THRESHOLD", default=Decimal("499"), cast=Decimal)
 
 # Fallback GST rate (%) used only when a product/combo has no tax_rate set.
