@@ -74,12 +74,14 @@ def _build_llm():
     try:
         if provider == 'openrouter':
             from langchain_openai import ChatOpenAI
+            from spices_backend.llm import openrouter_extra_body
             return ChatOpenAI(
                 model=model_name,
                 openai_api_key=api_key,
                 openai_api_base=os.getenv('OPENROUTER_API_BASE', 'https://openrouter.ai/api/v1'),
                 temperature=0.2,
                 max_tokens=MAX_OUTPUT_TOKENS,
+                extra_body=openrouter_extra_body(),
             )
         from langchain.chat_models import init_chat_model
         return init_chat_model(
@@ -165,7 +167,8 @@ class Agent:
 
         if not self.llm_available:
             return {'reply': FALLBACK_REPLY, 'proposed_action': None,
-                    'sources': sources, 'escalate': True, 'llm_used': False}
+                    'sources': sources, 'escalate': True, 'llm_used': False,
+                    'history_truncated': False}
 
         # Build the message list: system + language directive + history + new turn.
         system_text = self._system_prompt + '\n\n' + language_directive(language)
@@ -177,13 +180,20 @@ class Agent:
         budget = MODEL_CONTEXT_TOKENS - MAX_OUTPUT_TOKENS - TOOL_OBS_RESERVE_TOKENS
         used = _estimate_tokens(system_text) + _estimate_tokens(message)
         kept = []
-        for h in reversed(history or []):
+        supplied = list(history or [])
+        for h in reversed(supplied):
             cost = _estimate_tokens(h.get('content', ''))
             if used + cost > budget:
                 break            # older turns beyond the budget are dropped
             used += cost
             kept.append(h)
         kept.reverse()           # restore chronological order
+
+        # The thread outgrew the context window: the oldest turns above are gone
+        # from the prompt, so the assistant will answer without them. Surface it
+        # instead of silently forgetting (the view passes it to the client, which
+        # nudges the customer to start a fresh conversation).
+        history_truncated = len(kept) < len(supplied)
 
         for h in kept:
             h_role = h.get('role', 'user')
@@ -244,11 +254,12 @@ class Agent:
             title = self._clean_title(env.get('title'))
             return {'reply': reply, 'proposed_action': proposed_action,
                     'sources': sources, 'escalate': escalate, 'llm_used': True,
-                    'title': title}
+                    'title': title, 'history_truncated': history_truncated}
 
         # Loop exhausted or unrecoverable -> safe fallback.
         return {'reply': FALLBACK_REPLY, 'proposed_action': None,
-                'sources': sources, 'escalate': True, 'llm_used': True, 'title': None}
+                'sources': sources, 'escalate': True, 'llm_used': True, 'title': None,
+                'history_truncated': history_truncated}
 
     # ------------------------------------------------------------------
     def _clean_reply(self, reply):

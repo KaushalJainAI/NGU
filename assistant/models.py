@@ -1,7 +1,18 @@
 import uuid
+from datetime import timedelta
 
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+
+from decouple import config
+
+# How long the AI stays silent after a team member's last message in a thread.
+# The pause is sticky (an admin releases it explicitly), but this is the safety
+# net: without it, an admin who replies at 11pm and goes to bed leaves the
+# customer with NOBODY answering — worse than the AI talking over a human.
+# Every admin reply restarts the clock. 0 disables the auto-release entirely.
+HANDOFF_IDLE_HOURS = config('ASSISTANT_HANDOFF_IDLE_HOURS', default=12, cast=int)
 
 
 class AssistantConversation(models.Model):
@@ -51,6 +62,19 @@ class AssistantConversation(models.Model):
         related_name='assigned_conversations',
     )
 
+    # Set to now() on every admin reply. While the pause is live the AI does not
+    # answer this thread at all (the chat view short-circuits before the LLM
+    # call, so a handed-off thread also costs no tokens). Cleared when an admin
+    # hands the thread back or resolves it.
+    ai_paused_at = models.DateTimeField(null=True, blank=True)
+    ai_paused_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paused_conversations',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -58,6 +82,30 @@ class AssistantConversation(models.Model):
         ordering = ['-updated_at']
         verbose_name = 'Assistant Conversation'
         verbose_name_plural = 'Assistant Conversations'
+
+    @property
+    def is_ai_paused(self):
+        """True while a human is handling this thread and the AI must stay quiet.
+
+        Computed, never stored as a bool: the auto-release must take effect on
+        read, without a scheduler tick, so a stale row can't strand a customer."""
+        if self.ai_paused_at is None:
+            return False
+        if HANDOFF_IDLE_HOURS <= 0:
+            return True          # auto-release disabled — sticky until released
+        return timezone.now() - self.ai_paused_at < timedelta(hours=HANDOFF_IDLE_HOURS)
+
+    def pause_ai(self, admin_user=None):
+        """An admin spoke — silence the AI and restart the idle clock."""
+        self.ai_paused_at = timezone.now()
+        self.ai_paused_by = admin_user
+        return ['ai_paused_at', 'ai_paused_by']
+
+    def resume_ai(self):
+        """Hand the thread back to the AI."""
+        self.ai_paused_at = None
+        self.ai_paused_by = None
+        return ['ai_paused_at', 'ai_paused_by']
 
     def __str__(self):
         who = self.user.email if self.user else (self.anon_session or 'guest')

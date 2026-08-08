@@ -212,40 +212,80 @@ stock counts, supplier data, or reviewer emails.
 
 ## Voice Ordering
 
-Voice input is transcribed on our own infrastructure, not by the browser. The old
-Web Speech API was unreliable — Chrome/Edge-only, and weak on Hindi/Hinglish and
-regional languages, which is exactly our customer base.
+Voice input is transcribed server-side, not by the browser. The old Web Speech API
+was unreliable — Chrome/Edge-only, and weak on Hindi/Hinglish and regional
+languages, which is exactly our customer base.
 
 **Flow:**
 
 ```
-Mic → MediaRecorder (browser) → 16 kHz mono WAV
-    → POST /api/assistant/transcribe/  (multipart: audio, language)
-    → whisper.cpp server (small-q5 model, self-hosted container)
-    → { transcript, language }
-    → POST /api/assistant/chat/  (identical to typed text)
+Mic -> MediaRecorder (browser) -> 16 kHz mono WAV
+    -> POST /api/assistant/transcribe/  (multipart: audio, language)
+    -> assistant/stt.py  -> dispatches on STT_PROVIDER
+         voxtral  -> OpenRouter /v1/audio/transcriptions (default)
+         whisper  -> local whisper.cpp container (fallback)
+    -> { transcript, language }
+    -> POST /api/assistant/chat/  (identical to typed text)
 ```
 
+### Two backends
+
+| | `voxtral` (default) | `whisper` (fallback) |
+|---|---|---|
+| Model | `mistralai/voxtral-mini-transcribe` via OpenRouter | whisper.cpp `small-q5`, self-hosted |
+| Latency | **~1.1s** for a ~5s utterance | **~20s per second of audio** on the 2 vCPU box |
+| Cost | $0.003/min of audio, prorated to the second (~Rs 0.026 per utterance) | free |
+| Audio leaves our infra | yes (OpenRouter -> Mistral) | no |
+| RAM | none | 1 GB container limit |
+
+`STT_PROVIDER` picks the primary. When it is `voxtral` and
+`STT_FALLBACK_TO_WHISPER` is on (default), an unavailable Voxtral — OpenRouter
+outage, exhausted credit limit, missing key — retries on the local container, so
+voice degrades to slow-but-working rather than failing. Set it to `False` where
+the whisper container is not deployed; the fallback would only add latency before
+the same 503.
+
+Voxtral reuses the assistant's `LLM_API_KEY` unless `OPENROUTER_API_KEY` is set
+separately. **Prefer a separate key in production** so transcription and chat do
+not share a failure domain or a credit limit.
+
 - **Frontend:** `useVoiceInput` records with `MediaRecorder` (works in all browsers,
-  incl. Firefox/Safari), converts to 16 kHz mono WAV client-side (`lib/audio.ts`) so
-  the whisper container needs no ffmpeg build, and uploads it.
+  incl. Firefox/Safari), converts to 16 kHz mono WAV client-side (`lib/audio.ts`),
+  and uploads it. Nothing here is backend-specific — OpenRouter accepts WAV, and
+  keeping the conversion means the whisper fallback stays usable (it needs no
+  ffmpeg build). No frontend change was needed to switch backends.
 - **Backend:** `AssistantTranscribeView` (login-only, tighter `assistant_stt`
-  throttle) forwards the audio to the whisper server via `assistant/whisper_client.py`.
-  It never touches the LLM and persists nothing — it just returns text.
+  throttle, 8 MB cap) calls `stt.transcribe`. It never touches the LLM and
+  persists nothing — it just returns text. The per-request cost OpenRouter reports
+  is logged at DEBUG and deliberately **not** returned: that is our billing data,
+  and this response goes straight to the browser.
 - **whisper.cpp container:** `whisper/Dockerfile` builds the server with the `small`
-  model quantized to q5_1 (~180 MB disk, ~400 MB resident) — the quality/footprint
-  sweet spot for a small (2 GB) host. Runs internal-only on `ngu-network`, 500 MB limit.
+  model quantized to q5_1 (~180 MB disk, ~400 MB resident). Runs internal-only on
+  `ngu-network`, 1 GB limit.
 
-**Accuracy tricks that punch above the small model** (see `whisper_client.py`):
-1. **Forced language** — the UI language selector is passed through (`hinglish`→`hi`);
-   forcing the language beats autodetect on a small model.
-2. **Domain prompt** — the decoder is primed with catalogue vocabulary (haldi, jeera,
-   garam masala, "add to cart", …) so in-domain spice terms transcribe reliably.
+### Accuracy notes
 
-**Config / degradation:** `USE_SELF_HOSTED_STT` gates the endpoint (503 when off, so
-the frontend simply behaves as if voice is unavailable). `WHISPER_URL` /
-`WHISPER_TIMEOUT` point at the container; if it's unreachable the endpoint returns
-503 and the transcription is skipped gracefully.
+1. **Forced language** — the UI language selector is passed through (`hinglish`->`hi`).
+   Forcing the language beats autodetect, especially on the small whisper model.
+   WARNING: the two backends disagree on how to say "detect it". whisper.cpp needs
+   the literal `'auto'` (omitting the field makes it assume English), while
+   OpenRouter **422s on `'auto'`** and autodetects only when the field is *absent*.
+   `stt.py` resolves to `'auto'` and each client translates from there — see
+   `test_voxtral_omits_language_when_unknown`.
+2. **Domain prompt** — `stt.DOMAIN_PROMPT` primes the decoder with catalogue
+   vocabulary (haldi, jeera, garam masala, "add to cart", ...). WARNING: **this
+   works on whisper.cpp but appears to be a no-op on Voxtral.** OpenRouter documents
+   `prompt` as "accepted but ignored on most providers", and a side-by-side probe
+   returned byte-identical text with and without it — including transcribing
+   "kasuri methi" as "kajari methi" either way. We still send it (free, harmless,
+   may start being honoured), but Voxtral's accuracy advantage comes from the model
+   itself, not from biasing. Near-miss spice names are absorbed downstream by the
+   search tool's fuzzy/synonym matching rather than fixed at transcription time.
+
+**Config / degradation:** `USE_SELF_HOSTED_STT` gates the endpoint as a whole (503
+when off, so the frontend simply behaves as if voice is unavailable — the name
+predates there being a hosted option). If every configured backend is unreachable
+the endpoint returns 503 and the frontend drops the recording silently.
 
 The system prompt enforces a structured ordering arc for voice sessions:
 1. Search for the item → confirm name + price in the reply
@@ -333,6 +373,35 @@ receives the full history including tool observations.
     agent token-trims them, bounding the queryset on a runaway thread.
   - Older turns beyond the budget stay in the DB for the full audit trail / UI
     history; they are just not sent to the LLM.
+  - **The drop is reported, not silent.** When any turn is trimmed, `Agent.run`
+    returns `history_truncated: True` and both chat views echo it as
+    `history_truncated` in the JSON response. The storefront widget then shows a
+    persistent amber notice + a one-click "Start a new chat" button
+    (`assistant.contextFull` / `assistant.contextFullCta`, all six locales).
+    Rationale: past that point the assistant answers without the earliest part of
+    the thread, so the customer must know its memory of this chat is now partial.
+    The flag is per-thread — it clears on switching threads or starting a new one.
+- **Human handoff (AI pause)**: the moment an admin replies into a thread, the AI
+  stops answering it. This is enforced state, not a prompt instruction — the chat
+  view short-circuits *before* the LLM call, so a handed-off thread also costs
+  zero tokens.
+  - `AssistantConversation.ai_paused_at` / `ai_paused_by` are stamped by
+    `AdminConversationReplyView`. Every admin reply restarts the clock.
+  - `is_ai_paused` is a **computed property**, never a stored bool, so the
+    auto-release takes effect on read without a scheduler tick.
+  - Auto-release: `ASSISTANT_HANDOFF_IDLE_HOURS` (default `12`). Without it an
+    admin who replies at 11pm and goes to bed leaves *nobody* answering — worse
+    than the AI talking over a human. Set `0` to disable (sticky forever).
+  - Manual release: admin PATCHes `{"ai_paused": false}` ("Hand back to AI" in the
+    panel), or resolves/archives the thread, which releases it implicitly.
+  - While paused, a customer message is **still persisted** and re-raises
+    `needs_human` — silence must never mean a lost message. The chat response is
+    `{reply: '', ai_paused: true, handled_by: '<admin name>'}` and the storefront
+    shows a "team member is helping you" banner plus an 8s poll of the open thread
+    (the AI produces no turns during a handoff, so without the poll the chat
+    would look dead until the widget was reopened).
+  - `needs_human` is cleared on an admin reply (they just answered) and re-set by
+    the customer's next message.
 - `MAX_ITERATIONS = 4` — the agent loop runs at most 4 tool-call cycles per turn before
   being forced to a final reply
 - Thread title is auto-generated by the LLM on the first turn and stored on

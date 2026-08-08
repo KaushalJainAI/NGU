@@ -361,11 +361,13 @@ class SpiceSearchEngine:
         try:
             if self.provider.lower() == 'openrouter':
                 from langchain_openai import ChatOpenAI
+                from spices_backend.llm import openrouter_extra_body
                 self.llm = ChatOpenAI(
                     model=self.model_name,
                     openai_api_key=api_key,
                     openai_api_base="https://openrouter.ai/api/v1",
-                    temperature=0.1
+                    temperature=0.1,
+                    extra_body=openrouter_extra_body(),
                 )
             else:
                 self.llm = init_chat_model(

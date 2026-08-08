@@ -24,7 +24,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 
-from . import whisper_client
+from . import stt
 from .models import AssistantConversation, AssistantMessage
 from .serializers import (
     AssistantChatRequestSerializer,
@@ -95,6 +95,30 @@ class AssistantChatView(APIView):
         conversation = self._get_or_create_conversation(
             data.get('conversation_id'), user, anon_session
         )
+        # Human handoff: a team member is on this thread, so the AI stays out of
+        # it entirely. The customer's message is still persisted and the thread
+        # is re-flagged for attention — silence must never mean a lost message.
+        if conversation.is_ai_paused:
+            admin = conversation.ai_paused_by
+            handled_by = (admin.get_full_name() or admin.email) if admin else ''
+            AssistantMessage.objects.create(
+                conversation=conversation, role='user', content=message
+            )
+            fields = ['updated_at']
+            if not conversation.needs_human:
+                conversation.needs_human = True
+                fields.append('needs_human')
+            conversation.save(update_fields=fields)
+            return Response({
+                'conversation_id': str(conversation.conversation_id),
+                'reply': '',
+                'proposed_action': None,
+                'sources': [],
+                'history_truncated': False,
+                'ai_paused': True,
+                'handled_by': handled_by,
+            })
+
         is_first_turn = not conversation.messages.filter(role='assistant').exists()
 
         history = self._load_history(conversation)
@@ -138,6 +162,13 @@ class AssistantChatView(APIView):
             'reply': result.get('reply', ''),
             'proposed_action': proposed_action,
             'sources': result.get('sources', []),
+            # True once the thread no longer fits the model's context window and
+            # its oldest turns were dropped from the prompt. The client shows a
+            # "start a new chat" notice — the assistant is now answering without
+            # the earliest part of this conversation.
+            'history_truncated': bool(result.get('history_truncated')),
+            'ai_paused': False,
+            'handled_by': '',
         })
 
     # ------------------------------------------------------------------
@@ -209,6 +240,7 @@ class AdminAssistantChatView(APIView):
         return Response({
             'reply': result.get('reply', ''),
             'sources': result.get('sources', []),
+            'history_truncated': bool(result.get('history_truncated')),
         })
 
 
@@ -220,7 +252,8 @@ class AssistantTranscribeView(APIView):
     """Speech-to-text for voice chat input.
 
     Accepts an audio blob (multipart field ``audio``), runs it through the
-    self-hosted whisper.cpp server, and returns the transcript. The frontend
+    configured STT backend (``STT_PROVIDER`` — Voxtral over OpenRouter, or the
+    self-hosted whisper.cpp container), and returns the transcript. The frontend
     then sends that transcript to /chat/ exactly like typed text — this endpoint
     never touches the LLM and persists nothing. Login-only, like the rest of the
     assistant (G1)."""
@@ -228,8 +261,9 @@ class AssistantTranscribeView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AssistantTranscribeThrottle, AssistantDailyThrottle]
 
-    # Voice orders are short; cap upload size so a bad client can't hand the
-    # whisper server a huge file. 16 kHz mono WAV is ~32 KB/s, so this is minutes.
+    # Voice orders are short; cap upload size so a bad client can't hand the STT
+    # backend a huge file (a metered one, on Voxtral — audio is billed per minute).
+    # 16 kHz mono WAV is ~32 KB/s, so this is minutes.
     MAX_AUDIO_BYTES = 8 * 1024 * 1024
 
     def post(self, request):
@@ -250,10 +284,10 @@ class AssistantTranscribeView(APIView):
 
         language = (request.data.get('language') or '').strip()
         try:
-            result = whisper_client.transcribe(
+            result = stt.transcribe(
                 audio.read(), audio.name, audio.content_type, language,
             )
-        except whisper_client.WhisperUnavailable:
+        except stt.TranscriptionUnavailable:
             return Response(
                 {'error': 'Transcription service is temporarily unavailable.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -338,12 +372,17 @@ class AdminConversationReplyView(APIView):
             content=ser.validated_data['message'],
             sender_name=sender_name,
         )
-        # Admin joining clears the needs_human flag.
+        # An admin speaking silences the AI on this thread and (re)starts the
+        # idle clock, so the two can't answer the same customer at once.
+        fields = convo.pause_ai(request.user) + ['updated_at']
+        # The admin has just answered, so nothing is waiting on a human right
+        # now. A later customer message re-raises the flag (see AssistantChatView).
         if convo.needs_human:
             convo.needs_human = False
-        convo.save(update_fields=['needs_human', 'updated_at'])
+            fields.append('needs_human')
+        convo.save(update_fields=fields)
 
-        return Response({'status': 'sent'})
+        return Response({'status': 'sent', 'ai_paused': convo.is_ai_paused})
 
 
 class AdminConversationPatchView(APIView):
@@ -354,4 +393,12 @@ class AdminConversationPatchView(APIView):
         ser = ConversationPatchSerializer(convo, data=request.data, partial=True)
         ser.is_valid(raise_exception=True)
         ser.save()
+
+        # Hand the thread back to the AI — either explicitly (`ai_paused: false`)
+        # or implicitly by resolving/archiving it, which ends the human's turn.
+        wants_resume = request.data.get('ai_paused') is False
+        closed = ser.validated_data.get('status') in ('resolved', 'archived')
+        if (wants_resume or closed) and convo.ai_paused_at is not None:
+            convo.save(update_fields=convo.resume_ai() + ['updated_at'])
+
         return Response(ConversationSummarySerializer(convo).data)

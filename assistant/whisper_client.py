@@ -1,11 +1,12 @@
 """Client for the self-hosted whisper.cpp transcription server.
 
-Voice input is transcribed on our own infrastructure (a small whisper.cpp
-container, `small-q5` model) rather than the browser's Web Speech API — the
-latter is browser-dependent and weak on Hindi/Hinglish. See docs/ASSISTANT.md.
+One of two STT backends (see `stt.py` for the dispatcher and the shared domain
+prompt / language mapping). This one keeps audio entirely on our own
+infrastructure, but on the 2 vCPU deploy box it runs ~20s per second of audio,
+so it now serves as the FALLBACK behind Voxtral rather than the default.
 
 Kept intentionally thin and dependency-light: the HTTP details (endpoint shape,
-timeout, domain prompt, language mapping) all live here so the view stays simple.
+timeout) all live here so the view stays simple.
 """
 
 import logging
@@ -13,29 +14,12 @@ import logging
 import requests
 from django.conf import settings
 
+from .stt import DOMAIN_PROMPT, TranscriptionUnavailable, resolve_language
+
 logger = logging.getLogger(__name__)
 
-# Prime the decoder with our catalogue vocabulary. A small model transcribes
-# in-domain spice terms far more reliably when biased toward the words customers
-# actually say — this punches above the model size for our use case.
-DOMAIN_PROMPT = (
-    "Nidhi Masala spices. haldi turmeric, mirch chilli, dhaniya coriander, "
-    "jeera cumin, garam masala, kasuri methi, chaat masala, sabji masala, "
-    "hing asafoetida, elaichi cardamom, laung clove, kali mirch black pepper. "
-    "Add to cart, checkout, my orders, track order."
-)
 
-# Our UI language codes -> whisper language codes. Anything not listed
-# (including 'auto'/'') maps to 'auto' so the server autodetects — NOTE the
-# whisper server defaults to English when language is omitted, so we must send
-# 'auto' explicitly rather than leaving it unset.
-_LANG_MAP = {
-    'en': 'en', 'hi': 'hi', 'hinglish': 'hi',
-    'gu': 'gu', 'mr': 'mr', 'pa': 'pa',
-}
-
-
-class WhisperUnavailable(Exception):
+class WhisperUnavailable(TranscriptionUnavailable):
     """The whisper server was unreachable or returned an error."""
 
 
@@ -47,7 +31,7 @@ def transcribe(audio_bytes: bytes, filename: str, content_type: str, language: s
     """
     # Forcing the language beats autodetect on a small model; 'auto' triggers
     # detection (omitting the field would force English on this server).
-    lang = _LANG_MAP.get((language or '').lower(), 'auto')
+    lang = resolve_language(language)
     data = {
         'temperature': '0.0',
         'response_format': 'json',

@@ -14,14 +14,26 @@ class AssistantChatRequestSerializer(serializers.Serializer):
 class ConversationSummarySerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
     user_email = serializers.SerializerMethodField()
+    # True while a team member is handling the thread and the AI is staying out
+    # of it. Computed (see AssistantConversation.is_ai_paused) so the idle
+    # auto-release is reflected on read without a scheduler tick.
+    ai_paused = serializers.BooleanField(source='is_ai_paused', read_only=True)
+    ai_paused_by = serializers.SerializerMethodField()
 
     class Meta:
         model = AssistantConversation
         fields = [
             'conversation_id', 'title', 'status', 'needs_human',
             'last_message', 'user_email', 'updated_at', 'created_at',
+            'ai_paused', 'ai_paused_by',
         ]
         read_only_fields = fields
+
+    def get_ai_paused_by(self, obj):
+        admin = obj.ai_paused_by
+        if not admin:
+            return ''
+        return admin.get_full_name() or admin.email
 
     def get_last_message(self, obj):
         # Prefer the value annotated on the queryset (avoids an N+1 when the

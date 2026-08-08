@@ -2,12 +2,14 @@
 Unified chat, assistant tools, and admin-assistant tests.
 Includes catalogue/order tools, thread title generation, admin persona, and ordering flows.
 """
+from datetime import timedelta
 from decimal import Decimal
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.core.cache import cache
+from django.utils import timezone
 
 from assistant import tools as toolkit
 from assistant.agent import Agent
@@ -375,6 +377,141 @@ class TestAdminReply:
         assert 'Kaushal' in joined and 'Nidhi Team' in joined
 
 
+# ==================== Human handoff (AI pause) ==================== #
+
+@pytest.mark.django_db
+class TestHumanHandoff:
+    """An admin replying takes the thread; the AI must stop answering it."""
+
+    @staticmethod
+    def _admin_client(test_admin):
+        """A client of its own: the shared `admin_client`/`authenticated_client`
+        fixtures both mutate the SAME api_client, so a test needing both an
+        admin and a customer must not use them together."""
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        client = APIClient()
+        client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {RefreshToken.for_user(test_admin).access_token}'
+        )
+        return client
+
+    def _conv_with_admin_reply(self, admin_client, test_user):
+        conv = AssistantConversation.objects.create(user=test_user)
+        url = f'/api/assistant/conversations/{conv.conversation_id}/admin-reply/'
+        assert admin_client.post(url, {'message': 'I can help'}, format='json').status_code == 200
+        conv.refresh_from_db()
+        return conv
+
+    def test_admin_reply_pauses_ai(self, admin_client, test_admin, test_user):
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        assert conv.ai_paused_at is not None
+        assert conv.ai_paused_by == test_admin
+        assert conv.is_ai_paused is True
+
+    def test_customer_turn_gets_no_ai_reply_while_paused(
+        self, authenticated_client, test_admin, test_user, monkeypatch
+    ):
+        conv = self._conv_with_admin_reply(self._admin_client(test_admin), test_user)
+        # Scripted so that if the view DID call the LLM, it would say this.
+        _capture(monkeypatch, _env(final_reply='I should never speak'))
+
+        resp = authenticated_client.post(
+            CHAT_URL,
+            {'message': 'still there?', 'conversation_id': str(conv.conversation_id)},
+            format='json',
+        )
+        assert resp.status_code == 200
+        assert resp.data['ai_paused'] is True
+        assert resp.data['reply'] == ''
+        # No assistant turn was written to the thread.
+        assert not conv.messages.filter(role='assistant').exists()
+
+    def test_customer_message_is_still_saved_and_reflagged(
+        self, authenticated_client, test_admin, test_user, monkeypatch
+    ):
+        """Silence must never mean a lost message — it is persisted and the
+        thread is re-raised for human attention."""
+        conv = self._conv_with_admin_reply(self._admin_client(test_admin), test_user)
+        conv.refresh_from_db()
+        assert conv.needs_human is False      # admin just answered
+        _capture(monkeypatch, _env(final_reply='nope'))
+        authenticated_client.post(
+            CHAT_URL,
+            {'message': 'any update?', 'conversation_id': str(conv.conversation_id)},
+            format='json',
+        )
+        conv.refresh_from_db()
+        assert conv.needs_human is True
+        assert conv.messages.filter(role='user', content='any update?').exists()
+
+    def test_ai_auto_resumes_after_idle_window(self, admin_client, test_user):
+        """Safety net: an admin who replies and disappears must not strand the
+        customer with nobody answering."""
+        import assistant.models as m
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        conv.ai_paused_at = timezone.now() - timedelta(hours=m.HANDOFF_IDLE_HOURS + 1)
+        conv.save(update_fields=['ai_paused_at'])
+        assert conv.is_ai_paused is False
+
+    def test_idle_window_zero_means_never_auto_resume(self, admin_client, test_user, monkeypatch):
+        import assistant.models as m
+        monkeypatch.setattr(m, 'HANDOFF_IDLE_HOURS', 0)
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        conv.ai_paused_at = timezone.now() - timedelta(days=400)
+        assert conv.is_ai_paused is True
+
+    def test_ai_answers_again_after_idle_release(
+        self, authenticated_client, test_admin, test_user, monkeypatch
+    ):
+        import assistant.models as m
+        conv = self._conv_with_admin_reply(self._admin_client(test_admin), test_user)
+        conv.ai_paused_at = timezone.now() - timedelta(hours=m.HANDOFF_IDLE_HOURS + 1)
+        conv.save(update_fields=['ai_paused_at'])
+        _capture(monkeypatch, _env(final_reply='Back with you'))
+        resp = authenticated_client.post(
+            CHAT_URL,
+            {'message': 'hello?', 'conversation_id': str(conv.conversation_id)},
+            format='json',
+        )
+        assert resp.data['ai_paused'] is False
+        assert resp.data['reply'] == 'Back with you'
+
+    def test_admin_can_hand_thread_back(self, admin_client, test_user):
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        url = f'/api/assistant/conversations/{conv.conversation_id}/'
+        resp = admin_client.patch(url, {'ai_paused': False}, format='json')
+        assert resp.status_code == 200
+        assert resp.data['ai_paused'] is False
+        conv.refresh_from_db()
+        assert conv.ai_paused_at is None and conv.ai_paused_by is None
+
+    def test_resolving_thread_releases_the_ai(self, admin_client, test_user):
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        url = f'/api/assistant/conversations/{conv.conversation_id}/'
+        resp = admin_client.patch(url, {'status': 'resolved'}, format='json')
+        assert resp.status_code == 200
+        conv.refresh_from_db()
+        assert conv.ai_paused_at is None
+
+    def test_second_admin_reply_restarts_the_clock(self, admin_client, test_user):
+        conv = self._conv_with_admin_reply(admin_client, test_user)
+        stale = timezone.now() - timedelta(hours=11)
+        conv.ai_paused_at = stale
+        conv.save(update_fields=['ai_paused_at'])
+        url = f'/api/assistant/conversations/{conv.conversation_id}/admin-reply/'
+        admin_client.post(url, {'message': 'still here'}, format='json')
+        conv.refresh_from_db()
+        assert conv.ai_paused_at > stale
+
+    def test_paused_thread_is_visible_to_admin_list(self, admin_client, test_user):
+        self._conv_with_admin_reply(admin_client, test_user)
+        resp = admin_client.get(ADMIN_LIST_URL)
+        assert resp.status_code == 200
+        assert resp.data[0]['ai_paused'] is True
+        assert resp.data[0]['ai_paused_by'] == 'Admin User'
+
+
 # ==================== Token-budgeted history ==================== #
 
 @pytest.mark.django_db
@@ -411,6 +548,34 @@ class TestHistoryBudget:
         assert 'OLD0' not in joined       # oldest turns dropped
         total_tokens = sum(agent_mod._estimate_tokens(m[1]) for m in captured['messages'])
         assert total_tokens <= agent_mod.MODEL_CONTEXT_TOKENS
+
+    def test_history_truncated_flag_false_when_everything_fits(self, test_user, monkeypatch):
+        history = [{'role': 'user', 'content': f'msg {i}', 'sender_name': ''} for i in range(5)]
+        _capture(monkeypatch, _env(final_reply='ok'))
+        out = Agent(test_user).run('now', history=history)
+        assert out['history_truncated'] is False
+
+    def test_history_truncated_flag_set_when_turns_dropped(self, test_user, monkeypatch):
+        """Dropping the oldest turns must be REPORTED, not silent — the client
+        uses this to tell the customer to start a new conversation."""
+        import assistant.agent as agent_mod
+        monkeypatch.setattr(agent_mod, 'MODEL_CONTEXT_TOKENS', 4000)
+        monkeypatch.setattr(agent_mod, 'TOOL_OBS_RESERVE_TOKENS', 0)
+        big = 'x' * 3000
+        history = [{'role': 'user', 'content': f'OLD{i} {big}', 'sender_name': ''}
+                   for i in range(10)]
+        _capture(monkeypatch, _env(final_reply='ok'))
+        out = Agent(test_user).run('now', history=history)
+        assert out['history_truncated'] is True
+
+    def test_chat_endpoint_exposes_history_truncated(self, authenticated_client, monkeypatch):
+        import assistant.agent as agent_mod
+        monkeypatch.setattr(agent_mod, 'MODEL_CONTEXT_TOKENS', 4000)
+        monkeypatch.setattr(agent_mod, 'TOOL_OBS_RESERVE_TOKENS', 0)
+        _capture(monkeypatch, _env(final_reply='ok'))
+        resp = authenticated_client.post(CHAT_URL, {'message': 'hi'}, format='json')
+        assert resp.status_code == 200
+        assert resp.data['history_truncated'] is False
 
 
 # ==================== Customer thread endpoints ==================== #

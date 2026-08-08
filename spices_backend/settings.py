@@ -169,11 +169,36 @@ MODELTRANSLATION_FALLBACK_LANGUAGES = ('en',)
 USE_CLOUDINARY = config('USE_CLOUDINARY', default=True, cast=bool)
 USE_S3 = config('USE_S3', default=False, cast=bool)
 
-# --- Self-hosted voice transcription (whisper.cpp) ---
-# When enabled, the assistant's voice input is transcribed by the local whisper
-# container (small-q5 model) instead of the browser Web Speech API. Off by
-# default so dev environments without the container fall back to text.
+# --- Voice transcription (assistant voice input) ---
+# USE_SELF_HOSTED_STT gates the /assistant/transcribe/ endpoint as a whole
+# (legacy name — it predates there being a hosted option). Off by default so
+# dev environments without a backend fall back to text-only chat.
 USE_SELF_HOSTED_STT = config('USE_SELF_HOSTED_STT', default=False, cast=bool)
+
+# Which backend does the transcribing: 'voxtral' (Mistral Voxtral Mini
+# Transcribe over OpenRouter — hosted, ~1s per utterance, $0.003/min) or
+# 'whisper' (the local whisper.cpp container — free, but ~20s per second of
+# audio on the 2 vCPU deploy box). See assistant/stt.py.
+STT_PROVIDER = config('STT_PROVIDER', default='voxtral')
+# On a Voxtral failure (OpenRouter outage, exhausted credit limit, missing key),
+# retry on the local container instead of failing the request. Set False if the
+# whisper container is not deployed — the fallback would just add latency before
+# the same 503.
+STT_FALLBACK_TO_WHISPER = config('STT_FALLBACK_TO_WHISPER', default=True, cast=bool)
+
+# Voxtral over OpenRouter. Reuses the assistant's LLM_API_KEY by default; set
+# OPENROUTER_API_KEY to bill transcription to a separate key. `.strip(''"')`
+# because the deployed .env files quote their values.
+OPENROUTER_API_KEY = (
+    config('OPENROUTER_API_KEY', default='') or config('LLM_API_KEY', default='')
+).strip().strip('"').strip("'")
+OPENROUTER_TRANSCRIBE_URL = config(
+    'OPENROUTER_TRANSCRIBE_URL', default='https://openrouter.ai/api/v1/audio/transcriptions'
+)
+VOXTRAL_MODEL = config('VOXTRAL_MODEL', default='mistralai/voxtral-mini-transcribe')
+VOXTRAL_TIMEOUT = config('VOXTRAL_TIMEOUT', default=30, cast=int)
+
+# Self-hosted whisper.cpp container (fallback backend).
 WHISPER_URL = config('WHISPER_URL', default='http://whisper:8080/inference')
 WHISPER_TIMEOUT = config('WHISPER_TIMEOUT', default=30, cast=int)
 
