@@ -70,9 +70,10 @@ Create `.env.local`:
 VITE_API_URL=http://localhost:8000/api
 ```
 
-> The admin panel authenticates with **email + password only** (`src/pages/Login.tsx`).
-> There is no Google sign-in here — `VITE_GOOGLE_CLIENT_ID` is not used. Only the
-> customer storefront (`Frontend/nidhi-brand-forge`) needs it.
+> The admin panel signs staff in with **email + password and Google**
+> (`src/pages/Login.tsx`). Google works for **existing staff accounts only** —
+> it never creates one. Set `VITE_GOOGLE_CLIENT_ID` (or runtime
+> `GOOGLE_CLIENT_ID`); when empty the Google button is hidden.
 
 ## Pages
 
@@ -100,4 +101,3 @@ unauthenticated users to `/login`. All API calls include a JWT `Authorization` h
 ## Deployment
 
 See [DEPLOYMENT.md](../../DEPLOYMENT.md) for EC2 deployment instructions.
-Built as a static Vite app — can also be deployed to Cloudflare Pages (see `HOSTING_PLAN.md`).
