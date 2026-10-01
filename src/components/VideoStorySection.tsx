@@ -8,19 +8,10 @@ import spicesPoster from "@/assets/kitchen-story-poster.jpg";
 const VideoStorySection = () => {
   const { t } = useTranslation();
   return (
-    <section className="relative overflow-hidden border-y border-border/70 bg-card py-8 sm:py-14">
-      <svg
-        className="pointer-events-none absolute inset-0 h-full w-full text-secondary/10"
-        viewBox="0 0 1200 520"
-        preserveAspectRatio="none"
-        aria-hidden="true"
-      >
-        <path d="M-132 377 C 70 199 246 442 436 294 S 768 95 1325 255" fill="none" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
-        <path d="M103 74 C 132 117 174 124 223 102 C 205 149 220 190 261 220 C 210 218 174 242 155 289 C 143 238 113 210 61 204 C 108 178 124 134 103 74Z" fill="currentColor" opacity=".65" />
-      </svg>
-      <div className="container relative mx-auto px-3 sm:px-4">
+    <section className="border-y border-border bg-card py-8 sm:py-14">
+      <div className="container mx-auto px-3 sm:px-4">
         <div className="grid grid-cols-1 lg:grid-cols-[1.08fr_0.92fr] gap-5 sm:gap-8 items-center">
-          <div className="relative aspect-video overflow-hidden rounded-lg border border-border shadow-2xl">
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-border">
             {/* Muted + looping, so the clip carries no audio track. The poster
                 fills the frame while the video buffers instead of a black box. */}
             <video
@@ -34,8 +25,7 @@ const VideoStorySection = () => {
               aria-label={t('ourStory.eyebrow')}
               src={spicesVideo}
             />
-            <div className="absolute inset-0 bg-gradient-to-tr from-foreground/30 via-transparent to-transparent" />
-            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-card/90 px-3 py-1.5 text-xs font-bold text-foreground shadow-lg backdrop-blur">
+            <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-md bg-background/95 px-3 py-1.5 text-xs font-semibold text-foreground">
               <Play className="h-3.5 w-3.5 fill-primary text-primary" />
               {t('ourStory.eyebrow')}
             </div>
@@ -61,7 +51,7 @@ const VideoStorySection = () => {
                 <p className="text-xs text-muted-foreground">{t('ourStory.feature2Desc')}</p>
               </div>
             </div>
-            <Button asChild size="lg" className="group rounded-full shadow-lg shadow-primary/30 hover:brightness-110 active-press">
+            <Button asChild size="lg" className="group rounded-full">
               <Link to="/products" className="flex items-center">
                 {t('ourStory.cta')}
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />

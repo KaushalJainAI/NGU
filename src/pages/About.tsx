@@ -59,7 +59,7 @@ const About = () => {
           <Reveal delay={120}>
             <h1 className="mt-5 text-4xl sm:text-6xl md:text-7xl font-extrabold leading-[1.05] tracking-tight text-foreground">
               {t("about.heroPre")}
-              <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
+              <span className="text-primary">
                 {t("about.heroHighlight")}
               </span>
               {/* heroPost is empty in every locale; guard against i18next
@@ -144,7 +144,7 @@ const About = () => {
             {values.map((value, i) => (
               <Reveal key={i} variant="scale" delay={i * 100}>
                 <div className="group h-full text-center p-4 sm:p-6 bg-card rounded-2xl border border-border shadow-card active-press">
-                  <div className="mx-auto mb-3 sm:mb-4 grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white shadow-[var(--shadow-elegant)] transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3">
+                  <div className="mx-auto mb-3 sm:mb-4 grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-full bg-primary text-white shadow-[var(--shadow-elegant)] transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3">
                     {valueIcons[i]}
                   </div>
                   <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-lg">
@@ -162,7 +162,7 @@ const About = () => {
       <section className="py-12 sm:py-20">
         <div className="container mx-auto px-4">
           <Reveal variant="scale">
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary to-accent p-6 sm:p-14 shadow-[var(--shadow-lift)]">
+            <div className="relative overflow-hidden rounded-3xl bg-primary p-6 sm:p-14 shadow-[var(--shadow-lift)]">
               <div className="absolute inset-0 opacity-20" style={{ background: "var(--backdrop-spice)" }} aria-hidden />
               <div className="relative grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 text-center">
                 {facts.map((fact, i) => (

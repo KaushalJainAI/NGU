@@ -78,7 +78,7 @@ const Contact = () => {
           <Reveal delay={120}>
             <h1 className="mt-4 text-3xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-foreground">
               {t('pages.contact.heroTitleLead')}{" "}
-              <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
+              <span className="text-primary">
                 {t('pages.contact.heroTitleAccent')}
               </span>
             </h1>
@@ -198,7 +198,7 @@ const Contact = () => {
               {channels.map((c, i) => (
                 <Reveal key={i} variant="right" delay={i * 100}>
                   <div className="flex items-start gap-3 sm:gap-4 bg-card rounded-2xl border border-border shadow-card p-4 sm:p-5">
-                    <div className="grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white">
+                    <div className="grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-full bg-primary text-white">
                       {c.icon}
                     </div>
                     <div>
@@ -234,7 +234,7 @@ const Contact = () => {
               {/* Grievance Officer — required disclosure under the Consumer
                   Protection (E-Commerce) Rules, 2020. */}
               <div className="flex items-start gap-3 sm:gap-4 bg-card rounded-2xl border border-border shadow-card p-4 sm:p-5">
-                <div className="grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white">
+                <div className="grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-full bg-primary text-white">
                   <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div>

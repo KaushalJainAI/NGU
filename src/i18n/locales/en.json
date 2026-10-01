@@ -30,15 +30,16 @@
   },
   "hero": {
     "badge": "Authentic Indian Spices",
-    "headlineStart": "Spices ground fresh in ",
-    "headlineHighlight": "Barnagar",
-    "headlineEnd": ", Madhya Pradesh",
-    "description": "Spice blends from our FSSAI-licensed facility in Barnagar — packed fresh, shipped across India. Cash on Delivery available.",
+    "headlineStart": "Taste of ",
+    "headlineHighlight": "Tradition",
+    "headlineEnd": " in Every Spice",
+    "description": "Experience the authentic flavours of India with our premium quality spices and masalas. Made with love, delivered with care.",
     "learnMore": "Learn More",
+    "statsProducts": "Products",
+    "statsPure": "Pure & Natural",
+    "statsCustomers": "Happy Customers",
     "handPackedFresh": "Hand-packed fresh",
-    "statsLicensed": "Lic. No. 11414730000288",
-    "statsMadeIn": "Made in Madhya Pradesh",
-    "statsCod": "Cash on Delivery"
+    "since": "Since 1995"
   },
   "home": {
     "features": {
@@ -185,7 +186,7 @@
     "endsOn": "Ends {{date}}"
   },
   "trust": {
-    "freeShipping": "🚚 Free shipping ₹499+",
+    "freeShipping": "Free shipping ₹499+",
     "happyKitchens": "FSSAI Lic. No. 11414730000288"
   },
   "trustBand": {

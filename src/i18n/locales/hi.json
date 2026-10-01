@@ -30,15 +30,16 @@
   },
   "hero": {
     "badge": "असली भारतीय मसाले",
-    "headlineStart": "मध्य प्रदेश के ",
-    "headlineHighlight": "बड़नगर",
-    "headlineEnd": " में ताज़ा पिसे मसाले",
-    "description": "बड़नगर में हमारी FSSAI-लाइसेंस प्राप्त सुविधा के मसाले — ताज़ा पैक, पूरे भारत में डिलीवरी। कैश ऑन डिलीवरी उपलब्ध।",
+    "headlineStart": "हर मसाले में ",
+    "headlineHighlight": "परंपरा",
+    "headlineEnd": " का स्वाद",
+    "description": "हमारे प्रीमियम मसालों के साथ भारत के असली स्वाद का अनुभव करें। प्यार से बने, देखभाल के साथ पहुँचाए।",
     "learnMore": "और जानें",
+    "statsProducts": "उत्पाद",
+    "statsPure": "शुद्ध और प्राकृतिक",
+    "statsCustomers": "खुश ग्राहक",
     "handPackedFresh": "ताज़ा हाथ से पैक",
-    "statsLicensed": "लाइसेंस नं. 11414730000288",
-    "statsMadeIn": "मध्य प्रदेश में निर्मित",
-    "statsCod": "कैश ऑन डिलीवरी"
+    "since": "1995 से"
   },
   "home": {
     "features": {
@@ -171,7 +172,7 @@
     "endsOn": "{{date}} को समाप्त"
   },
   "trust": {
-    "freeShipping": "🚚 फ्री शिपिंग ₹499+",
+    "freeShipping": "फ्री शिपिंग ₹499+",
     "happyKitchens": "FSSAI लाइसेंस नं. 11414730000288"
   },
   "trustBand": {

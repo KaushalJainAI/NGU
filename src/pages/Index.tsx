@@ -247,7 +247,7 @@ const Index = () => {
 
         {/* Recommended For You (personalized, logged-in users only) */}
         {recommendedForYou.length > 0 && (
-          <section className="py-8 sm:py-10 bg-gradient-to-r from-primary/10 via-accent/10 to-secondary/10">
+          <section className="py-8 sm:py-10 bg-muted/30">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="mb-4">
                                 <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.recommended.title')}</h2>
@@ -309,7 +309,7 @@ const Index = () => {
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
               {features.map((feature, index) => (
                 <div key={index} className="group flex flex-col items-center text-center p-3 sm:p-5 bg-card rounded-lg border border-border/80 shadow-sm transition-colors duration-300 hover:border-primary/25">
-                  <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full spice-backdrop grid place-items-center text-primary mb-2 sm:mb-4 transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3">{feature.icon}</div>
+                  <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full spice-backdrop grid place-items-center text-primary mb-2 sm:mb-4">{feature.icon}</div>
                   <h3 className="font-semibold text-xs sm:text-base text-foreground mb-1 sm:mb-2">{feature.title}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">{feature.description}</p>
                 </div>
@@ -333,16 +333,8 @@ const Index = () => {
 
         {/* Categories Section */}
         {categories.length > 0 && (
-          <section className="relative overflow-hidden py-9 sm:py-12 bg-gradient-to-br from-primary/5 via-accent/5 to-secondary/5">
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full text-primary/10"
-              viewBox="0 0 1200 520"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path d="M-120 351 C 93 169 247 414 449 278 S 801 89 1329 226" fill="none" stroke="currentColor" strokeWidth="18" strokeLinecap="round" />
-            </svg>
-            <div className="container relative mx-auto px-2 sm:px-4">
+          <section className="py-9 sm:py-12 bg-muted/30">
+            <div className="container mx-auto px-2 sm:px-4">
               <div className="text-center mb-6">
                                 <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.categories.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground max-w-2xl mx-auto">
@@ -356,7 +348,7 @@ const Index = () => {
                     onClick={() => handleCategoryClick(category)}
                     className="group relative flex w-28 shrink-0 flex-col items-center gap-2 overflow-hidden rounded-lg bg-card border border-border/80 p-3 shadow-sm transition-colors duration-300 hover:border-primary/25 sm:w-auto sm:p-5 sm:gap-3"
                   >
-                    <span className="h-14 w-14 sm:h-20 sm:w-20 rounded-full spice-backdrop grid place-items-center overflow-hidden transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3">
+                    <span className="h-14 w-14 sm:h-20 sm:w-20 rounded-full spice-backdrop grid place-items-center overflow-hidden">
                       {category.image ? (
                         <img src={category.image} alt={category.name} className="h-10 w-10 sm:h-16 sm:w-16 object-contain" />
                       ) : (
@@ -402,7 +394,7 @@ const Index = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-5">
               {featuredReviews.map((review) => (
-                <div key={review.id} className="bg-card rounded-lg p-4 sm:p-6 border border-border/80 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg flex flex-col">
+                <div key={review.id} className="bg-card rounded-lg p-4 sm:p-6 border border-border/80 shadow-sm flex flex-col">
                   <div className="flex mb-2 sm:mb-4 text-accent">
                     {[...Array(Math.max(0, Math.min(5, review.rating)))].map((_, i) => (
                       <span key={i} className="text-accent text-sm sm:text-base">★</span>
@@ -437,12 +429,9 @@ const Index = () => {
         {/* CTA Section */}
         <section className="py-8 sm:py-14">
           <div className="container mx-auto px-3 sm:px-4">
-            <div
-              className="relative overflow-hidden rounded-2xl px-6 py-12 sm:px-10 sm:py-16 text-center text-primary-foreground shadow-xl"
-              style={{ background: "var(--gradient-offer)" }}
-            >
+            <div className="rounded-2xl bg-primary px-6 py-12 sm:px-10 sm:py-16 text-center text-primary-foreground">
               <div className="relative">
-                <span className="inline-block bg-white/20 backdrop-blur-sm text-xs font-semibold tracking-wide px-3 py-1.5 rounded-full mb-3 sm:mb-4">
+                <span className="block text-xs sm:text-sm font-semibold text-primary-foreground/85 mb-3 sm:mb-4">
                   {t('home.cta.handPacked')}
                 </span>
                 <h2 className="text-2xl sm:text-4xl font-extrabold mb-2 sm:mb-3">
@@ -455,7 +444,7 @@ const Index = () => {
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                   <Button
                     size="lg"
-                    className="group w-full sm:w-auto rounded-full bg-background text-primary font-bold shadow-lg hover:bg-background/90 active-press"
+                    className="group w-full sm:w-auto rounded-full bg-background text-primary font-semibold hover:bg-background/90"
                     asChild
                   >
                     <Link to="/products" className="flex items-center justify-center">
@@ -466,7 +455,7 @@ const Index = () => {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="w-full sm:w-auto rounded-full border-2 border-white/70 bg-transparent text-primary-foreground font-bold hover:bg-white/15 hover:text-primary-foreground active-press"
+                    className="w-full sm:w-auto rounded-full border border-white/70 bg-transparent text-primary-foreground font-semibold hover:bg-white/15 hover:text-primary-foreground"
                     asChild
                   >
                     <Link to="/offer-zone" className="flex items-center justify-center">

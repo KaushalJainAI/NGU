@@ -24,15 +24,16 @@
   },
   "hero": {
     "badge": "ਅਸਲੀ ਭਾਰਤੀ ਮਸਾਲੇ",
-    "headlineStart": "ਮੱਧ ਪ੍ਰਦੇਸ਼ ਦੇ ",
-    "headlineHighlight": "ਬੜਨਗਰ",
-    "headlineEnd": " ਵਿੱਚ ਤਾਜ਼ੇ ਪੀਸੇ ਮਸਾਲੇ",
-    "description": "ਬੜਨਗਰ ਦੀ FSSAI-ਲਾਇਸੰਸ ਸੁਵਿਧਾ ਤੋਂ ਮਸਾਲੇ — ਤਾਜ਼ਾ ਪੈਕਿੰਗ, ਪੂਰੇ ਭਾਰਤ ਵਿੱਚ ਡਿਲਿਵਰੀ. ਕੈਸ਼ ਆਨ ਡਿਲਿਵਰੀ ਉਪਲਬਧ.",
+    "headlineStart": "ਹਰ ਮਸਾਲੇ ਵਿੱਚ ",
+    "headlineHighlight": "ਪਰੰਪਰਾ",
+    "headlineEnd": " ਦਾ ਸੁਆਦ",
+    "description": "ਸਾਡੇ ਪ੍ਰੀਮੀਅਮ ਮਸਾਲਿਆਂ ਨਾਲ ਭਾਰਤ ਦੇ ਅਸਲੀ ਸੁਆਦ ਦਾ ਅਨੁਭਵ ਕਰੋ। ਪਿਆਰ ਨਾਲ ਬਣਾਏ, ਸੰਭਾਲ ਨਾਲ ਪਹੁੰਚਾਏ।",
     "learnMore": "ਹੋਰ ਜਾਣੋ",
+    "statsProducts": "ਪ੍ਰੋਡਕਟ",
+    "statsPure": "ਸ਼ੁੱਧ ਅਤੇ ਕੁਦਰਤੀ",
+    "statsCustomers": "ਖੁਸ਼ ਗਾਹਕ",
     "handPackedFresh": "ਹੱਥਾਂ ਨਾਲ ਤਾਜ਼ਾ ਪੈਕ ਕੀਤਾ",
-    "statsLicensed": "ਲਾਇਸੰਸ ਨੰ. 11414730000288",
-    "statsMadeIn": "ਮੱਧ ਪ੍ਰਦੇਸ਼ ਵਿੱਚ ਤਿਆਰ",
-    "statsCod": "ਕੈਸ਼ ਆਨ ਡਿਲਿਵਰੀ"
+    "since": "1995 ਤੋਂ"
   },
   "home": {
     "features": {
@@ -285,7 +286,7 @@
     "endsOn": "{{date}} ਨੂੰ ਸਮਾਪਤ"
   },
   "trust": {
-    "freeShipping": "🚚 ਮੁਫ਼ਤ ਸ਼ਿਪਿੰਗ ₹499+",
+    "freeShipping": "ਮੁਫ਼ਤ ਸ਼ਿਪਿੰਗ ₹499+",
     "happyKitchens": "FSSAI ਲਾਇਸੰਸ ਨੰ. 11414730000288"
   },
   "trustBand": {

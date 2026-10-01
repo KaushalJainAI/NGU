@@ -10,7 +10,7 @@ const Footer = () => {
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
           {/* Company Info */}
           <div className="col-span-2 sm:col-span-1">
-            <h3 className="notranslate text-base sm:text-xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent mb-2 sm:mb-4">
+            <h3 className="notranslate text-base sm:text-xl font-bold text-primary mb-2 sm:mb-4">
               Nidhi Grah Udyog
             </h3>
             <p className="text-muted-foreground text-xs sm:text-base mb-2 sm:mb-4">

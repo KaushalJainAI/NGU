@@ -274,7 +274,7 @@ const Register = () => {
                 <Trans i18nKey="register.agreePrivacy" components={{ a: <Link to="/privacy-policy" target="_blank" className="text-primary hover:underline" /> }} />
               </Label>
             </div>
-            <Button type="submit" className="w-full h-11 rounded-full font-bold bg-gradient-to-r from-primary to-accent shadow-lg shadow-primary/30 hover:brightness-110 active-press transition-all" disabled={isLoading || !agreedToPrivacy}>
+            <Button type="submit" className="w-full h-11 rounded-full font-bold bg-primary transition-all" disabled={isLoading || !agreedToPrivacy}>
               {isLoading ? t('register.creating') : t('register.create')}
             </Button>
             <p className="text-sm text-center text-muted-foreground">

@@ -89,7 +89,7 @@ const PrivacyPolicy = () => {
         <div className="absolute inset-0" style={{ background: "var(--backdrop-spice)" }} aria-hidden />
         <div className="relative container mx-auto px-4 max-w-4xl py-12 sm:py-16">
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-accent text-white shadow-[var(--shadow-elegant)]">
+            <div className="grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-2xl bg-primary text-white shadow-[var(--shadow-elegant)]">
               <ShieldCheck className="h-6 w-6 sm:h-8 sm:w-8" />
             </div>
             <div>

@@ -24,15 +24,16 @@
   },
   "hero": {
     "badge": "અસ્સલ ભારતીય મસાલા",
-    "headlineStart": "મધ્ય પ્રદેશના ",
-    "headlineHighlight": "બડનગર",
-    "headlineEnd": "માં તાજા દળેલા મસાલા",
-    "description": "બડનગરની FSSAI-લાઇસન્સ સુવિધાના મસાલા — તાજું પેકિંગ, સમગ્ર ભારતમાં ડિલિવરી. કેશ ઓન ડિલિવરી ઉપલબ્ધ.",
+    "headlineStart": "દરેક મસાલામાં ",
+    "headlineHighlight": "પરંપરા",
+    "headlineEnd": "નો સ્વાદ",
+    "description": "અમારા પ્રીમિયમ મસાલા સાથે ભારતના અસ્સલ સ્વાદનો અનુભવ કરો. પ્રેમથી બનાવ્યા, કાળજીથી પહોંચાડ્યા.",
     "learnMore": "વધુ જાણો",
+    "statsProducts": "પ્રોડક્ટ્સ",
+    "statsPure": "શુદ્ધ અને કુદરતી",
+    "statsCustomers": "ખુશ ગ્રાહક",
     "handPackedFresh": "હાથથી તાજું પેક કરેલું",
-    "statsLicensed": "લાઇસન્સ નં. 11414730000288",
-    "statsMadeIn": "મધ્ય પ્રદેશમાં નિર્મિત",
-    "statsCod": "કેશ ઓન ડિલિવરી"
+    "since": "1995 થી"
   },
   "home": {
     "features": {
@@ -285,7 +286,7 @@
     "endsOn": "{{date}} ના રોજ સમાપ્ત"
   },
   "trust": {
-    "freeShipping": "🚚 મફત શિપિંગ ₹499+",
+    "freeShipping": "મફત શિપિંગ ₹499+",
     "happyKitchens": "FSSAI લાઇસન્સ નં. 11414730000288"
   },
   "trustBand": {

@@ -10,10 +10,10 @@ const UspRibbon = () => {
 
   // Falls back to English copy when a translation key is missing.
   const items = [
-    `🚚 ${t("ribbon.freeShipping")}`,
-    `🌿 ${t("ribbon.pure")}`,
-    `🏠 ${t("ribbon.handPacked")}`,
-    `⭐ ${t("ribbon.trusted")}`,
+    t("ribbon.freeShipping"),
+    t("ribbon.pure"),
+    t("ribbon.handPacked"),
+    t("ribbon.trusted"),
   ];
 
   return (

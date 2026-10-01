@@ -77,7 +77,7 @@ const ForgotPassword = () => {
               <CardFooter className="flex flex-col space-y-4">
                 <Button
                   type="submit"
-                  className="w-full bg-gradient-to-r from-primary to-accent hover:opacity-90 transition-opacity"
+                  className="w-full bg-primary hover:opacity-90 transition-opacity"
                   disabled={isLoading}
                 >
                   {isLoading ? t('forgotPassword.sending') : t('forgotPassword.sendOtp')}

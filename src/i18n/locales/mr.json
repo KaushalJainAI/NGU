@@ -24,15 +24,16 @@
   },
   "hero": {
     "badge": "खरे भारतीय मसाले",
-    "headlineStart": "मध्य प्रदेशातील ",
-    "headlineHighlight": "बडनगर",
-    "headlineEnd": "मध्ये ताजे दळलेले मसाले",
-    "description": "बडनगरमधील FSSAI-परवानाधारक सुविधेतील मसाले — ताजे पॅकिंग, संपूर्ण भारतात डिलिव्हरी. कॅश ऑन डिलिव्हरी उपलब्ध.",
+    "headlineStart": "प्रत्येक मसाल्यात ",
+    "headlineHighlight": "परंपरा",
+    "headlineEnd": "ची चव",
+    "description": "आमच्या प्रीमियम मसाल्यांसह भारताच्या खऱ्या चवीचा अनुभव घ्या. प्रेमाने बनवले, काळजीने पोहोचवले.",
     "learnMore": "अधिक जाणा",
+    "statsProducts": "प्रॉडक्ट्स",
+    "statsPure": "शुद्ध आणि नैसर्गिक",
+    "statsCustomers": "आनंदी ग्राहक",
     "handPackedFresh": "हाताने ताजे पॅक केलेले",
-    "statsLicensed": "परवाना क्र. 11414730000288",
-    "statsMadeIn": "मध्य प्रदेशमध्ये उत्पादित",
-    "statsCod": "कॅश ऑन डिलिव्हरी"
+    "since": "1995 पासून"
   },
   "home": {
     "features": {
@@ -285,7 +286,7 @@
     "endsOn": "{{date}} रोजी संपेल"
   },
   "trust": {
-    "freeShipping": "🚚 मोफत शिपिंग ₹499+",
+    "freeShipping": "मोफत शिपिंग ₹499+",
     "happyKitchens": "FSSAI परवाना क्र. 11414730000288"
   },
   "trustBand": {

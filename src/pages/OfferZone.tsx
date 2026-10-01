@@ -134,7 +134,7 @@ const OfferZone = () => {
             <>
               <div className="text-center mb-6 sm:mb-10">
                 <h2 className="text-2xl sm:text-4xl font-bold mb-2">
-                  <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                  <span className="text-primary">
                     {t('offerZone.comboOffersTitle')}
                   </span>
                 </h2>
@@ -266,7 +266,7 @@ const OfferZone = () => {
             <>
                <div className="text-center mb-6 sm:mb-10">
                 <h2 className="text-2xl sm:text-4xl font-bold mb-2">
-                  <span className="bg-gradient-to-r from-accent to-secondary bg-clip-text text-transparent">
+                  <span className="text-primary">
                     {t('offerZone.hotDealsTitle')}
                   </span>
                 </h2>

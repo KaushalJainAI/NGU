@@ -414,13 +414,13 @@ const MyOrders = () => {
         <div className="absolute inset-0" style={{ background: "var(--backdrop-spice)" }} aria-hidden />
         <div className="relative container mx-auto px-4 py-8 sm:py-14 max-w-5xl animate-fade-in-up">
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white shadow-[var(--shadow-elegant)]">
+            <div className="grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-full bg-primary text-white shadow-[var(--shadow-elegant)]">
               <Package className="h-6 w-6 sm:h-8 sm:w-8" />
             </div>
             <div>
               <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground">
                 {t('myOrders.titleLead')}{" "}
-                <span className="bg-gradient-to-r from-primary via-primary to-accent bg-clip-text text-transparent">
+                <span className="text-primary">
                   {t('myOrders.titleAccent')}
                 </span>
               </h1>

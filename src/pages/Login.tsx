@@ -121,7 +121,7 @@ const Login: React.FC = () => {
               <CardFooter className="flex flex-col space-y-4">
                 <Button
                   type="submit"
-                  className="w-full h-11 rounded-full font-bold bg-gradient-to-r from-primary to-accent shadow-lg shadow-primary/30 hover:brightness-110 active-press transition-all"
+                  className="w-full h-11 rounded-full font-bold bg-primary transition-all"
                   disabled={isLoading}
                 >
                   {isLoading ? t('auth.loggingIn') : t('auth.login')}

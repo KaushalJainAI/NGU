@@ -24,15 +24,16 @@
   },
   "hero": {
     "badge": "Asli Indian Masale",
-    "headlineStart": "Spices ground fresh in ",
-    "headlineHighlight": "Barnagar",
-    "headlineEnd": ", Madhya Pradesh",
-    "description": "Barnagar ki FSSAI-licensed facility se fresh masale — poore India mein delivery. COD available.",
+    "headlineStart": "Har Masale Mein ",
+    "headlineHighlight": "Parampara",
+    "headlineEnd": " Ka Swaad",
+    "description": "Hamare premium masalon ke saath India ke asli swaad ka anubhav karein. Pyaar se bane, care ke saath pahunchaye.",
     "learnMore": "Aur Jaanein",
+    "statsProducts": "Products",
+    "statsPure": "Shudh aur Natural",
+    "statsCustomers": "Khush Customers",
     "handPackedFresh": "Hand-packed fresh",
-    "statsLicensed": "Lic. No. 11414730000288",
-    "statsMadeIn": "Made in Barnagar, MP",
-    "statsCod": "Cash on Delivery"
+    "since": "Since 1995"
   },
   "home": {
     "features": {
@@ -285,7 +286,7 @@
     "endsOn": "{{date}} ko khatam"
   },
   "trust": {
-    "freeShipping": "🚚 Free shipping ₹499+",
+    "freeShipping": "Free shipping ₹499+",
     "happyKitchens": "FSSAI Lic. No. 11414730000288"
   },
   "trustBand": {
