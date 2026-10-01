@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Command as CommandPrimitive } from "cmdk";
-import { Loader2, Search, X } from "lucide-react";
+import { Loader2, Mic, MicOff, Search, X } from "lucide-react";
+import { toast } from "sonner";
 import { Command, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { searchAPI, Suggestion } from "@/lib/api/search";
 import { matchPages } from "@/lib/searchablePages";
 import { LANG_STORAGE_KEY } from "@/i18n/index";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { useTranslation } from "react-i18next";
 
 interface SearchAutocompleteProps {
@@ -43,6 +45,40 @@ const SearchAutocomplete = ({
   }, [query]);
 
   const lang = localStorage.getItem(LANG_STORAGE_KEY) ?? "en";
+
+  // AP11: mic in the search bar — one utterance fills the box (reuses the
+  // chat voice hook; silence stops it, errors toast instead of vanishing).
+  const {
+    supported: voiceSupported, recording: voiceRecording,
+    transcribing: voiceTranscribing, error: voiceError, clearError: clearVoiceError,
+    start: voiceStart, stop: voiceStop,
+  } = useVoiceInput(
+    (text) => {
+      setQuery(text);
+      setOpen(true);
+      inputRef.current?.focus();
+    },
+    () => localStorage.getItem(LANG_STORAGE_KEY) ?? "en",
+  );
+
+  useEffect(() => {
+    if (!voiceError) return;
+    const key =
+      voiceError === "mic-denied"
+        ? "assistant.voiceMicDenied"
+        : voiceError === "transcribe-failed"
+          ? "assistant.voiceTranscribeFailed"
+          : "assistant.voiceNothingHeard";
+    const fallback =
+      voiceError === "mic-denied"
+        ? "Microphone blocked — allow mic access to use voice."
+        : voiceError === "transcribe-failed"
+          ? "Could not transcribe that — please try again."
+          : "Didn't catch that — please try again.";
+    toast.error(t(key, fallback));
+    clearVoiceError();
+  }, [voiceError, t, clearVoiceError]);
+
   const { data, isFetching } = useQuery({
     queryKey: ["suggest", lang, debouncedQuery],
     queryFn: () => searchAPI.suggest(debouncedQuery),
@@ -190,6 +226,28 @@ const SearchAutocomplete = ({
               inputClassName,
             )}
           />
+
+          {voiceSupported && !query && (
+            <button
+              type="button"
+              aria-label={t('assistant.speak', 'Speak')}
+              onClick={() => (voiceRecording ? voiceStop() : void voiceStart())}
+              disabled={voiceTranscribing}
+              className={cn(
+                "absolute right-3 top-1/2 z-10 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-full",
+                "text-muted-foreground hover:bg-muted hover:text-foreground",
+                voiceRecording && "animate-pulse text-primary",
+              )}
+            >
+              {voiceTranscribing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : voiceRecording ? (
+                <MicOff className="h-3.5 w-3.5" />
+              ) : (
+                <Mic className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
 
           {query && (
             <button

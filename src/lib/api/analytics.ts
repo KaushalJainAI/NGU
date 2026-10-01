@@ -28,7 +28,10 @@ export type TrackEventType =
   | "page_view"
   | "checkout_started"
   | "checkout_completed"
-  | "checkout_abandoned";
+  | "checkout_abandoned"
+  // AP11 voice-ordering funnel ("say your shopping list").
+  | "voice_used"
+  | "voice_confirmed";
 
 /** Aggregate metrics accepted by the anonymous counter endpoint. */
 export type AnonMetric =

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, User, Send, Mic, MicOff, X, Loader2,
   ArrowRight, ShoppingCart, ShoppingBasket, Plus, Minus, ChevronLeft, Shield, AlertTriangle,
+  Volume2, VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import {
   assistantAPI, AssistantReply, ProposedAction, ProposalLine, ConversationSummary, ChatMessage,
 } from "@/lib/api/assistant";
 import { cartAPI } from "@/lib/api/cart";
+import { trackEvent } from "@/lib/api/analytics";
 import { MAX_ITEM_QUANTITY } from "@/config/limits";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
@@ -149,6 +151,11 @@ const AssistantWidget = () => {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"threads" | "chat">("chat");
   const [voiceMode, setVoiceMode] = useState(false);
+  // AP11: read-aloud is an EXPLICIT toggle, default OFF (using the mic once
+  // must not narrate every later typed reply). Persisted per device.
+  const [readAloud, setReadAloud] = useState(
+    () => localStorage.getItem("assistant_read_aloud") === "1"
+  );
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<LocalTurn[]>([GREETING]);
   const [activeConvId, setActiveConvId] = useState<string | null>(
@@ -171,15 +178,77 @@ const AssistantWidget = () => {
   // without re-creating the hook (which would churn the external-open effect).
   const voiceModeRef = useRef(voiceMode);
   voiceModeRef.current = voiceMode;
-  const sendRef = useRef<(text: string) => void>(() => {});
+  const sendRef = useRef<(text: string, viaVoice?: boolean) => void>(() => {});
+  // True while the pending turn came from the mic — a later proposal confirm
+  // then counts as a voice confirmation (AP11 funnel event).
+  const voiceTurnRef = useRef(false);
 
-  const { supported: voiceSupported, recording, transcribing, start, stop } = useVoiceInput(
+  const { supported: voiceSupported, recording, transcribing, error: voiceError, clearError: clearVoiceError, start, stop } = useVoiceInput(
     (text) => {
       setInput(text);
-      if (voiceModeRef.current) sendRef.current(text);
+      if (voiceModeRef.current) {
+        setVoiceMode(false); // one-shot per utterance: mic tap re-arms
+        trackEvent({ event_type: "voice_used" });
+        sendRef.current(text, true);
+      }
     },
     () => language
   );
+
+  // AP11: mic/transcription failures are visible (the hook never swallows).
+  useEffect(() => {
+    if (!voiceError) return;
+    const key =
+      voiceError === "mic-denied"
+        ? "assistant.voiceMicDenied"
+        : voiceError === "transcribe-failed"
+          ? "assistant.voiceTranscribeFailed"
+          : "assistant.voiceNothingHeard";
+    const fallback =
+      voiceError === "mic-denied"
+        ? "Microphone blocked — allow mic access to use voice."
+        : voiceError === "transcribe-failed"
+          ? "Could not transcribe that — please try again."
+          : "Didn't catch that — please try again.";
+    toast.error(t(key, fallback));
+    clearVoiceError();
+  }, [voiceError, t, clearVoiceError]);
+
+  // AP11: read-aloud speaks in the thread's language (browser default would
+  // mangle Hindi/Gujarati/Marathi/Punjabi). Never runs unless toggled on.
+  const speak = useCallback(
+    (text: string) => {
+      if (!readAloud || !("speechSynthesis" in window) || !text) return;
+      const langMap: Record<string, string> = {
+        hi: "hi-IN", hinglish: "hi-IN", gu: "gu-IN", mr: "mr-IN", pa: "pa-IN",
+      };
+      try {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(stripMarkdown(text));
+        utterance.lang = langMap[language] ?? "en-IN";
+        window.speechSynthesis.speak(utterance);
+      } catch { /* noop */ }
+    },
+    [readAloud, language]
+  );
+
+  const toggleReadAloud = useCallback(() => {
+    setReadAloud((prev) => {
+      const next = !prev;
+      localStorage.setItem("assistant_read_aloud", next ? "1" : "0");
+      if (!next && "speechSynthesis" in window) {
+        try { window.speechSynthesis.cancel(); } catch { /* noop */ }
+      }
+      return next;
+    });
+  }, []);
+
+  // AP11: speech never leaks past the widget — closing stops it cold.
+  useEffect(() => {
+    if (!open && "speechSynthesis" in window) {
+      try { window.speechSynthesis.cancel(); } catch { /* noop */ }
+    }
+  }, [open]);
 
   // ── Thread list (only when logged in) ─────────────────────────────────────
   const { data: threads = [] } = useQuery<ConversationSummary[]>({
@@ -303,13 +372,7 @@ const AssistantWidget = () => {
         { role: "assistant", text: data.reply, action: data.proposed_action },
       ]);
       queryClient.invalidateQueries({ queryKey: ["assistant-threads"] });
-      if (voiceMode && "speechSynthesis" in window && data.reply) {
-        try {
-          window.speechSynthesis.speak(
-            new SpeechSynthesisUtterance(stripMarkdown(data.reply))
-          );
-        } catch { /* noop */ }
-      }
+      speak(data.reply);
     },
     onError: () => {
       setTurns((prev) => [
@@ -320,9 +383,10 @@ const AssistantWidget = () => {
   });
 
   const send = useCallback(
-    (raw: string) => {
+    (raw: string, viaVoice = false) => {
       const message = raw.trim();
       if (!message || mutation.isPending) return;
+      voiceTurnRef.current = viaVoice;
       setTurns((prev) => [...prev, { role: "user", text: message }]);
       setInput("");
       mutation.mutate(message);
@@ -367,6 +431,9 @@ const AssistantWidget = () => {
 
   const handleAction = async (action: ProposedAction, turnIndex: number) => {
     markActionUsed(turnIndex);
+    // AP11 funnel: a proposal confirm that completes a voice-originated turn.
+    const fromVoice = voiceTurnRef.current;
+    voiceTurnRef.current = false;
     try {
       switch (action.type) {
         case "add_to_cart": {
@@ -379,6 +446,7 @@ const AssistantWidget = () => {
             quantity: action.quantity || 1,
           });
           if (res.requiresLogin) navigate("/login");
+          else if (fromVoice) trackEvent({ event_type: "voice_confirmed" });
           break;
         }
         case "cart_proposal": {
@@ -391,6 +459,7 @@ const AssistantWidget = () => {
           })));
           await fetchCartFromBackend();
           toast.success(t('assistant.proposalAdded', 'Added to cart'));
+          if (fromVoice) trackEvent({ event_type: "voice_confirmed" });
           break;
         }
         case "edit_cart": {
@@ -402,6 +471,7 @@ const AssistantWidget = () => {
             }
           }
           toast.success(t('assistant.proposalUpdated', 'Cart updated'));
+          if (fromVoice) trackEvent({ event_type: "voice_confirmed" });
           break;
         }
         case "checkout":
@@ -466,6 +536,19 @@ const AssistantWidget = () => {
         <span className="font-semibold text-sm flex-1 truncate">
           {view === "threads" ? t('assistant.yourConversations') : t('assistant.title')}
         </span>
+
+        {view === "chat" && (
+          <button
+            onClick={toggleReadAloud}
+            aria-label={t('assistant.readAloudAria', 'Read replies aloud')}
+            title={readAloud
+              ? t('assistant.readAloudOn', 'Read-aloud on')
+              : t('assistant.readAloudOff', 'Read-aloud off')}
+            className="opacity-80 hover:opacity-100"
+          >
+            {readAloud ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+          </button>
+        )}
 
         {view === "chat" && (
           <Select
