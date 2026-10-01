@@ -28,8 +28,12 @@ ADDR = {"shipping_address": "1 Rd", "phone_number": "1234567890", "payment_metho
 
 
 def _make_user(django_user_model, n):
+    # AP7b: the COD guard needs verified inboxes — these racers model
+    # established buyers, so verify them (the race under test is stock/coupon
+    # locking, not verification).
     return django_user_model.objects.create_user(
-        username=f"race{n}", email=f"race{n}@example.com", password="x")
+        username=f"race{n}", email=f"race{n}@example.com", password="x",
+        email_verified=True)
 
 
 def _product(cat, stock, price="600.00"):
