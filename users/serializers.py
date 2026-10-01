@@ -10,8 +10,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'name', 'first_name', 'last_name', 'phone',
-                  'address', 'city', 'state', 'pincode', 'profile_picture', 'created_at']
-        read_only_fields = ['id', 'created_at']
+                  'address', 'city', 'state', 'pincode', 'profile_picture', 'created_at',
+                  'is_staff']
+        read_only_fields = ['id', 'created_at', 'is_staff']
 
     def validate_email(self, value):
         # Profile updates can change email too, so apply the same canonical,

@@ -14,7 +14,8 @@ def health_check(request):
 
 from users.views import (
     UserRegistrationView, UserProfileView, CustomTokenObtainPairView, CustomTokenRefreshView, ChangePasswordView,
-    PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin
+    PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin,
+    LogoutView, AdminLoginView, AdminGoogleLoginView, AdminTokenRefreshView, AdminLogoutView,
 )
 from products.sitemaps import sitemap_xml, robots_txt
 from products.views import (
@@ -99,6 +100,11 @@ urlpatterns = [
     path('api/auth/register/', UserRegistrationView.as_view(), name='register'),
     path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='logout'),
+    path('api/auth/admin/login/', AdminLoginView.as_view(), name='admin-login'),
+    path('api/auth/admin/google/', AdminGoogleLoginView.as_view(), name='admin-google-login'),
+    path('api/auth/admin/token/refresh/', AdminTokenRefreshView.as_view(), name='admin-token-refresh'),
+    path('api/auth/admin/logout/', AdminLogoutView.as_view(), name='admin-logout'),
     path('api/auth/profile/', UserProfileView.as_view(), name='profile'),
     path('api/auth/change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('api/auth/password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),

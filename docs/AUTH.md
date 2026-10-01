@@ -38,8 +38,26 @@ token rotation is enabled in SimpleJWT settings, a new `refresh_token` cookie is
 
 ### Logout (`POST /api/auth/logout/`)
 
-Clears both cookies. The frontend additionally removes the cached user profile from
-`localStorage("user")`.
+`LogoutView` blacklists the `refresh_token` cookie quietly (logout always
+succeeds) and clears `access_token` + `refresh_token`. It never touches the
+admin cookies — customer and admin sessions are independent.
+
+### Admin session (`POST /api/auth/admin/*`)
+
+The Panel sends `X-Admin-Panel: 1` on every request. When that header is
+present `CookieJWTAuthentication` reads ONLY `admin_access_token` (JWT claim
+`scope == "admin"`, user must have `is_staff=True`); otherwise it reads ONLY
+the customer `access_token`. Customer cookies keep their names.
+
+| Route | Behaviour |
+|---|---|
+| `POST /api/auth/admin/login/` | `{email, password}` via `CustomTokenObtainPairSerializer`; non-staff → 401, no cookies. Staff → admin cookies + `{success, user}` |
+| `POST /api/auth/admin/google/` | `id_token` (or `access_token`); missing → 400, bad → 401, non-staff → 403. Never creates a user |
+| `POST /api/auth/admin/token/refresh/` | Reads `admin_refresh_token` cookie; rejects non-admin scope, unknown or demoted users |
+| `POST /api/auth/admin/logout/` | Blacklists the admin refresh cookie quietly, clears admin cookies only |
+
+`UserSerializer` exposes read-only `is_staff` so the Panel can refuse
+non-staff accounts client-side as well.
 
 ---
 

@@ -6,9 +6,13 @@ from django.db import IntegrityError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
 from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from .authentication import ADMIN_ACCESS_COOKIE, ADMIN_REFRESH_COOKIE, ADMIN_SCOPE
 from .serializers import (
     UserRegistrationSerializer,
     UserSerializer,
@@ -28,9 +32,9 @@ def _cookie_max_age(key, default_seconds):
     return int(lifetime.total_seconds()) if lifetime else default_seconds
 
 
-def set_access_cookie(response, access_token):
+def set_access_cookie(response, access_token, key='access_token'):
     response.set_cookie(
-        key='access_token',
+        key=key,
         value=str(access_token),
         httponly=True,
         secure=settings.AUTH_COOKIE_SECURE,
@@ -39,15 +43,36 @@ def set_access_cookie(response, access_token):
     )
 
 
-def set_refresh_cookie(response, refresh_token):
+def set_refresh_cookie(response, refresh_token, key='refresh_token'):
     response.set_cookie(
-        key='refresh_token',
+        key=key,
         value=str(refresh_token),
         httponly=True,
         secure=settings.AUTH_COOKIE_SECURE,
         samesite=settings.AUTH_COOKIE_SAMESITE,
         max_age=_cookie_max_age('REFRESH_TOKEN_LIFETIME', 3600 * 24 * 7),
     )
+
+
+def clear_auth_cookies(response, access_key, refresh_key):
+    for key in (access_key, refresh_key):
+        response.delete_cookie(key, samesite=settings.AUTH_COOKIE_SAMESITE)
+
+
+def _blacklist_quietly(raw_refresh):
+    """Invalidate a refresh token; never raise (logout must always succeed)."""
+    if not raw_refresh:
+        return
+    try:
+        RefreshToken(raw_refresh).blacklist()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def admin_tokens_for(user):
+    refresh = CustomTokenObtainPairSerializer.get_token(user)
+    refresh['scope'] = ADMIN_SCOPE          # set BEFORE reading .access_token
+    return refresh, refresh.access_token
 
 
 # ==================== CUSTOM THROTTLES ====================
@@ -354,6 +379,18 @@ class PasswordResetConfirmView(APIView):
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
+
+def verify_google_id_token(token):
+    client_id = settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id']
+    idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+    email = (idinfo.get('email') or '').strip().lower()
+    if not email:
+        raise ValueError('Email not provided by Google')
+    if idinfo.get('email_verified') not in (True, 'true'):
+        raise ValueError('Google account email is not verified')
+    return email, idinfo
+
+
 def _unique_username_from_email(email):
     """Derive a username from the local part, de-duplicated.
 
@@ -372,57 +409,30 @@ def _unique_username_from_email(email):
 class GoogleLogin(APIView):
     """
     Google Social Login View (Manual id_token Verification)
-    Receives frontend's Google credential, verifies it locally, 
+    Receives frontend's Google credential, verifies it locally,
     and returns JWT tokens for the session.
     """
     permission_classes = [AllowAny]
+    authentication_classes = []
     throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         # Frontend sends the credential as `access_token` due to authAPI setup
         token = request.data.get('access_token') or request.data.get('id_token')
-        
+
         if not token:
             return Response({'detail': 'Google token is missing'}, status=status.HTTP_400_BAD_REQUEST)
-            
-        try:
-            # 1. Verify token signature against Google's certificates
-            client_id = settings.SOCIALACCOUNT_PROVIDERS['google']['APP']['client_id']
-            
-            # Use dynamic host for any callback URI requirements if needed
-            # current_host = request.get_host()
-            # protocol = 'https' if request.is_secure() else 'http'
-            # callback_uri = f"{protocol}://{current_host}/api/auth/google/" 
 
-            idinfo = id_token.verify_oauth2_token(
-                token, 
-                google_requests.Request(), 
-                client_id
-            )
-            
+        try:
+            email, idinfo = verify_google_id_token(token)
+
             # 2. Extract user info
-            email = idinfo.get('email')
             name = idinfo.get('name', '')
             first_name = idinfo.get('given_name', '')
             last_name = idinfo.get('family_name', '')
 
-            if not email:
-                return Response({'detail': 'Email not provided by Google'}, status=status.HTTP_400_BAD_REQUEST)
-
-            # A validly-signed id_token can still carry an UNVERIFIED email. Since
-            # we match existing accounts by email below, trusting one would let a
-            # holder of such a token sign in as any existing user with that
-            # address — account takeover. Google sends `email_verified` as a bool
-            # or the string "true" depending on the flow; accept only those.
-            if idinfo.get('email_verified') not in (True, 'true'):
-                return Response(
-                    {'detail': 'Google account email is not verified'},
-                    status=status.HTTP_401_UNAUTHORIZED,
-                )
-
             # 3. Get or create user (match email case-insensitively so a Google
             # sign-in never forks a second account from a case variant).
-            email = email.strip().lower()
             user = User.objects.filter(email__iexact=email).first()
             created = user is None
             if created:
@@ -461,8 +471,16 @@ class GoogleLogin(APIView):
             return response
 
         except ValueError as e:
+            # verify_google_id_token raises ValueError for a bad signature as
+            # well as for a missing/unverified email — preserve the old
+            # per-case statuses so existing clients/tests keep passing.
+            msg = str(e)
+            if msg == 'Email not provided by Google':
+                return Response({'detail': msg}, status=status.HTTP_400_BAD_REQUEST)
+            if msg == 'Google account email is not verified':
+                return Response({'detail': msg}, status=status.HTTP_401_UNAUTHORIZED)
             # google-auth raises ValueError for a bad signature/aud/issuer/expiry.
-            return Response({'detail': 'Invalid Google token', 'error': str(e)}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({'detail': 'Invalid Google token', 'error': msg}, status=status.HTTP_401_UNAUTHORIZED)
         except (KeyError, IntegrityError) as e:
             # Misconfigured SOCIALACCOUNT_PROVIDERS, or a racing signup on the
             # same email. Neither is the caller's fault — don't leak a 500.
@@ -471,4 +489,129 @@ class GoogleLogin(APIView):
                 {'detail': 'Google sign-in is temporarily unavailable.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+# ==================== LOGOUT + ADMIN SESSION ====================
+
+class LogoutView(APIView):
+    """Customer logout: blacklist the customer refresh cookie, clear both.
+
+    Must NOT touch the admin cookies — the two sessions are independent.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        _blacklist_quietly(request.COOKIES.get('refresh_token'))
+        response = Response({'success': True})
+        clear_auth_cookies(response, 'access_token', 'refresh_token')
+        return response
+
+
+class AdminLoginView(APIView):
+    """Staff-only login that issues the admin session cookies."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        serializer = CustomTokenObtainPairSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.user
+        if not user.is_staff:
+            return Response(
+                {'detail': 'Invalid credentials or not an admin account.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        refresh, access = admin_tokens_for(user)
+        response = Response({'success': True, 'user': UserSerializer(user).data})
+        set_access_cookie(response, access, key=ADMIN_ACCESS_COOKIE)
+        set_refresh_cookie(response, refresh, key=ADMIN_REFRESH_COOKIE)
+        return response
+
+
+class AdminGoogleLoginView(APIView):
+    """Google sign-in for EXISTING staff accounts only. Never creates a user."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        token = request.data.get('id_token') or request.data.get('access_token')
+        if not token:
+            return Response({'detail': 'Google token is missing'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            email, _idinfo = verify_google_id_token(token)
+        except ValueError:
+            return Response({'detail': 'Invalid Google token'}, status=status.HTTP_401_UNAUTHORIZED)
+        except (KeyError, IntegrityError):
+            logger.exception('Admin Google login failed')
+            return Response(
+                {'detail': 'Google sign-in is temporarily unavailable.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        user = User.objects.filter(email__iexact=email, is_staff=True, is_active=True).first()
+        if user is None:
+            return Response(
+                {'detail': 'This Google account is not an admin of this store.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        refresh, access = admin_tokens_for(user)
+        response = Response({'success': True, 'user': UserSerializer(user).data})
+        set_access_cookie(response, access, key=ADMIN_ACCESS_COOKIE)
+        set_refresh_cookie(response, refresh, key=ADMIN_REFRESH_COOKIE)
+        return response
+
+
+class AdminTokenRefreshView(APIView):
+    """Refresh the admin session from the admin refresh cookie."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        raw = request.COOKIES.get(ADMIN_REFRESH_COOKIE)
+        if not raw:
+            return Response({'detail': 'Admin refresh token is missing.'}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            token = RefreshToken(raw)
+        except TokenError:
+            return Response({'detail': 'Invalid admin refresh token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        if token.get('scope') != ADMIN_SCOPE:
+            return Response({'detail': 'Invalid admin refresh token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        user_id = token.get('user_id')
+        user = User.objects.filter(pk=user_id, is_staff=True, is_active=True).first()
+        if user is None:
+            response = Response({'detail': 'Admin session required.'}, status=status.HTTP_401_UNAUTHORIZED)
+            clear_auth_cookies(response, ADMIN_ACCESS_COOKIE, ADMIN_REFRESH_COOKIE)
+            return response
+        serializer = TokenRefreshSerializer(data={'refresh': raw})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError:
+            return Response({'detail': 'Invalid admin refresh token.'}, status=status.HTTP_401_UNAUTHORIZED)
+        response = Response({'success': True})
+        set_access_cookie(response, serializer.validated_data['access'], key=ADMIN_ACCESS_COOKIE)
+        if 'refresh' in serializer.validated_data:
+            set_refresh_cookie(response, serializer.validated_data['refresh'], key=ADMIN_REFRESH_COOKIE)
+        return response
+
+
+class AdminLogoutView(APIView):
+    """Admin logout: blacklist the admin refresh cookie, clear both.
+
+    Must NOT touch the customer cookies.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        _blacklist_quietly(request.COOKIES.get(ADMIN_REFRESH_COOKIE))
+        response = Response({'success': True})
+        clear_auth_cookies(response, ADMIN_ACCESS_COOKIE, ADMIN_REFRESH_COOKIE)
+        return response
 

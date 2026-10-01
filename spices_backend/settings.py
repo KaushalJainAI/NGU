@@ -423,9 +423,11 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=False, cast=bool)
 CORS_ALLOW_CREDENTIALS = True
 
-# Allow the storefront's language header (used for modeltranslation content).
+# Allow the storefront's language header (used for modeltranslation content)
+# plus the admin-panel marker the Panel sends on every request so the backend
+# knows to read the admin session cookies (see users/authentication.py).
 from corsheaders.defaults import default_headers as _cors_default_headers
-CORS_ALLOW_HEADERS = list(_cors_default_headers) + ['x-language']
+CORS_ALLOW_HEADERS = list(_cors_default_headers) + ['x-language', 'x-admin-panel']
 
 CORS_ALLOW_METHODS = [
     'GET',
