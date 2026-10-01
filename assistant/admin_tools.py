@@ -23,6 +23,43 @@ logger = logging.getLogger(__name__)
 MAX_LIST = 20
 DEFAULT_LIST = 8
 
+
+# --- PII minimisation (AP8/S11) -------------------------------------------
+# These tools run inside prompts sent to a THIRD-PARTY model (OpenRouter), so
+# contact details are masked by default and revealed only when the owner
+# explicitly asks for them (include_contact=True), which is logged.
+def _mask_email(email):
+    """'buyer@example.com' -> 'b***@example.com'. Never the full address."""
+    local, sep, domain = (email or '').partition('@')
+    if not sep or not domain:
+        return '***'
+    return f"{local[:1]}***@{domain}"
+
+
+def _customer_public(customer, include_contact=False, admin=None):
+    """Masked customer identity for model prompts (AP8/S11).
+
+    Default: stable `customer_ref` + display name + masked email, NO phone.
+    `include_contact=True` adds the full email and phone — tool handlers must
+    only pass it when the admin explicitly asked for contact details, and
+    every such call is logged at WARNING with the admin's id.
+    """
+    email = getattr(customer, 'email', '') or ''
+    name = ((getattr(customer, 'name', '') or '').strip()
+            or f"{getattr(customer, 'first_name', '')} {getattr(customer, 'last_name', '')}".strip()
+            or email)
+    row = {
+        'customer_ref': f'CUST-{customer.pk}',
+        'name': name,
+        'email_masked': _mask_email(email),
+    }
+    if include_contact:
+        logger.warning('admin assistant unmasked contact details: admin_id=%s customer_id=%s',
+                       getattr(admin, 'pk', None), customer.pk)
+        row['email'] = email
+        row['phone'] = getattr(customer, 'phone', '') or ''
+    return row
+
 # Named reporting periods → number of days back (None = all time).
 _PERIODS = {'today': 0, '7d': 6, '30d': 29, '90d': 89, 'all': None}
 
@@ -90,10 +127,13 @@ def admin_count_orders(user, args):
 
 def admin_list_recent_orders(user, args):
     """Recent orders (optionally filtered by status) with number, customer,
-    status and total. Read-only summary — no addresses or payment details."""
+    status and total. Read-only summary — no addresses or payment details.
+    Customer identity is masked (AP8/S11); pass include_contact=True only when
+    the admin explicitly asked for contact details."""
     from orders.models import Order
 
     limit = _coerce_limit(args)
+    include_contact = args.get('include_contact') is True
     status = (args.get('status') or '').strip().lower()
     qs = Order.objects.filter(is_deleted=False).select_related('user')
     valid = {'pending', 'confirmed', 'processing', 'shipped', 'delivering', 'delivered', 'cancelled'}
@@ -104,11 +144,18 @@ def admin_list_recent_orders(user, args):
     orders = qs.order_by('-created_at')[:limit]
     rows = []
     for o in orders:
-        name = ((getattr(o.user, 'name', '') or '').strip()
-                or getattr(o.user, 'email', '') if o.user_id else 'Guest')
+        if o.user_id:
+            identity = _customer_public(o.user, include_contact=include_contact, admin=user)
+        else:
+            identity = {'customer_ref': 'GUEST', 'name': 'Guest', 'email_masked': '***'}
+            if include_contact:
+                logger.warning('admin assistant unmasked contact details: admin_id=%s customer_id=%s',
+                               getattr(user, 'pk', None), 'guest')
         rows.append({
             'order_number': _order_number(o.id),
-            'customer': name,
+            'customer': identity['name'],
+            'customer_ref': identity['customer_ref'],
+            'customer_email': identity.get('email', identity['email_masked']),
             'status': o.status,
             'payment': o.payment_method,
             'total': float(o.total_amount),
@@ -180,12 +227,15 @@ def admin_product_stock(user, args):
 
 def admin_find_customer(user, args):
     """Look up customers by name, email or phone, with their order count and
-    total spend. Admin-only cross-user read."""
+    total spend. Admin-only cross-user read. Contact details are masked
+    (AP8/S11); pass include_contact=True only when the admin explicitly asked
+    for them — every unmasked call is logged."""
     from django.contrib.auth import get_user_model
 
     query = (args.get('query') or '').strip()
     if not query:
         return {'error': 'bad_args', 'message': 'query is required'}
+    include_contact = args.get('include_contact') is True
     User = get_user_model()
     not_cancelled = Q(orders__is_deleted=False) & ~Q(orders__status='cancelled')
     qs = (User.objects.filter(
@@ -197,13 +247,10 @@ def admin_find_customer(user, args):
           [:MAX_LIST])
     rows = []
     for u in qs:
-        rows.append({
-            'name': (getattr(u, 'name', '') or f"{u.first_name} {u.last_name}".strip() or u.email),
-            'email': u.email,
-            'phone': getattr(u, 'phone', '') or '',
-            'orders': int(u.order_count or 0),
-            'total_spent': float(u.total_spent or 0),
-        })
+        row = _customer_public(u, include_contact=include_contact, admin=user)
+        row['orders'] = int(u.order_count or 0)
+        row['total_spent'] = float(u.total_spent or 0)
+        rows.append(row)
     if not rows:
         return {'error': 'not_found', 'message': f'No customer matching "{query}".'}
     return {'customers': rows, 'count': len(rows)}

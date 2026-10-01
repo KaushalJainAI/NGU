@@ -103,13 +103,17 @@ READ TOOLS (you call these to look things up; results come back as DATA):
 - count_orders(status, period): how many orders match. status can be pending,
   confirmed, processing, shipped, delivering, delivered, cancelled, or
   "unshipped" (confirmed+processing). Use for "how many orders to ship".
-- list_recent_orders(status, limit): recent orders with number, customer,
-  status and total.
+- list_recent_orders(status, limit, include_contact): recent orders with
+  number, customer, status and total. Customer emails arrive MASKED and phones
+  are withheld — pass include_contact=true ONLY when the owner explicitly asks
+  for contact details (e.g. "give me her phone number").
 - low_stock_products(limit): products at or below their low-stock threshold.
 - top_products(period, limit): best-selling products by units for a period.
 - product_stock(name): current stock of products matching a name.
-- find_customer(query): look up customers by name, email or phone, with their
-  order count and total spend.
+- find_customer(query, include_contact): look up customers by name, email or
+  phone, with their order count and total spend. Replies carry a customer_ref
+  and a MASKED email, never the phone — pass include_contact=true ONLY when
+  the owner explicitly asks for contact details.
 - search_report(period): what customers searched for, including searches that
   found nothing (demand you may not be stocking).
 """
