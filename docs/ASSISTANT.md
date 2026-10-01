@@ -94,9 +94,10 @@ One row per turn. Roles: `user` / `assistant` / `tool` / `system` / `admin`.
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
 | `POST` | `/api/assistant/chat/` | **Required** (login-only) | Send a message; AI responds |
+| `POST` | `/api/assistant/chat/stream/` | **Required** (login-only) | Same turn, SSE-delivered (`meta` → `reply` chunks → `done`) — AP10b |
 | `GET` | `/api/assistant/conversations/` | Required | List the authenticated user's threads |
 | `POST` | `/api/assistant/conversations/` | Required | Create a new empty thread |
-| `GET` | `/api/assistant/conversations/{id}/messages/` | Required | Full message history for one thread |
+| `GET` | `/api/assistant/conversations/{id}/messages/` | Required | Full message history for one thread (assistant messages carry their saved `proposed_action` — AP10b) |
 
 ### Admin-facing (`IsAdminUser`)
 
@@ -125,8 +126,16 @@ aggregates across all customers and orders — it has no action/cart tools. Gate
 | `low_stock_products` | Products at/under their `low_stock_threshold` |
 | `top_products` | Best sellers by revenue for a period |
 | `product_stock` | Stock level for a named product |
-| `find_customer` | Look up a customer (orders, total spent) |
+| `find_customer` | Look up a customer (orders, total spent) — contact masked unless `include_contact` (AP8/S11) |
 | `search_report` | Top search terms + zero-result ("not found") searches |
+
+Customer tools added in AP10: size-aware `search_products` (per-variant rows) and
+`add_to_cart` (`variant_id`); multi-line `cart_proposal`; `edit_cart`;
+`get_offers`, `get_delivery_info` (live limits), `get_tracking` (own orders);
+`get_policy` answered from `assistant/policies.py` (static-page source, AP10 —
+no longer the retired Policy table). Behaviour contract is locked by
+`assistant/test_eval.py` (43 scripted cases + summary: completion, median
+ms/turn, false-escalation rate).
 
 #### `POST /api/assistant/chat/` Request / Response
 
@@ -448,6 +457,12 @@ in English.
 
 Plus one in-flight turn per account (concurrent POST → 429) and a ~12k-token
 history budget (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
+
+AP10b note on worker isolation (S5): chat currently shares the 3×2 gunicorn
+pool with checkout. The shipped mitigation is bounds, not a separate pool —
+20 s LLM timeout + 1 retry (AP2), one in-flight turn per account (AP7c),
+10/min + 100/day throttles and the history cap. A dedicated chat worker pool
+(separate service/upstream) remains future work; see DEPLOYMENT.md.
 
 ---
 

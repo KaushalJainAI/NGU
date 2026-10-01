@@ -41,6 +41,7 @@ from admin_panel.views import (
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
     AssistantChatView,
+    AssistantChatStreamView,
     AdminAssistantChatView,
     AssistantTranscribeView,
     ConversationListCreateView,
@@ -176,6 +177,7 @@ urlpatterns = [
     # NOTE: the static `admin/` route is declared before the `<uuid>` routes so
     # it is matched first and never shadowed.
     path('api/assistant/chat/', AssistantChatView.as_view(), name='assistant-chat'),
+    path('api/assistant/chat/stream/', AssistantChatStreamView.as_view(), name='assistant-chat-stream'),
     path('api/assistant/admin-chat/', AdminAssistantChatView.as_view(), name='assistant-admin-chat'),
     path('api/assistant/transcribe/', AssistantTranscribeView.as_view(), name='assistant-transcribe'),
     path('api/assistant/conversations/admin/', AdminConversationListView.as_view(), name='assistant-admin-list'),
