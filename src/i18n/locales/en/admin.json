@@ -36,7 +36,27 @@
     "notClassified": "NOT CLASSIFIED",
     "refundsNotePrefix": "Refunds recorded in this period (credit notes — reported in Table 9B, ",
     "refundsNoteNot": "not",
-    "refundsNoteSuffix": " netted off above): {{amount}}, including GST of {{tax}}."
+    "refundsNoteSuffix": " netted off above): {{amount}}, including GST of {{tax}}.",
+    "tabSummary": "Summary",
+    "tabHsn": "HSN",
+    "tabB2c": "State-wise (B2C)",
+    "tabDocs": "Documents",
+    "tabRegisters": "Registers",
+    "invoicesRow": "Invoices",
+    "creditNotesRow": "Credit notes",
+    "netRow": "Net",
+    "fallbackTitle": "Some invoices used a fallback state",
+    "fallbackBody": "State could not be read from the address; billed as Madhya Pradesh.",
+    "colState": "State",
+    "colNetTaxable": "Net taxable",
+    "colType": "Type",
+    "colSeries": "Series",
+    "colFrom": "From",
+    "colTo": "To",
+    "colCount": "Count",
+    "colGap": "Gap",
+    "invoiceRegisterCsv": "Invoice register CSV",
+    "creditNoteRegisterCsv": "Credit note register CSV"
   },
 
   "customers": {

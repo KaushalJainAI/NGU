@@ -36,7 +36,27 @@
     "notClassified": "NOT CLASSIFIED",
     "refundsNotePrefix": "इस अवधि में दर्ज रिफ़ंड (क्रेडिट नोट — टेबल 9B में दिखाए जाते हैं, ऊपर से ",
     "refundsNoteNot": "घटाए नहीं",
-    "refundsNoteSuffix": " गए): {{amount}}, जिसमें {{tax}} का जीएसटी शामिल है।"
+    "refundsNoteSuffix": " गए): {{amount}}, जिसमें {{tax}} का जीएसटी शामिल है।",
+    "tabSummary": "सारांश",
+    "tabHsn": "एचएसएन",
+    "tabB2c": "राज्य-वार (B2C)",
+    "tabDocs": "दस्तावेज़",
+    "tabRegisters": "रजिस्टर",
+    "invoicesRow": "चालान",
+    "creditNotesRow": "क्रेडिट नोट",
+    "netRow": "शुद्ध",
+    "fallbackTitle": "कुछ चालानों में अनुमानित राज्य इस्तेमाल हुआ",
+    "fallbackBody": "पते से राज्य पढ़ा नहीं जा सका; मध्य प्रदेश मानकर बिल बनाया गया।",
+    "colState": "राज्य",
+    "colNetTaxable": "शुद्ध करयोग्य",
+    "colType": "प्रकार",
+    "colSeries": "सीरीज़",
+    "colFrom": "से",
+    "colTo": "तक",
+    "colCount": "संख्या",
+    "colGap": "अंतर",
+    "invoiceRegisterCsv": "चालान रजिस्टर CSV",
+    "creditNoteRegisterCsv": "क्रेडिट नोट रजिस्टर CSV"
   },
 
   "customers": {

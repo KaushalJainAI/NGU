@@ -86,6 +86,90 @@ export const getHsnSummary = (from?: string, to?: string) =>
   api.get<HsnSummary>('/admin/hsn-summary/', { params: { from, to } })
     .then(r => r.data);
 
+export interface GstBlock {
+  count: number;
+  taxable_value: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  tax: number;
+  total: number;
+}
+
+export interface GstSummary {
+  from: string;
+  to: string;
+  invoices: GstBlock;
+  credit_notes: GstBlock;
+  net: Omit<GstBlock, 'count'>;
+  fallback_place_of_supply: { number: string; order_number: string; address: string }[];
+}
+
+export interface B2cRow {
+  state_code: string;
+  state_name: string;
+  rate: number | null;
+  rate_label: string;
+  gross_taxable_value: number;
+  gross_cgst: number;
+  gross_sgst: number;
+  gross_igst: number;
+  credit_taxable_value: number;
+  credit_cgst: number;
+  credit_sgst: number;
+  credit_igst: number;
+  net_taxable_value: number;
+  net_cgst: number;
+  net_sgst: number;
+  net_igst: number;
+}
+
+export interface DocRow {
+  series: string;
+  from_number: string;
+  to_number: string;
+  count: number;
+  gap: number;
+}
+
+const blobDownload = async (url: string, filename: string) => {
+  const res = await api.get(url, { responseType: 'blob' });
+  const objectUrl = window.URL.createObjectURL(res.data as Blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(objectUrl);
+};
+
+export const getGstSummary = (from: string, to: string) =>
+  api.get<GstSummary>('/admin/gst/summary/', { params: { from, to } }).then(r => r.data);
+
+export const getGstB2c = (from: string, to: string) =>
+  api.get<{ from: string; to: string; rows: B2cRow[] }>('/admin/gst/b2c/', { params: { from, to } })
+    .then(r => r.data);
+
+export const getGstDocuments = (from: string, to: string) =>
+  api.get<{ from: string; to: string; invoices: DocRow[]; credit_notes: DocRow[] }>(
+    '/admin/gst/documents/', { params: { from, to } }).then(r => r.data);
+
+export const exportGstSummaryCsv = (from: string, to: string) =>
+  blobDownload(`/admin/gst/summary/?from=${from}&to=${to}&download=csv`, `gst-summary-${from}-to-${to}.csv`);
+
+export const exportGstB2cCsv = (from: string, to: string) =>
+  blobDownload(`/admin/gst/b2c/?from=${from}&to=${to}&download=csv`, `gst-b2c-${from}-to-${to}.csv`);
+
+export const exportGstDocumentsCsv = (from: string, to: string) =>
+  blobDownload(`/admin/gst/documents/?from=${from}&to=${to}&download=csv`, `gst-documents-${from}-to-${to}.csv`);
+
+export const exportInvoiceRegisterCsv = (from: string, to: string) =>
+  blobDownload(`/admin/gst/invoices/?from=${from}&to=${to}&download=csv`, `invoice-register-${from}-to-${to}.csv`);
+
+export const exportCreditNoteRegisterCsv = (from: string, to: string) =>
+  blobDownload(`/admin/gst/credit-notes/?from=${from}&to=${to}&download=csv`, `credit-note-register-${from}-to-${to}.csv`);
+
 /**
  * Download the CSV rendering of the same summary.
  *
