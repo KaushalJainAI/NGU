@@ -174,7 +174,8 @@ class OrderViewSet(viewsets.ModelViewSet):
     # fixable. It is deliberately NOT recomputed when an admin edits
     # `shipping_address`: silently re-heading an already-issued invoice off a
     # courier-detail correction is precisely the failure this guards against.
-    ADMIN_EDITABLE_FIELDS = {'status', 'tracking_number', 'shipping_address',
+    ADMIN_EDITABLE_FIELDS = {'status', 'tracking_number', 'courier_name', 'tracking_url',
+                             'shipping_address',
                              'phone_number', 'payment_status', 'shipping_cost',
                              'cod_paid', 'place_of_supply_state_code'}
     # Statuses from which an order can no longer be cancelled. 'refunded' is
@@ -1157,6 +1158,20 @@ class OrderViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'refund_amount must be greater than zero.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate the tracking URL BEFORE the transaction: a 400 from inside
+        # would commit earlier writes (see the restock warning below).
+        if 'tracking_url' in request.data:
+            raw_url = (request.data.get('tracking_url') or '').strip()
+            if raw_url:
+                from django.core.validators import URLValidator
+                from django.core.exceptions import ValidationError as DjangoValidationError
+                try:
+                    URLValidator(schemes=['http', 'https'])(raw_url)
+                except DjangoValidationError:
+                    return Response(
+                        {'tracking_url': ['Enter a valid http(s) link.']},
+                        status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
             obj = self.get_object()  # 404s if outside the caller's queryset
             # Canonical lock order (§7.2): Order first, then Payment — so an admin
@@ -1167,6 +1182,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 
             old_status = order.status
             old_tracking = (order.tracking_number or '').strip()
+            old_tracking_url = (order.tracking_url or '').strip()
 
             data = {k: v for k, v in request.data.items() if k in self.ADMIN_EDITABLE_FIELDS}
             new_status = data.get('status', old_status)
@@ -1288,6 +1304,10 @@ class OrderViewSet(viewsets.ModelViewSet):
                     order.payment_status = 'pending'
             if 'tracking_number' in data:
                 order.tracking_number = (data['tracking_number'] or '').strip()
+            if 'courier_name' in data:
+                order.courier_name = (data['courier_name'] or '').strip()[:60]
+            if 'tracking_url' in data:
+                order.tracking_url = (data['tracking_url'] or '').strip()
 
             # Restock on the transition into 'cancelled', once (never on a no-op
             # re-cancel).
@@ -1366,7 +1386,11 @@ class OrderViewSet(viewsets.ModelViewSet):
         # notifies them is a newly-added tracking number (their parcel shipped).
         # Cancellation is handled separately by the `cancel` action below.
         new_tracking = (order.tracking_number or '').strip()
-        tracking_added = bool(new_tracking) and new_tracking != old_tracking
+        new_tracking_url = (order.tracking_url or '').strip()
+        tracking_added = (
+            (bool(new_tracking) and new_tracking != old_tracking)
+            or (bool(new_tracking_url) and new_tracking_url != old_tracking_url)
+        )
         if tracking_added:
             send_order_status_email(order, status_changed=False, tracking_added=True)
 

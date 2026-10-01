@@ -303,18 +303,25 @@ def send_order_status_email(order, status_changed=False, tracking_added=False):
     parts = [f"Update on your Nidhi Masala order {number}:", "", status_line]
 
     tracking = (order.tracking_number or '').strip()
-    if tracking_added and tracking:
-        parts += [
-            "",
-            f"Your tracking ID is: {tracking}",
-            "You can track your parcel on the courier partner's website using "
-            "this tracking ID to see its live status and expected delivery.",
-        ]
+    courier = (getattr(order, 'courier_name', '') or '').strip()
+    tracking_url = (getattr(order, 'tracking_url', '') or '').strip()
+    if tracking_added and (tracking or tracking_url):
+        parts.append("")
+        if courier:
+            parts.append(f"Shipped with: {courier}")
+        if tracking:
+            parts.append(f"Your tracking ID is: {tracking}")
+        if tracking_url:
+            parts.append(f"Track your parcel here: {tracking_url}")
+        else:
+            parts.append(
+                "You can track your parcel on the courier partner's website "
+                "using this tracking ID.")
 
     parts += ["", f"View your order: {_frontend_url()}/my-orders", "", "— Team Nidhi Masala"]
 
     # Subject reflects the most important thing that happened.
-    if tracking_added and tracking:
+    if tracking_added and (tracking or tracking_url):
         subject = f"Your order {number} has shipped | Nidhi Masala"
     else:
         subject = f"Order {number} update: {order.status} | Nidhi Masala"

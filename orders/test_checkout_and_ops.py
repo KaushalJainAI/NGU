@@ -1455,3 +1455,54 @@ class TestAdminUpdateAtomicity:
         assert order.status == "cancelled"
         assert order.shipping_cost == Decimal("40.00")
         assert variant.stock == 10
+
+
+@pytest.mark.django_db
+class TestCourierTrackingEmail:
+    """WP4: courier name + tracking link in the shipped email."""
+
+    def _capture(self, monkeypatch):
+        sent = []
+
+        def fake_send(subject, message, recipient):
+            sent.append({'subject': subject, 'message': message, 'recipient': recipient})
+
+        monkeypatch.setattr('orders.emails._send_async', fake_send)
+        return sent
+
+    def test_email_contains_courier_and_url(self, admin_client, test_order, monkeypatch):
+        sent = self._capture(monkeypatch)
+        r = admin_client.patch(f"{URL}{test_order.id}/", {
+            'tracking_number': 'TRK123',
+            'courier_name': 'Delhivery',
+            'tracking_url': 'https://track.example/abc',
+        }, format='json')
+        assert r.status_code == 200
+        assert r.data['courier_name'] == 'Delhivery'
+        assert r.data['tracking_url'] == 'https://track.example/abc'
+        assert len(sent) == 1
+        body = sent[0]['message']
+        assert 'Delhivery' in body
+        assert 'https://track.example/abc' in body
+
+    def test_bad_url_400_changes_nothing(self, admin_client, test_order):
+        r = admin_client.patch(f"{URL}{test_order.id}/", {
+            'tracking_url': 'javascript:alert(1)',
+        }, format='json')
+        assert r.status_code == 400
+        test_order.refresh_from_db()
+        assert test_order.tracking_url == ''
+        assert test_order.tracking_number == ''
+
+    def test_resending_same_values_sends_no_second_email(
+            self, admin_client, test_order, monkeypatch):
+        sent = self._capture(monkeypatch)
+        payload = {
+            'tracking_number': 'TRK123',
+            'courier_name': 'Delhivery',
+            'tracking_url': 'https://track.example/abc',
+        }
+        assert admin_client.patch(f"{URL}{test_order.id}/", payload, format='json').status_code == 200
+        assert len(sent) == 1
+        assert admin_client.patch(f"{URL}{test_order.id}/", payload, format='json').status_code == 200
+        assert len(sent) == 1

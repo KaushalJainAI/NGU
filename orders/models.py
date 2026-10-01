@@ -202,6 +202,10 @@ class Order(models.Model):
     # Shipment tracking (set by admin once the parcel is dispatched). Adding a
     # value triggers a "your order is on its way" email to the customer.
     tracking_number = models.CharField(max_length=100, blank=True, default='')
+    # Which courier carried the parcel, and where the customer can track it.
+    # Free text + a pasted URL because the store ships with any provider.
+    courier_name = models.CharField(max_length=60, blank=True, default='')
+    tracking_url = models.URLField(max_length=500, blank=True, default='')
 
     # Delivery bill (admin-only). A scan/photo/PDF of the courier or delivery
     # receipt the admin uploads for their own records. Deliberately NOT exposed
