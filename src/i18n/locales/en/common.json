@@ -107,7 +107,14 @@
     "successTitle": "Welcome back!",
     "successBody": "You have successfully logged in.",
     "failedTitle": "Login failed",
-    "failedBody": "Invalid email or password. Please try again."
+    "failedBody": "Invalid email or password. Please try again.",
+    "verifyTitle": "Confirm your email",
+    "verifyBody": "We sent a 6-digit code to {{email}}. Enter it below to sign in.",
+    "code": "Verification code",
+    "verifySubmit": "Confirm and sign in",
+    "resend": "Resend code",
+    "resendFailed": "Could not send a new code. Please try again in a while.",
+    "useAnotherAccount": "Use another account"
   },
 
   "search": {

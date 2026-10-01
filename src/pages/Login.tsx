@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider, GoogleLogin as GoogleButton } from '@react-oauth/google';
 import { useAuth } from '@/contexts/AuthContext';
+import { confirmEmailVerification, requestEmailVerification } from '@/api/admin';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +22,10 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // Set once the backend says the password is right but the email is
+  // unconfirmed: the form then asks for the emailed code instead.
+  const [needsCode, setNeedsCode] = useState(false);
+  const [code, setCode] = useState('');
   const { login, loginWithGoogle, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -34,19 +39,42 @@ const Login = () => {
     setLoading(true);
 
     try {
+      if (needsCode) {
+        await confirmEmailVerification(email, code, password);
+        setNeedsCode(false);
+        setCode('');
+      }
       await login(email, password);
       toast({
         title: t('login.successTitle'),
         description: t('login.successBody'),
       });
     } catch (error) {
-      toast({
-        title: t('login.failedTitle'),
-        description: t('login.failedBody'),
-        variant: 'destructive',
-      });
+      const response = (error as { response?: { status?: number; data?: { code?: string; detail?: string } } })
+        ?.response;
+      if (response?.status === 403 && response.data?.code === 'email_not_verified') {
+        // A failed send is not fatal: the code step has a resend button.
+        await requestEmailVerification(email).catch(() => undefined);
+        setNeedsCode(true);
+        toast({ title: t('login.verifyTitle'), description: t('login.verifyBody', { email }) });
+      } else {
+        toast({
+          title: t('login.failedTitle'),
+          description: (needsCode && response?.data?.detail) || t('login.failedBody'),
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    try {
+      await requestEmailVerification(email);
+      toast({ title: t('login.verifyTitle'), description: t('login.verifyBody', { email }) });
+    } catch {
+      toast({ title: t('login.failedTitle'), description: t('login.resendFailed'), variant: 'destructive' });
     }
   };
 
@@ -99,6 +127,7 @@ const Login = () => {
                 placeholder={t('login.emailPlaceholder')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={needsCode}
                 required
               />
             </div>
@@ -110,13 +139,41 @@ const Login = () => {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                disabled={needsCode}
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? t('login.submitting') : t('login.submit')}
+            {needsCode ? (
+              <div className="space-y-2">
+                <Label htmlFor="code">{t('login.code')}</Label>
+                <Input
+                  id="code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  required
+                />
+                <div className="flex justify-between text-sm">
+                  <button type="button" className="text-primary hover:underline" onClick={handleResend}>
+                    {t('login.resend')}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:underline"
+                    onClick={() => { setNeedsCode(false); setCode(''); }}
+                  >
+                    {t('login.useAnotherAccount')}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <Button type="submit" className="w-full" disabled={loading || (needsCode && code.length !== 6)}>
+              {loading ? t('login.submitting') : needsCode ? t('login.verifySubmit') : t('login.submit')}
             </Button>
-            {GOOGLE_CLIENT_ID ? (
+            {GOOGLE_CLIENT_ID && !needsCode ? (
               <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
                 <div className="flex justify-center pt-2">
                   <GoogleButton

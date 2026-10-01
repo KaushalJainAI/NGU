@@ -40,6 +40,14 @@ export interface LoginResponse {
 export const login = (credentials: LoginCredentials) =>
   api.post<LoginResponse>('/auth/admin/login/', credentials);
 
+// A staff account whose email was never confirmed is refused at login with
+// 403 {code: 'email_not_verified'}. These two calls let it confirm, once.
+export const requestEmailVerification = (email: string) =>
+  api.post('/auth/verify-email/request/', { email });
+
+export const confirmEmailVerification = (email: string, otp_code: string, password: string) =>
+  api.post('/auth/verify-email/', { email, otp_code, password });
+
 export const googleLogin = (credential: string) =>
   api.post('/auth/admin/google/', { id_token: credential });
 
