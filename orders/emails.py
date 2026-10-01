@@ -327,3 +327,23 @@ def send_order_status_email(order, status_changed=False, tracking_added=False):
         subject = f"Order {number} update: {order.status} | Nidhi Masala"
 
     _send_async(subject=subject, message="\n".join(parts), recipient=recipient)
+
+
+def send_refund_recorded_email(order, amount):
+    """Tell the customer a refund was recorded against their order."""
+    recipient = _recipient(order)
+    if not recipient:
+        return
+    number = _order_number(order)
+    message = (
+        f"A refund of Rs. {amount} has been recorded against your "
+        f"Nidhi Masala order {number}.\n\n"
+        f"It should reach your account within a few business days.\n\n"
+        f"You can view your order any time here: {_frontend_url()}/my-orders\n\n"
+        f"— Team Nidhi Masala"
+    )
+    _send_async(
+        subject=f"Refund of Rs. {amount} — {number} | Nidhi Masala",
+        message=message,
+        recipient=recipient,
+    )

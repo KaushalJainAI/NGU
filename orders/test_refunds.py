@@ -199,6 +199,21 @@ class TestAdminCanRecordARefund:
         assert paid_order.status == "refunded"
         assert paid_order.refunds.get().note == "one jar returned"
 
+    def test_partial_refund_sends_one_email_with_the_amount(
+            self, admin_client, paid_order, monkeypatch):
+        sent = []
+        monkeypatch.setattr('orders.emails._send_async',
+                            lambda subject, message, recipient: sent.append(
+                                {'subject': subject, 'message': message,
+                                 'recipient': recipient}))
+        r = admin_client.patch(f"{URL}{paid_order.id}/",
+                               {"status": "refunded", "refund_amount": "200.00"},
+                               format="json")
+        assert r.status_code == 200
+        assert len(sent) == 1
+        assert '200.00' in sent[0]['message']
+        assert f"ORD-{paid_order.id:06d}" in sent[0]['message']
+
     def test_the_partial_amount_reaches_the_customer_response(self, admin_client, paid_order):
         """The customer is told how much came back — the status alone would read
         as a full refund."""

@@ -1395,16 +1395,20 @@ class OrderViewSet(viewsets.ModelViewSet):
                     raise DRFValidationError(
                         {'error': f'refund_amount exceeds the refundable balance '
                                   f'({outstanding}).'})
-                record_refund(
+                recorded = record_refund(
                     order, amount, source='admin', mark_refunded=True,
                     note=(request.data.get('refund_note') or '')[:255])
                 order.refresh_from_db()
+                recorded_refund_amount = recorded.amount if recorded is not None else None
+            else:
+                recorded_refund_amount = None
 
         # Side-effect notifications, outside the transaction.
         # Product decision: routine status changes (confirmed → processing →
         # delivered …) must NOT email the customer. The ONLY status update that
         # notifies them is a newly-added tracking number (their parcel shipped).
         # Cancellation is handled separately by the `cancel` action below.
+        # A recorded refund ALWAYS emails: it is money going back.
         new_tracking = (order.tracking_number or '').strip()
         new_tracking_url = (order.tracking_url or '').strip()
         tracking_added = (
@@ -1413,6 +1417,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         )
         if tracking_added:
             send_order_status_email(order, status_changed=False, tracking_added=True)
+        if recorded_refund_amount is not None:
+            from .emails import send_refund_recorded_email
+            send_refund_recorded_email(order, recorded_refund_amount)
 
         return Response(OrderDetailSerializer(order, context={'request': request}).data)
 
