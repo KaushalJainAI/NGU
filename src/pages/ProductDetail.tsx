@@ -391,7 +391,11 @@ const ProductDetail = () => {
   const discountPercent = (selectedVariant ? selectedVariant.discount_percentage : product.discount_percentage) ||
     (originalPrice && originalPrice > price ? Math.round(((originalPrice - price) / originalPrice) * 100) : 0);
   const savings = originalPrice && originalPrice > price ? originalPrice - price : 0;
-  const effectiveStock = selectedVariant ? selectedVariant.stock : product.stock;
+  // AP8/S12: the catalog API no longer exposes exact stock counts to the
+  // storefront (staff-only now) — availability is the boolean in_stock, and
+  // quantities are capped client-side by MAX_ITEM_QUANTITY. The server still
+  // enforces real stock on cart-add and checkout, so oversell is impossible.
+  const effectiveStock = selectedVariant?.stock ?? product.stock ?? MAX_ITEM_QUANTITY;
   const effectiveInStock = selectedVariant ? selectedVariant.in_stock : product.in_stock;
   const effectiveWeight = selectedVariant ? selectedVariant.formatted_weight : formatWeight(product.weight, product.unit, "100g");
 
@@ -632,7 +636,6 @@ const ProductDetail = () => {
                 <>
                   <Check className="h-4 w-4" />
                   <span className="font-medium">{t('product.inStock')}</span>
-                  <span className="text-sm">{t('product.available', { count: effectiveStock })}</span>
                 </>
               ) : (
                 <span className="font-medium">{t('product.outOfStock')}</span>

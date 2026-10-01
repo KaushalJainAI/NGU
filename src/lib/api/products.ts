@@ -11,7 +11,9 @@ export interface ProductVariant {
   discount_price?: number | null;
   final_price: number;
   discount_percentage: number;
-  stock: number;
+  // AP8/S12: exact counts are staff-only now — absent on the storefront
+  // session. Use `in_stock` for availability; the server enforces quantities.
+  stock?: number;
   in_stock: boolean;
   sku?: string;
   is_default: boolean;
@@ -31,7 +33,8 @@ export interface Product {
   discount_price?: number;
   final_price: number;
   discount_percentage: number;
-  stock: number;
+  // AP8/S12: staff-only now — absent on the storefront session (see ProductVariant note).
+  stock?: number;
   weight: number;
   unit: string;
   origin_country?: string;
