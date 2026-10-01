@@ -1124,6 +1124,8 @@
     "tax": "Tax",
     "taxIncluded": "Incl. GST {{amount}}",
     "shippingTo": "Shipping to: {{address}}",
+    "shippedWith": "Shipped with {{courier}}",
+    "trackParcel": "Track parcel",
     "reorder": "Reorder",
     "support": "Support",
     "bill": "Bill",

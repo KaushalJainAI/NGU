@@ -1100,6 +1100,8 @@
     "tax": "कर",
     "taxIncluded": "GST सहित {{amount}}",
     "shippingTo": "शिपिंग यहाँ: {{address}}",
+    "shippedWith": "{{courier}} द्वारा भेजा गया",
+    "trackParcel": "पार्सल ट्रैक करें",
     "reorder": "फिर से ऑर्डर करें",
     "support": "सहायता",
     "bill": "बिल",

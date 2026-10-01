@@ -90,6 +90,8 @@ export interface Order {
   total: number;
   shipping_address: string;
   tracking_number?: string;
+  courier_name?: string;
+  tracking_url?: string;
   payment_method?: string;
   payment_status?: "pending" | "processing" | "paid" | "failed" | "refunded";
   /**

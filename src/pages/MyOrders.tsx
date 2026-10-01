@@ -603,14 +603,33 @@ const MyOrders = () => {
                             </p>
 
                             {/* Tracking number (shown once the admin dispatches) */}
-                            {order.tracking_number ? (
+                            {order.tracking_number || order.tracking_url ? (
                               <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
-                                <p className="text-xs font-semibold text-primary">
-                                  {t('myOrders.trackingNumber', 'Tracking number')}
-                                </p>
-                                <p className="text-sm font-mono font-medium break-all">
-                                  {order.tracking_number}
-                                </p>
+                                {order.courier_name ? (
+                                  <p className="text-xs text-muted-foreground">
+                                    {t('myOrders.shippedWith', 'Shipped with {{courier}}', { courier: order.courier_name })}
+                                  </p>
+                                ) : null}
+                                {order.tracking_number ? (
+                                  <>
+                                    <p className="text-xs font-semibold text-primary">
+                                      {t('myOrders.trackingNumber', 'Tracking number')}
+                                    </p>
+                                    <p className="text-sm font-mono font-medium break-all">
+                                      {order.tracking_number}
+                                    </p>
+                                  </>
+                                ) : null}
+                                {order.tracking_url && (order.tracking_url.startsWith('http://') || order.tracking_url.startsWith('https://')) ? (
+                                  <a
+                                    href={order.tracking_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-sm font-medium text-primary underline"
+                                  >
+                                    {t('myOrders.trackParcel', 'Track parcel')}
+                                  </a>
+                                ) : null}
                               </div>
                             ) : null}
                           </>
