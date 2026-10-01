@@ -1,12 +1,13 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login as apiLogin, getAdminInfo, AdminInfo } from '@/api/admin';
+import { login as apiLogin, googleLogin, getAdminInfo, AdminInfo } from '@/api/admin';
 import api, { SESSION_EXPIRED_EVENT } from '@/api/axiosInstance';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   user: AdminInfo | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
   loading: boolean;
   refreshUser: () => Promise<void>;
@@ -43,8 +44,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const initAuth = async () => {
       try {
         const response = await getAdminInfo();
-        setUser(response.data);
-        setIsAuthenticated(true);
+        if (response.data.is_staff === true) {
+          setUser(response.data);
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
+          setUser(null);
+        }
       } catch (error) {
         setIsAuthenticated(false);
         setUser(null);
@@ -69,13 +75,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await apiLogin({ email, password });
+      await apiLogin({ email, password });
+      const profile = await getAdminInfo();
+      if (profile.data.is_staff !== true) {
+        setIsAuthenticated(false);
+        setUser(null);
+        throw new Error('Not an admin account');
+      }
+      setUser(profile.data);
       setIsAuthenticated(true);
-      await fetchUserProfile();
       navigate('/dashboard');
     } catch (error) {
-      throw new Error('Invalid credentials');
+      throw error instanceof Error ? error : new Error('Invalid credentials');
     }
+  };
+
+  const loginWithGoogle = async (credential: string) => {
+    await googleLogin(credential);
+    const profile = await getAdminInfo();
+    if (profile.data.is_staff !== true) {
+      setIsAuthenticated(false);
+      setUser(null);
+      throw new Error('Not an admin account');
+    }
+    setUser(profile.data);
+    setIsAuthenticated(true);
+    navigate('/dashboard');
   };
 
   const logout = async () => {
@@ -83,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // with empty credentials, which burned a slot in the 5/min login throttle
     // on every logout.)
     try {
-      await api.post('/auth/logout/');
+      await api.post('/auth/admin/logout/');
     } catch (e) { /* logging out locally regardless */ }
     setIsAuthenticated(false);
     setUser(null);
@@ -97,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading, refreshUser }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, loginWithGoogle, logout, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

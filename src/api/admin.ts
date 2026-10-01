@@ -14,6 +14,7 @@ export interface AdminInfo {
   pincode?: string;
   profile_picture?: string;
   created_at?: string;
+  is_staff: boolean;
 }
 
 export interface LoginCredentials {
@@ -35,9 +36,12 @@ export interface LoginResponse {
   };
 }
 
-// Call Django JWT endpoint
+// Call Django admin JWT endpoint (separate admin session cookies)
 export const login = (credentials: LoginCredentials) =>
-  api.post<LoginResponse>('/auth/login/', credentials);
+  api.post<LoginResponse>('/auth/admin/login/', credentials);
+
+export const googleLogin = (credential: string) =>
+  api.post('/auth/admin/google/', { id_token: credential });
 
 // Get admin profile (uses auth/profile endpoint)
 export const getAdminInfo = () => api.get<AdminInfo>('/auth/profile/');

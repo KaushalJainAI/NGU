@@ -9,6 +9,7 @@ const api = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-Admin-Panel': '1',
   },
 });
 
@@ -53,7 +54,7 @@ const refreshSession = () => {
     // Bare axios, not `api` — a 401 from the refresh call itself must not
     // recurse back into this interceptor.
     refreshInFlight = axios
-      .post(`${api.defaults.baseURL}/auth/token/refresh/`, {}, { withCredentials: true })
+      .post(`${api.defaults.baseURL}/auth/admin/token/refresh/`, {}, { withCredentials: true, headers: { 'X-Admin-Panel': '1' } })
       .then(() => undefined)
       .finally(() => { refreshInFlight = null; });
   }
@@ -66,7 +67,12 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response) {
       const original = error.config || {};
-      const isAuthCall = typeof original.url === 'string' && original.url.includes('/auth/');
+      const isAuthCall = typeof original.url === 'string' && (
+        original.url.includes('/auth/admin/login/') ||
+        original.url.includes('/auth/admin/google/') ||
+        original.url.includes('/auth/admin/token/refresh/') ||
+        original.url.includes('/auth/admin/logout/')
+      );
       const onLoginPage = window.location.pathname.includes('/login');
 
       if (error.response.status === 401 && !original._retried && !isAuthCall && !onLoginPage) {

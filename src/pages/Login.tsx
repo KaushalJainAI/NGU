@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { GoogleOAuthProvider, GoogleLogin as GoogleButton } from '@react-oauth/google';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,12 +11,17 @@ import { ShoppingBag } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 
+const GOOGLE_CLIENT_ID =
+  (window as unknown as { APP_CONFIG?: { GOOGLE_CLIENT_ID?: string } }).APP_CONFIG?.GOOGLE_CLIENT_ID ||
+  (import.meta.env.VITE_GOOGLE_CLIENT_ID as string) ||
+  '';
+
 const Login = () => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -37,6 +43,29 @@ const Login = () => {
       toast({
         title: t('login.failedTitle'),
         description: t('login.failedBody'),
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse: { credential?: string }) => {
+    if (!credentialResponse.credential) return;
+    setLoading(true);
+    try {
+      await loginWithGoogle(credentialResponse.credential);
+      toast({
+        title: t('login.successTitle'),
+        description: t('login.successBody'),
+      });
+    } catch (error: unknown) {
+      const detail =
+        (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
+        (error instanceof Error ? error.message : '');
+      toast({
+        title: t('login.failedTitle'),
+        description: detail || t('login.failedBody'),
         variant: 'destructive',
       });
     } finally {
@@ -87,6 +116,26 @@ const Login = () => {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? t('login.submitting') : t('login.submit')}
             </Button>
+            {GOOGLE_CLIENT_ID ? (
+              <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+                <div className="flex justify-center pt-2">
+                  <GoogleButton
+                    onSuccess={handleGoogleSuccess}
+                    onError={() =>
+                      toast({
+                        title: t('login.failedTitle'),
+                        description: t('login.failedBody'),
+                        variant: 'destructive',
+                      })
+                    }
+                    useOneTap={false}
+                    theme="outline"
+                    shape="rectangular"
+                    width="320"
+                  />
+                </div>
+              </GoogleOAuthProvider>
+            ) : null}
           </form>
         </CardContent>
       </Card>
