@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
 import { userAPI, publicFetch, API_BASE_URL } from "@/lib/api";
+import { isEmailNotVerified } from "@/lib/api/auth";
 
 interface User {
   id: string;
@@ -141,6 +142,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       toast.success("Login successful!");
       return true;
     } catch (error: any) {
+      // Right password, unconfirmed email: not a failure to report here — the
+      // caller sends the customer to the code screen.
+      if (isEmailNotVerified(error)) throw error;
       console.error("Login error:", error);
       toast.error("Login failed. Please check your credentials.");
       return false;

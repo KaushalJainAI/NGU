@@ -210,7 +210,8 @@
     "networkError": "Network error. Kripya dobara try karein.",
     "googleFailed": "Google login fail. Kripya dobara try karein.",
     "subtitle": "Apne account tak pahunchne ke liye apni details darj karein",
-    "registerHere": "Yahan register karein"
+    "registerHere": "Yahan register karein",
+    "verifyFirst": "Pehle apna email confirm karein. Humne aapko ek code bheja hai."
   },
   "about": {
     "badge": "Barnagar, Madhya Pradesh",
@@ -401,8 +402,8 @@
       "charges": {
         "title": "Shipping Charges",
         "intro": "Shipping charge aapke order ke weight aur delivery location ke hisaab se calculate hota hai:",
-        "free": "₹499 se upar ke orders: <b>Free Shipping</b>",
-        "upto": "₹499 tak ke orders: ₹69 shipping charge lagta hai"
+        "free": "₹499 ya usse upar ke orders: <b>Free Shipping</b>",
+        "upto": "₹499 se kam ke orders: ₹69.62 shipping charge lagta hai (₹59 + 18% GST)"
       },
       "tracking": {
         "title": "Order Tracking",
@@ -787,7 +788,8 @@
     "creating": "Account banaya ja raha hai...",
     "create": "Account banaayein",
     "haveAccount": "Pehle se account hai?",
-    "login": "Login"
+    "login": "Login",
+    "checkEmail": "Bas ek step aur. Apne email mein 6-digit code dekhein."
   },
   "combosPage": {
     "loadError": "Combos load karne mein fail",
@@ -1067,5 +1069,37 @@
     "whatsapp": "WhatsApp",
     "copy": "Details copy karein",
     "copied": "Copy ho gaya"
+  },
+  "verifyEmail": {
+    "title": "Apna email confirm karein",
+    "description": "Humne {{email}} par 6-digit code bheja hai. Account poora karne ke liye use yahan daalein.",
+    "code": "Verification code",
+    "hint": "Code 10 minute tak valid hai. Na mile to spam folder dekhein.",
+    "enterCode": "Please 6-digit code daalein.",
+    "verify": "Email confirm karein",
+    "verifying": "Confirm ho raha hai...",
+    "failed": "Yeh code kaam nahi kiya. Phir se try karein.",
+    "resend": "Code phir bhejein",
+    "resendIn": "{{seconds}}s mein code phir bhejein",
+    "resent": "Naya code bheja ja raha hai.",
+    "resendFailed": "Naya code nahi bheja ja saka. Thodi der baad try karein.",
+    "wrongEmail": "Email address galat hai?",
+    "registerAgain": "Phir se register karein"
+  },
+  "changeEmail": {
+    "change": "Badlein",
+    "title": "Login email badlein",
+    "description": "Aapka login email {{email}} hai. Naye address ko confirm karne ke liye hum us par code bhejenge.",
+    "codeDescription": "{{email}} par bheja gaya 6-digit code daalein.",
+    "newEmail": "Naya email",
+    "currentPassword": "Current password",
+    "googleHint": "Google se sign up kiya tha aur password nahi banaya? Pehle login page par \"Forgot password\" se password banayein.",
+    "code": "Verification code",
+    "sendCode": "Code bhejein",
+    "confirm": "Email badlein",
+    "back": "Wapas",
+    "codeSent": "{{email}} par code bhej diya gaya.",
+    "success": "Login email badal gaya.",
+    "failed": "Email nahi badla ja saka. Phir se try karein."
   }
 }

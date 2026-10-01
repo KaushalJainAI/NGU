@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
+import { authAPI, isEmailNotVerified } from "@/lib/api/auth";
 import { GoogleLogin } from "@react-oauth/google";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,18 @@ const Login: React.FC = () => {
 
     try {
       const success = await login(email, password);
-      if (success) {
-        navigate("/");
-      } else {
-        toast.error(t('auth.loginFailed'));
-      }
+      // On failure `login` has already shown the reason.
+      if (success) navigate("/");
     } catch (error) {
+      if (isEmailNotVerified(error)) {
+        // The password was right; the inbox is unproven. Mail a code and move
+        // to the code screen. A failed send is not fatal — that screen has a
+        // resend button.
+        await authAPI.resendVerification(email).catch(() => {});
+        toast.info(t('auth.verifyFirst'));
+        navigate("/verify-email", { state: { email, password } });
+        return;
+      }
       toast.error(t('auth.networkError'));
     } finally {
       setIsLoading(false);

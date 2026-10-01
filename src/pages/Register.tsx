@@ -71,8 +71,9 @@ const Register = () => {
         pincode: formData.pincode,
         profile_picture: formData.profile_picture
       });
-      toast.success(t('register.success'));
-      navigate("/login");
+      // The account cannot log in until the emailed code is entered.
+      toast.success(t('register.checkEmail'));
+      navigate("/verify-email", { state: { email: formData.email.trim(), password: formData.password } });
     } catch (error: any) {
       console.error("Registration error:", error);
       toast.error(error.message || t('register.failed'));

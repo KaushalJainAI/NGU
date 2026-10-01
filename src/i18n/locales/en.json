@@ -351,7 +351,8 @@
     "networkError": "Network error. Please try again.",
     "googleFailed": "Google login failed. Please try again.",
     "subtitle": "Enter your credentials to access your account",
-    "registerHere": "Register here"
+    "registerHere": "Register here",
+    "verifyFirst": "Please confirm your email first. We sent you a code."
   },
   "about": {
     "badge": "Barnagar, Madhya Pradesh",
@@ -417,8 +418,8 @@
       "charges": {
         "title": "Shipping Charges",
         "intro": "Shipping charges are calculated based on the weight of your order and delivery location:",
-        "free": "Orders above ₹499: <b>Free Shipping</b>",
-        "upto": "Orders up to ₹499: ₹69 shipping charge applies"
+        "free": "Orders of ₹499 and above: <b>Free Shipping</b>",
+        "upto": "Orders below ₹499: ₹69.62 shipping charge applies (₹59 + 18% GST)"
       },
       "tracking": {
         "title": "Order Tracking",
@@ -806,7 +807,8 @@
     "creating": "Creating account...",
     "create": "Create account",
     "haveAccount": "Already have an account?",
-    "login": "Login"
+    "login": "Login",
+    "checkEmail": "Almost done. Check your email for a 6-digit code."
   },
   "combosPage": {
     "loadError": "Failed to load combos",
@@ -1112,5 +1114,37 @@
     "whatsapp": "WhatsApp",
     "copy": "Copy details",
     "copied": "Copied"
+  },
+  "verifyEmail": {
+    "title": "Confirm your email",
+    "description": "We sent a 6-digit code to {{email}}. Enter it to finish setting up your account.",
+    "code": "Verification code",
+    "hint": "The code is valid for 10 minutes. Check your spam folder if you cannot find it.",
+    "enterCode": "Please enter the 6-digit code.",
+    "verify": "Confirm email",
+    "verifying": "Confirming...",
+    "failed": "That code did not work. Please try again.",
+    "resend": "Resend code",
+    "resendIn": "Resend code in {{seconds}}s",
+    "resent": "If a new code was due, it is on its way.",
+    "resendFailed": "Could not send a new code. Please try again in a while.",
+    "wrongEmail": "Wrong email address?",
+    "registerAgain": "Register again"
+  },
+  "changeEmail": {
+    "change": "Change",
+    "title": "Change login email",
+    "description": "Your login email is {{email}}. We will send a code to the new address to confirm it.",
+    "codeDescription": "Enter the 6-digit code we sent to {{email}}.",
+    "newEmail": "New email",
+    "currentPassword": "Current password",
+    "googleHint": "Signed up with Google and never set a password? Use \"Forgot password\" on the login page to set one first.",
+    "code": "Verification code",
+    "sendCode": "Send code",
+    "confirm": "Change email",
+    "back": "Back",
+    "codeSent": "Code sent to {{email}}.",
+    "success": "Login email changed.",
+    "failed": "Could not change your email. Please try again."
   }
 }

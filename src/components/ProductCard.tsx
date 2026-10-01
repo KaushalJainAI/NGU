@@ -26,7 +26,7 @@ interface ProductCardProps {
 
 
 const ProductCard = ({
-  id = 1,
+  id,
   name,
   image,
   price,

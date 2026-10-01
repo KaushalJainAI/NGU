@@ -31,6 +31,12 @@ export interface RegisterPayload {
   profile_picture?: string;
 }
 
+/** True for the login response that means "right password, email not confirmed yet". */
+export const isEmailNotVerified = (error: unknown): boolean => {
+  const e = error as { status?: number; data?: { code?: string } } | null;
+  return e?.status === 403 && e?.data?.code === "email_not_verified";
+};
+
 export const authAPI = {
   // Uses publicFetch so the CSRF header (X-CSRFToken) is sent. CookieJWTAuthentication
   // enforces CSRF whenever a (possibly stale) access_token cookie rides along, and a
@@ -59,6 +65,28 @@ export const authAPI = {
     authFetch(`${API_BASE_URL}/auth/change-password/`, {
       method: "POST",
       body: JSON.stringify({ old_password, new_password }),
+    }),
+
+  // The password goes with the code: the backend only verifies an address
+  // for the person who set the account's password (see VerifyEmailConfirmView).
+  verifyEmail: (email: string, otp_code: string, password: string) =>
+    publicFetch(`${API_BASE_URL}/auth/verify-email/`, {
+      method: "POST",
+      body: JSON.stringify({ email, otp_code, password }),
+    }),
+
+  resendVerification: (email: string) =>
+    publicFetch(`${API_BASE_URL}/auth/verify-email/request/`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  // Call once without `otp_code` to mail a code to the new address, then again
+  // with it to make the switch.
+  changeEmail: (new_email: string, current_password: string, otp_code?: string) =>
+    authFetch(`${API_BASE_URL}/auth/change-email/`, {
+      method: "POST",
+      body: JSON.stringify({ new_email, current_password, ...(otp_code ? { otp_code } : {}) }),
     }),
 
   googleLogin: async (accessToken: string) => {

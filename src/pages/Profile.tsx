@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { CreditCard, Trash2, Star, Wallet, MapPin, Loader2 } from "lucide-react";
 import Footer from "@/components/Footer";
+import ChangeEmailDialog from "@/components/ChangeEmailDialog";
 import { useAuth } from "@/context/AuthContext";
 import { paymentMethodsAPI, userAPI, geoAPI } from "@/lib/api";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -65,7 +66,7 @@ const Profile = () => {
   // Location detection for the address fields.
   const geo = useGeolocation();
   const [detectingLocation, setDetectingLocation] = useState(false);
-  const { logout } = useAuth();
+  const { logout, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   // Payment methods
@@ -87,6 +88,7 @@ const Profile = () => {
   const [pwdError, setPwdError] = useState("");
   const [pwdSuccess, setPwdSuccess] = useState("");
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -205,7 +207,7 @@ const Profile = () => {
       setPwdSuccess(t('profile.passwordChanged'));
       setPwdForm({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
     } catch (err) {
-      setPwdError(err?.detail || t('profile.passwordChangeFailed'));
+      setPwdError(err?.message || t('profile.passwordChangeFailed'));
     } finally {
       setIsChangingPassword(false);
     }
@@ -353,7 +355,13 @@ const Profile = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">{t('profile.email')}</Label>
-                    <Input id="email" type="email" value={profile.email} onChange={e => setProfile({ ...profile, email: e.target.value })} />
+                    {/* The login email changes only through the code-confirmed dialog. */}
+                    <div className="flex gap-2">
+                      <Input id="email" type="email" value={profile.email} readOnly className="bg-muted" />
+                      <Button type="button" variant="outline" onClick={() => setEmailDialogOpen(true)}>
+                        {t('changeEmail.change')}
+                      </Button>
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone">{t('profile.phone')}</Label>
@@ -441,6 +449,15 @@ const Profile = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <ChangeEmailDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        currentEmail={profile.email}
+        onChanged={(email) => {
+          setProfile((prev) => ({ ...prev, email }));
+          refreshUser();
+        }}
+      />
       <Footer />
     </>
   );
