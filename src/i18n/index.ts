@@ -12,6 +12,7 @@ import enCombos from './locales/en/combos.json';
 import enOrders from './locales/en/orders.json';
 import enReviews from './locales/en/reviews.json';
 import enAdmin from './locales/en/admin.json';
+import enAccounts from './locales/en/accounts.json';
 
 import hiCommon from './locales/hi/common.json';
 import hiNav from './locales/hi/nav.json';
@@ -23,6 +24,7 @@ import hiCombos from './locales/hi/combos.json';
 import hiOrders from './locales/hi/orders.json';
 import hiReviews from './locales/hi/reviews.json';
 import hiAdmin from './locales/hi/admin.json';
+import hiAccounts from './locales/hi/accounts.json';
 
 /**
  * Languages the ADMIN PANEL offers. Deliberately shorter than the storefront's
@@ -59,6 +61,7 @@ const en = {
   ...enOrders,
   ...enReviews,
   ...enAdmin,
+  ...enAccounts,
 };
 
 const hi = {
@@ -72,6 +75,7 @@ const hi = {
   ...hiOrders,
   ...hiReviews,
   ...hiAdmin,
+  ...hiAccounts,
 };
 
 i18n

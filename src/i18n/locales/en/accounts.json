@@ -1,0 +1,20 @@
+{
+  "accounts": {
+    "title": "Accounts",
+    "subtitle": "Sales, cash, costs and an estimated profit — no ledgers.",
+    "month": "Month",
+    "netSales": "Net sales",
+    "moneyReceived": "Money received",
+    "moneySplit": "Online {{o}} · COD {{c}}",
+    "costs": "Costs",
+    "profit": "Estimated profit",
+    "gstToPay": "Estimated GST to pay",
+    "estimateNote": "Estimate from the entries in this panel. Confirm with your accountant before filing or paying.",
+    "gatewayCoverage": "Gateway fee recorded on {{a}} of {{b}} online payments.",
+    "courierCoverage": "Courier cost recorded on {{a}} of {{b}} dispatched orders.",
+    "expenses": "Expenses",
+    "saveFailed": "Could not save the expense.",
+    "deleteConfirm": "Delete this expense?",
+    "itc": "GST can be claimed"
+  }
+}

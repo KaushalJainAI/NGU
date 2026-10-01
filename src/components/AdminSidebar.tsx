@@ -47,6 +47,7 @@ const menuItems = [
   { titleKey: 'nav.bulkEdit', url: '/bulk-edit', icon: Table2 },
   { titleKey: 'nav.orders', url: '/orders', icon: ShoppingCart },
   { titleKey: 'nav.gst', url: '/gst', icon: Receipt },
+  { titleKey: 'nav.accounts', url: '/accounts', icon: Receipt },
   { titleKey: 'nav.customers', url: '/customers', icon: Users },
   { titleKey: 'nav.coupons', url: '/coupons', icon: Ticket },
   { titleKey: 'nav.recycleBin', url: '/recycle-bin', icon: Trash2 },
