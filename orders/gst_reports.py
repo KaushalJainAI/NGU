@@ -1,5 +1,13 @@
 """HSN-wise summary of outward supplies — the data behind GSTR-1 Table 12.
 
+WHICH ORDERS COUNT
+------------------
+Invoices issued in the period, by issue date. Only orders with an issued
+`Invoice` whose `issued_at` falls in the window are counted — an order that
+was never invoiced was never supplied. Credit notes are reported as a
+separate figure, NOT netted into the HSN rows (Table 9B, not Table 12).
+
+
 Table 12 asks, for every HSN code supplied in a return period: the unit
 quantity, the total quantity, the taxable (net) value and the tax. Nothing else
 in this codebase can produce it, because the per-slab breakup on an invoice is
@@ -23,13 +31,6 @@ Line snapshots, never the catalogue:
 
 Reading snapshots is the whole point: re-classifying a product today must not
 change a return that was already filed for last quarter.
-
-WHICH ORDERS COUNT
-------------------
-`analytics.management.commands.rollup_analytics.countable_orders()` — everything
-except cancelled and soft-deleted orders. Deliberately the same filter the sales
-dashboard uses, so the HSN summary and the revenue figure on the next screen
-cannot disagree.
 
 WHAT THIS DOES **NOT** DO
 -------------------------
@@ -73,13 +74,6 @@ SHIPPING_UQC = 'OTH'
 UNCLASSIFIED = ''
 
 
-def _countable_orders():
-    # Imported lazily: analytics imports orders models, so a module-level import
-    # here would close the cycle.
-    from analytics.management.commands.rollup_analytics import countable_orders
-    return countable_orders()
-
-
 def hsn_summary(start, end):
     """HSN x rate rows for orders placed in [start, end].
 
@@ -96,9 +90,12 @@ def hsn_summary(start, end):
     Rows are sorted by code then rate, with unclassified last so it reads as the
     exception it is.
     """
-    # range_filter, not __date__gte: the latter wraps created_at in a timezone
-    # expression and loses the index (see spices_backend/timeranges.py).
-    orders = _countable_orders().filter(**range_filter('created_at', start, end))
+    # Invoice basis: supplies invoiced in the window, by issue date — never
+    # orders by order date. range_filter keeps the predicate on the bare column
+    # so the index serves it (see spices_backend/timeranges.py).
+    from .models import Order
+    orders = Order.objects.filter(
+        invoice__isnull=False, **range_filter('invoice__issued_at', start, end))
 
     # (code, rate) -> {'qty', 'gross', 'tax'}. Amounts accumulate GROSS
     # (GST-inclusive) and the net is derived once at the end, so a slab's
@@ -173,9 +170,11 @@ def hsn_summary(start, end):
     }
 
     # Credit notes for the same window, reported but NOT netted off (Table 9B,
-    # not Table 12). Bucketed by REFUND date, which is when the credit note
-    # arises — not by the date of the order being refunded.
-    refunds = _refunds_in_period(start, end)
+    # not Table 12). Bucketed by credit-note issue date — the period whose
+    # output tax they reduce — not by the date of the order being credited.
+    from .gst_ledger import period_summary as _period_summary
+    _ledger = _period_summary(start, end)
+    refunds = {'amount': _ledger['credit_notes']['total'], 'tax': _ledger['credit_notes']['tax']}
 
     return {
         'rows': rows,

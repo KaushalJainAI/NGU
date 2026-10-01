@@ -113,6 +113,10 @@ class Order(models.Model):
         max_length=2, blank=True, default='', db_index=True,
         help_text="GST state code of the destination (e.g. '23' = Madhya Pradesh). "
                   "Blank = historical order, treated as intra-state.")
+    # True when the address could not be placed and the seller's own state was
+    # used as the fallback. The stored code is still authoritative — this only
+    # flags the guess so the GST report can ask an admin to confirm it.
+    place_of_supply_is_fallback = models.BooleanField(default=False)
 
     # Order Details
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
@@ -585,3 +589,32 @@ class OrderRefund(models.Model):
 
     def __str__(self):
         return f"Refund {self.amount} on ORD-{self.order_id:06d}"
+
+
+class CreditNote(models.Model):
+    """A GST credit note: reduces the output tax declared on an invoice.
+
+    Created (a) for every recorded refund, and (b) when an invoiced order is
+    cancelled while no money is held (e.g. a COD parcel returned to origin).
+    `OrderRefund` remains the record of money actually paid back.
+    """
+    REASONS = [('refund', 'Refund'), ('cancellation', 'Cancelled after invoice')]
+
+    order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name='credit_notes')
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name='credit_notes')
+    refund = models.OneToOneField(OrderRefund, on_delete=models.PROTECT, null=True,
+                                  blank=True, related_name='credit_note')
+    reason = models.CharField(max_length=20, choices=REASONS)
+    number = models.CharField(max_length=16, unique=True, db_index=True)
+    series = models.CharField(max_length=16, db_index=True)
+    sequence = models.PositiveIntegerField()
+    issued_at = models.DateTimeField(db_index=True)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2)  # value credited, GST included
+    total_tax = models.DecimalField(max_digits=10, decimal_places=2)
+    snapshot = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-issued_at', '-id']
+        constraints = [models.UniqueConstraint(fields=['series', 'sequence'],
+                                               name='uniq_credit_note_series_sequence')]

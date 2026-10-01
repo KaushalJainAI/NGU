@@ -804,6 +804,11 @@ class OrderViewSet(viewsets.ModelViewSet):
                 # and never re-derived: an admin correcting the address later
                 # would otherwise silently re-head an invoice already filed.
                 # Unresolvable addresses fall back to the seller's own state.
+                from .place_of_supply import resolve_state_code
+                _resolved = resolve_state_code(
+                    state=serializer.validated_data.get('shipping_state'),
+                    address=serializer.validated_data.get('shipping_address'),
+                )
                 place_of_supply = place_of_supply_for(
                     state=serializer.validated_data.get('shipping_state'),
                     address=serializer.validated_data.get('shipping_address'),
@@ -822,6 +827,7 @@ class OrderViewSet(viewsets.ModelViewSet):
                     status=order_status,
                     payment_status=order_payment_status,
                     place_of_supply_state_code=place_of_supply,
+                    place_of_supply_is_fallback=(_resolved is None),
                     **serializer.validated_data
                 )
 
@@ -1172,6 +1178,17 @@ class OrderViewSet(viewsets.ModelViewSet):
                         {'tracking_url': ['Enter a valid http(s) link.']},
                         status=status.HTTP_400_BAD_REQUEST)
 
+        # An issued invoice freezes the place of supply: changing it afterwards
+        # would re-head a filed bill. Checked before the transaction so a 400
+        # writes nothing.
+        if 'place_of_supply_state_code' in request.data:
+            from .models import Invoice as _Invoice
+            _pk = self.kwargs.get('pk') or self.kwargs.get('id')
+            if _pk is not None and _Invoice.objects.filter(order_id=_pk).exists():
+                return Response(
+                    {'place_of_supply_state_code': ['Cannot change after the invoice is issued.']},
+                    status=status.HTTP_400_BAD_REQUEST)
+
         with transaction.atomic():
             obj = self.get_object()  # 404s if outside the caller's queryset
             # Canonical lock order (§7.2): Order first, then Payment — so an admin
@@ -1340,6 +1357,9 @@ class OrderViewSet(viewsets.ModelViewSet):
             # advancing shipped → delivered must not raise a second.
             from .invoicing import maybe_issue_invoice
             maybe_issue_invoice(order)
+            if cancelling:
+                from .credit_notes import maybe_issue_credit_note_for_cancellation
+                maybe_issue_credit_note_for_cancellation(order)
 
             # Flipping an order to 'refunded' by hand must reverse its GST and
             # give the goods back to stock, or the tax owed stays overstated and
@@ -1445,6 +1465,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             order.status = 'cancelled'
             order.cancelled_at = timezone.now()
             order.save(update_fields=['status', 'cancelled_at'])
+            from .credit_notes import maybe_issue_credit_note_for_cancellation
+            maybe_issue_credit_note_for_cancellation(order)
 
         # Tell the customer their order was cancelled (best-effort).
         send_order_status_email(order, status_changed=True, tracking_added=False)

@@ -165,6 +165,9 @@ def record_refund(order, amount, *, source='gateway', reference=None, note='',
         if restore_order_stock(order):
             logger.info("Stock restored for order %s on refund %s.", order.pk, refund.pk)
 
+        from .credit_notes import maybe_issue_credit_note_for_refund
+        maybe_issue_credit_note_for_refund(refund)
+
         return refund
 
 

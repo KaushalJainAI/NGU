@@ -390,6 +390,14 @@ class DashboardViewSet(viewsets.ViewSet):
              'revenue': str(_money(r['revenue']))}
             for r in top_rows
         ]
+        # WP6 — GST on the INVOICE basis: what was invoiced this month, what
+        # credit notes reversed, and the net held. Invoices by issue date, not
+        # orders by order date.
+        from orders.gst_ledger import period_summary as _gst_period_summary
+        _mtd_ledger = _gst_period_summary(month_start, today)
+        mtd_gst_collected = _mtd_ledger['invoices']['tax']
+        mtd_gst_refunded = _mtd_ledger['credit_notes']['tax']
+        mtd_gst_net_collected = _mtd_ledger['net']['tax']
 
         data = {
             'orders_to_confirm': confirmable.count(),
@@ -425,15 +433,15 @@ class DashboardViewSet(viewsets.ViewSet):
             # ledger, so that figure is the owner's/accountant's to compute in
             # their books. Nothing here should be named or read as "payable".
             'today_gst_collected': str(today_stats['gst'] or 0),
-            'mtd_gst_collected': str(mtd_gst),
-            # GST reversed by refunds, counted on the day the refund happened.
+            'mtd_gst_collected': str(mtd_gst_collected),
+            # GST reversed by credit notes, counted on the day the note was issued.
             'today_gst_refunded': str(today_gst_refunded),
             'mtd_gst_refunded': str(mtd_gst_refunded),
-            # Collected − refunded: the net tax actually held for the period.
+            # Collected − reversed: the net tax actually held for the period.
             # The number the GST tile leads with.
             'today_gst_net_collected': str(
                 (today_stats['gst'] or 0) - today_gst_refunded),
-            'mtd_gst_net_collected': str(mtd_gst - mtd_gst_refunded),
+            'mtd_gst_net_collected': str(mtd_gst_net_collected),
             'today_refunds': str(today_ref['amount'] or 0),
             'mtd_refunds': str(mtd_ref['amount'] or 0),
             # Delivery economics. `shipping_cost` is admin-entered per order, so
@@ -484,7 +492,7 @@ class DashboardViewSet(viewsets.ViewSet):
         data['today_gst_payable'] = data['today_gst_net_collected']
         data['mtd_gst_payable'] = data['mtd_gst_net_collected']
         data['mtd_gst_payable_after_known_itc'] = str(
-            mtd_gst - mtd_gst_refunded - mtd_gateway_tax)
+            mtd_gst_net_collected - mtd_gateway_tax)
         cache.set(cache_key, data, 60)
         return Response(data)
 

@@ -38,6 +38,14 @@ def _order_one(client, user, product, quantity=1):
     return Order.objects.latest("id")
 
 
+def _invoiced(order, when=None):
+    """Issue the invoice so the order counts on the INVOICE basis."""
+    from django.utils import timezone
+    from orders.invoicing import issue_invoice
+    invoice, _ = issue_invoice(order, when=when or timezone.now())
+    return invoice
+
+
 @pytest.mark.django_db
 class TestSnapshotOnTheLine:
     def test_line_records_the_code_charged(
@@ -102,8 +110,8 @@ class TestHsnSummary:
             self, authenticated_client, test_user, test_category):
         spice = _product(test_category, "Haldi", "105", "5", "09103030")
         papad = _product(test_category, "Papad", "100", "0", "19059040")
-        _order_one(authenticated_client, test_user, spice)
-        _order_one(authenticated_client, test_user, papad)
+        _invoiced(_order_one(authenticated_client, test_user, spice))
+        _invoiced(_order_one(authenticated_client, test_user, papad))
 
         rows = {r["hsn_code"]: r for r in hsn_summary(YESTERDAY, TODAY)["rows"]}
         assert rows["09103030"]["rate"] == 5.0
@@ -114,7 +122,7 @@ class TestHsnSummary:
     def test_quantity_counts_packs_sold(
             self, authenticated_client, test_user, test_category):
         product = _product(test_category, "Haldi", "100", "5", "09103030")
-        _order_one(authenticated_client, test_user, product, quantity=3)
+        _invoiced(_order_one(authenticated_client, test_user, product, quantity=3))
         row = next(r for r in hsn_summary(YESTERDAY, TODAY)["rows"]
                    if r["hsn_code"] == "09103030")
         assert row["quantity"] == 3 and row["uqc"] == "PAC"
@@ -125,8 +133,11 @@ class TestHsnSummary:
         worse than useless — it looks authoritative and isn't."""
         spice = _product(test_category, "Haldi", "105", "5", "09103030")
         papad = _product(test_category, "Papad", "100", "0", "19059040")
-        orders = [_order_one(authenticated_client, test_user, spice),
-                  _order_one(authenticated_client, test_user, papad)]
+        o1 = _order_one(authenticated_client, test_user, spice)
+        _invoiced(o1)
+        o2 = _order_one(authenticated_client, test_user, papad)
+        _invoiced(o2)
+        orders = [o1, o2]
 
         data = hsn_summary(YESTERDAY, TODAY)
         charged = sum((o.total_tax for o in orders), Decimal("0.00"))
@@ -151,6 +162,7 @@ class TestHsnSummary:
         response = authenticated_client.post(URL, ADDR, format="json")
         assert response.status_code == 201, response.data
         order = Order.objects.latest("id")
+        _invoiced(order)
 
         data = hsn_summary(YESTERDAY, TODAY)
         goods_rows = [r for r in data["rows"] if not r["is_service"]]
@@ -163,7 +175,7 @@ class TestHsnSummary:
             self, authenticated_client, test_user, test_category):
         """Dropping them would produce a summary that quietly doesn't add up."""
         product = _product(test_category, "Mystery", "105", "5", "")
-        _order_one(authenticated_client, test_user, product)
+        _invoiced(_order_one(authenticated_client, test_user, product))
         data = hsn_summary(YESTERDAY, TODAY)
         row = data["rows"][-1]           # unclassified always sorts last
         assert row["is_unclassified"] and row["hsn_code"] == ""
@@ -180,7 +192,7 @@ class TestHsnSummary:
     def test_orders_outside_the_window_are_excluded(
             self, authenticated_client, test_user, test_category):
         product = _product(test_category, "Haldi", "105", "5", "09103030")
-        _order_one(authenticated_client, test_user, product)
+        _invoiced(_order_one(authenticated_client, test_user, product))
         past = TODAY - timedelta(days=30)
         assert hsn_summary(past, past - timedelta(days=1) + timedelta(days=1))["rows"] == []
 
@@ -190,6 +202,7 @@ class TestHsnSummary:
         summary short of the GST actually collected."""
         product = _product(test_category, "Haldi", "100", "5", "09103030")
         order = _order_one(authenticated_client, test_user, product)
+        _invoiced(order)
         assert order.shipping_charge > 0, "fixture must be below the free-shipping threshold"
 
         data = hsn_summary(YESTERDAY, TODAY)
@@ -214,7 +227,7 @@ class TestHsnSummaryEndpoint:
     def test_returns_rows_for_the_requested_window(
             self, admin_client, test_admin, test_category):
         product = _product(test_category, "Haldi", "105", "5", "09103030")
-        _order_one(admin_client, test_admin, product)
+        _invoiced(_order_one(admin_client, test_admin, product))
         body = admin_client.get(
             f"{self.URL}?from={YESTERDAY}&to={TODAY}").json()
         assert body["order_count"] == 1
@@ -223,7 +236,7 @@ class TestHsnSummaryEndpoint:
     def test_csv_download_carries_the_totals_and_the_period(
             self, admin_client, test_admin, test_category):
         product = _product(test_category, "Haldi", "105", "5", "09103030")
-        _order_one(admin_client, test_admin, product)
+        _invoiced(_order_one(admin_client, test_admin, product))
         response = admin_client.get(
             f"{self.URL}?from={YESTERDAY}&to={TODAY}&download=csv")
         assert response["Content-Type"].startswith("text/csv")

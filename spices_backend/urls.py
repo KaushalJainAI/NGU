@@ -4,7 +4,6 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 
@@ -27,7 +26,10 @@ from products.bulk_views import (
     bulk_products, bulk_products_apply, bulk_products_import, export_products_csv,
     hsn_coverage, hsn_reference,
 )
-from orders.gst_views import hsn_summary_report
+from orders.gst_views import (
+    gst_b2c, gst_credit_notes, gst_documents, gst_invoices, gst_summary,
+    hsn_summary_report,
+)
 from cart.views import CartViewSet, ValidateCouponAPIView, FavoritesViewSet
 from orders.views import OrderViewSet
 from reviews.views import ReviewViewSet
@@ -140,6 +142,11 @@ urlpatterns = [
     path('api/admin/hsn-reference/', hsn_reference, name='hsn-reference'),
     path('api/admin/hsn-coverage/', hsn_coverage, name='hsn-coverage'),
     path('api/admin/hsn-summary/', hsn_summary_report, name='hsn-summary'),
+    path('api/admin/gst/summary/', gst_summary, name='gst-summary'),
+    path('api/admin/gst/b2c/', gst_b2c, name='gst-b2c'),
+    path('api/admin/gst/documents/', gst_documents, name='gst-documents'),
+    path('api/admin/gst/invoices/', gst_invoices, name='gst-invoices'),
+    path('api/admin/gst/credit-notes/', gst_credit_notes, name='gst-credit-notes'),
 
     path('api/spice-forms/', get_spice_forms, name='spice-forms'),
     path('api/search/suggest/', search_suggest, name='search-suggest'),

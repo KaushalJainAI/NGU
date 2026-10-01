@@ -1,11 +1,13 @@
 """Admin-only GST reporting endpoints.
 
-One endpoint, two renderings: JSON for the admin panel's on-screen table and CSV
-for the file the owner (or their CA) actually uploads/keys into GSTR-1 Table 12.
-Both come from `gst_reports.hsn_summary` so the screen and the download can
-never disagree.
+Invoice-basis ledger (GSTR-1 Tables 7/9B/documents) plus the HSN summary
+(Table 12). One endpoint, two renderings: JSON for the panel's on-screen
+tables and CSV for the file the owner (or their CA) actually files from.
+Both renderings come from the same functions so the screen and the download
+can never disagree.
 """
 from datetime import date as date_cls, timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -15,7 +17,23 @@ from rest_framework.response import Response
 from admin_panel.utils import csv_response
 from products.hsn import RATES_AS_OF
 
+from .gst_ledger import (
+    b2c_by_state, credit_note_register, documents_issued,
+    fallback_place_of_supply, invoice_register, period_summary,
+)
 from .gst_reports import hsn_summary, unclassified_products
+
+
+def _f(value):
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _block_json(block):
+    return {k: (_f(v) if k != 'count' else v) for k, v in block.items()}
 
 
 def _parse_range(request):
@@ -126,4 +144,160 @@ def hsn_summary_report(request):
             {'id': p['id'], 'name': p['name'], 'tax_rate': float(p['tax_rate'] or 0)}
             for p in unclassified_products()
         ],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def gst_summary(request):
+    """Invoice-basis period summary: invoices, credit notes, net + fallbacks."""
+    date_from, date_to = _parse_range(request)
+    data = period_summary(date_from, date_to)
+    fallback = fallback_place_of_supply(date_from, date_to)
+
+    if request.query_params.get('download') == 'csv':
+        header = ['Block', 'Count', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total Tax', 'Total']
+
+        def rows():
+            for label in ('invoices', 'credit_notes', 'net'):
+                block = data[label]
+                yield [
+                    label,
+                    block.get('count', '') if label != 'net' else '',
+                    f"{block['taxable_value']:.2f}",
+                    f"{block['cgst']:.2f}",
+                    f"{block['sgst']:.2f}",
+                    f"{block['igst']:.2f}",
+                    f"{block['tax']:.2f}",
+                    f"{block['total']:.2f}",
+                ]
+            yield []
+            yield [f"Period: {date_from.isoformat()} to {date_to.isoformat()} (invoices by issue date)"]
+
+        return csv_response(f"gst-summary-{date_from.isoformat()}-to-{date_to.isoformat()}.csv",
+                            header, rows())
+
+    return Response({
+        'from': date_from.isoformat(),
+        'to': date_to.isoformat(),
+        'invoices': _block_json(data['invoices']),
+        'credit_notes': _block_json(data['credit_notes']),
+        'net': _block_json(data['net']),
+        'fallback_place_of_supply': fallback,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def gst_b2c(request):
+    """State-wise B2C summary (GSTR-1 Table 7 shape): gross/credit/net."""
+    date_from, date_to = _parse_range(request)
+    rows = b2c_by_state(date_from, date_to)
+
+    if request.query_params.get('download') == 'csv':
+        header = ['State Code', 'State', 'Rate (%)', 'Gross Taxable', 'Gross CGST',
+                  'Gross SGST', 'Gross IGST', 'Credit Taxable', 'Credit CGST',
+                  'Credit SGST', 'Credit IGST', 'Net Taxable', 'Net CGST',
+                  'Net SGST', 'Net IGST']
+
+        def csv_rows():
+            for r in rows:
+                yield [
+                    r['state_code'], r['state_name'],
+                    '' if r['rate'] is None else f"{r['rate']:g}",
+                    f"{r['gross_taxable_value']:.2f}", f"{r['gross_cgst']:.2f}",
+                    f"{r['gross_sgst']:.2f}", f"{r['gross_igst']:.2f}",
+                    f"{r['credit_taxable_value']:.2f}", f"{r['credit_cgst']:.2f}",
+                    f"{r['credit_sgst']:.2f}", f"{r['credit_igst']:.2f}",
+                    f"{r['net_taxable_value']:.2f}", f"{r['net_cgst']:.2f}",
+                    f"{r['net_sgst']:.2f}", f"{r['net_igst']:.2f}",
+                ]
+
+        return csv_response(f"gst-b2c-{date_from.isoformat()}-to-{date_to.isoformat()}.csv",
+                            header, csv_rows())
+
+    return Response({
+        'from': date_from.isoformat(),
+        'to': date_to.isoformat(),
+        'rows': [{k: _f(v) for k, v in r.items()} for r in rows],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def gst_documents(request):
+    """Documents issued per series, with gap detection (GSTR-1 Table 12 docs)."""
+    date_from, date_to = _parse_range(request)
+    data = documents_issued(date_from, date_to)
+
+    if request.query_params.get('download') == 'csv':
+        header = ['Type', 'Series', 'From', 'To', 'Count', 'Gap']
+
+        def csv_rows():
+            for label in ('invoices', 'credit_notes'):
+                for row in data[label]:
+                    yield [label, row['series'], row['from_number'],
+                           row['to_number'], row['count'], row['gap']]
+
+        return csv_response(f"gst-documents-{date_from.isoformat()}-to-{date_to.isoformat()}.csv",
+                            header, csv_rows())
+
+    return Response({'from': date_from.isoformat(), 'to': date_to.isoformat(), **data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def gst_invoices(request):
+    """Invoice register: one row per invoice issued in range."""
+    date_from, date_to = _parse_range(request)
+    rows = invoice_register(date_from, date_to)
+
+    if request.query_params.get('download') == 'csv':
+        header = ['Invoice', 'Issued On', 'Order', 'Buyer', 'Place of Supply',
+                  'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total Tax', 'Total',
+                  'Payment Method', 'Order Status']
+
+        def csv_rows():
+            for r in rows:
+                yield [r['number'], r['issued_on'], r['order_number'], r['buyer'],
+                       r['place_of_supply'], f"{r['taxable_value']:.2f}",
+                       f"{r['cgst']:.2f}", f"{r['sgst']:.2f}", f"{r['igst']:.2f}",
+                       f"{r['total_tax']:.2f}", f"{r['total']:.2f}",
+                       r['payment_method'], r['status']]
+
+        return csv_response(f"invoice-register-{date_from.isoformat()}-to-{date_to.isoformat()}.csv",
+                            header, csv_rows())
+
+    return Response({
+        'from': date_from.isoformat(),
+        'to': date_to.isoformat(),
+        'rows': [{k: _f(v) for k, v in r.items()} for r in rows],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def gst_credit_notes(request):
+    """Credit note register: one row per credit note issued in range."""
+    date_from, date_to = _parse_range(request)
+    rows = credit_note_register(date_from, date_to)
+
+    if request.query_params.get('download') == 'csv':
+        header = ['Credit Note', 'Issued On', 'Reason', 'Invoice', 'Order',
+                  'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total Tax', 'Total']
+
+        def csv_rows():
+            for r in rows:
+                yield [r['number'], r['issued_on'], r['reason'], r['invoice_number'],
+                       r['order_number'], f"{r['taxable_value']:.2f}",
+                       f"{r['cgst']:.2f}", f"{r['sgst']:.2f}", f"{r['igst']:.2f}",
+                       f"{r['total_tax']:.2f}", f"{r['total']:.2f}"]
+
+        return csv_response(f"credit-note-register-{date_from.isoformat()}-to-{date_to.isoformat()}.csv",
+                            header, csv_rows())
+
+    return Response({
+        'from': date_from.isoformat(),
+        'to': date_to.isoformat(),
+        'rows': [{k: _f(v) for k, v in r.items()} for r in rows],
     })

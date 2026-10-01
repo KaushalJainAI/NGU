@@ -197,18 +197,20 @@ def _order_number(order):
 def credit_note_number(refund):
     """The serial printed on `refund`'s credit note.
 
-    Derived from the ledger row's primary key for exactly the reason
-    `_order_number` derives the invoice number from the order's: the PK is
-    immutable, never reused, and issued in strictly increasing order, which is
-    what a GST serial has to be. No counter table, and no way for the number on a
-    reprinted document to differ from the number on the first print.
-
-    A credit note is a distinct series from the invoice ("CN-" vs "ORD-"), as
-    Rule 53 requires, and its issue date is the ledger row's `created_at` — the
-    date the refund was recorded, which is the period whose output tax it
-    reduces. Change this format only alongside a migration that freezes the old
-    numbers, since documents already sent to customers cite them.
+    The linked `orders.CreditNote` row's number (`CN/<FY>/<seq>`) when one has
+    been issued, otherwise the legacy `CN-<pk>` fallback. The fallback covers
+    refunds recorded before credit notes existed as rows (and any refund whose
+    order never got an invoice, which can never have a note).
     """
+    try:
+        note = getattr(refund, 'credit_note', None)
+        if note is None:
+            from .models import CreditNote
+            note = CreditNote.objects.filter(refund=refund).first()
+        if note is not None:
+            return note.number
+    except Exception:  # noqa: BLE001 — numbering must never break rendering
+        pass
     return f"CN-{refund.id:06d}"
 
 
