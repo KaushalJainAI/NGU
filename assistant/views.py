@@ -127,53 +127,66 @@ class AssistantChatView(APIView):
             conversation=conversation, role='user', content=message
         )
 
-        completion = getattr(request, '_assistant_completion', None)
-        agent = Agent(user, completion=completion)
-        result = agent.run(message, history=history, language=data.get('language') or '')
+        # AP7c/S5: one in-flight turn per account. A multi-call turn occupies a
+        # gunicorn slot for seconds; parallel turns from one account multiply
+        # that (and the LLM bill). cache.add is set-if-absent: losers get 429.
+        # The 60 s TTL is a dead-man's release if the worker dies mid-turn.
+        from django.core.cache import cache
+        inflight_key = f'ngu:chat:inflight:{user.pk}' if user else None
+        if inflight_key is not None and not cache.add(inflight_key, 1, timeout=60):
+            return Response({'detail': 'A reply is already in progress.'},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+        try:
+            completion = getattr(request, '_assistant_completion', None)
+            agent = Agent(user, completion=completion)
+            result = agent.run(message, history=history, language=data.get('language') or '')
 
-        proposed_action = result.get('proposed_action')
+            proposed_action = result.get('proposed_action')
 
-        # Escalation: flag thread for human attention (no ChatSession created).
-        # AP2: an LLM provider failure (reason llm_error) is never an escalation
-        # even if a future caller sets escalate alongside it — the friendly
-        # fallback is still persisted below so history shows it.
-        if result.get('escalate') and result.get('reason') != 'llm_error' and not conversation.needs_human:
-            conversation.needs_human = True
-            conversation.save(update_fields=['needs_human', 'updated_at'])
+            # Escalation: flag thread for human attention (no ChatSession created).
+            # AP2: an LLM provider failure (reason llm_error) is never an escalation
+            # even if a future caller sets escalate alongside it — the friendly
+            # fallback is still persisted below so history shows it.
+            if result.get('escalate') and result.get('reason') != 'llm_error' and not conversation.needs_human:
+                conversation.needs_human = True
+                conversation.save(update_fields=['needs_human', 'updated_at'])
 
-        # Auto-set thread title from the LLM on the first turn.
-        if is_first_turn and result.get('title') and not conversation.title:
-            conversation.title = result['title']
-            conversation.save(update_fields=['title', 'updated_at'])
-        else:
-            conversation.save(update_fields=['updated_at'])
+            # Auto-set thread title from the LLM on the first turn.
+            if is_first_turn and result.get('title') and not conversation.title:
+                conversation.title = result['title']
+                conversation.save(update_fields=['title', 'updated_at'])
+            else:
+                conversation.save(update_fields=['updated_at'])
 
-        AssistantMessage.objects.create(
-            conversation=conversation,
-            role='assistant',
-            content=result.get('reply', ''),
-            meta={
-                'sources': result.get('sources', []),
+            AssistantMessage.objects.create(
+                conversation=conversation,
+                role='assistant',
+                content=result.get('reply', ''),
+                meta={
+                    'sources': result.get('sources', []),
+                    'proposed_action': proposed_action,
+                    'escalate': bool(result.get('escalate')),
+                    'llm_used': result.get('llm_used'),
+                    'reason': result.get('reason', 'ok'),
+                },
+            )
+
+            return Response({
+                'conversation_id': str(conversation.conversation_id),
+                'reply': result.get('reply', ''),
                 'proposed_action': proposed_action,
-                'escalate': bool(result.get('escalate')),
-                'llm_used': result.get('llm_used'),
-                'reason': result.get('reason', 'ok'),
-            },
-        )
-
-        return Response({
-            'conversation_id': str(conversation.conversation_id),
-            'reply': result.get('reply', ''),
-            'proposed_action': proposed_action,
-            'sources': result.get('sources', []),
-            # True once the thread no longer fits the model's context window and
-            # its oldest turns were dropped from the prompt. The client shows a
-            # "start a new chat" notice — the assistant is now answering without
-            # the earliest part of this conversation.
-            'history_truncated': bool(result.get('history_truncated')),
-            'ai_paused': False,
-            'handled_by': '',
-        })
+                'sources': result.get('sources', []),
+                # True once the thread no longer fits the model's context window and
+                # its oldest turns were dropped from the prompt. The client shows a
+                # "start a new chat" notice — the assistant is now answering without
+                # the earliest part of this conversation.
+                'history_truncated': bool(result.get('history_truncated')),
+                'ai_paused': False,
+                'handled_by': '',
+            })
+        finally:
+            if inflight_key is not None:
+                cache.delete(inflight_key)
 
     # ------------------------------------------------------------------
     def _get_or_create_conversation(self, conversation_id, user, anon_session):

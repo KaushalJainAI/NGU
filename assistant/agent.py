@@ -46,7 +46,10 @@ CHARS_PER_TOKEN = 3
 # Hard ceiling — a single turn's prompt is never allowed to exceed this many
 # estimated tokens, so we stay inside the model's context window (minimax-m2.5
 # ~204k). Configurable per-deployment via env.
-MODEL_CONTEXT_TOKENS = int(os.getenv('ASSISTANT_MODEL_CONTEXT_TOKENS', '200000'))
+# AP7c/S8: a few thousand tokens of history per turn, not ~200k. The old
+# default let one account's thread drag a novel's worth of context through up
+# to 4 LLM calls per turn, 500 turns a day — pure spend. Env still overrides.
+MODEL_CONTEXT_TOKENS = int(os.getenv('ASSISTANT_MODEL_CONTEXT_TOKENS', '12000'))
 # Headroom reserved out of the ceiling for the reply and for <<DATA>> tool
 # observations appended across up to MAX_ITERATIONS loop cycles, so the running
 # prompt can't blow past MODEL_CONTEXT_TOKENS mid-turn.
