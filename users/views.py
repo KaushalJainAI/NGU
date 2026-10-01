@@ -100,6 +100,51 @@ def admin_tokens_for(user):
     return refresh, refresh.access_token
 
 
+# ==================== EMAIL VERIFICATION (AP5/S1) ====================
+
+def _create_email_otp(user):
+    """Mint a 6-digit verification OTP for a user (AP5).
+
+    REUSES the PasswordResetOTP table — no second OTP model. Previous live OTPs
+    are consumed first so only one code is valid at a time (same rule as the
+    reset flow, which prevents cross-talk in both directions).
+    """
+    import secrets
+    from datetime import timedelta
+    from django.utils import timezone
+    from .models import PasswordResetOTP
+
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+    record = PasswordResetOTP(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+    record.set_otp(otp_code)
+    record.save()
+    return otp_code
+
+
+def _send_verification_otp(user):
+    """Create + deliver a verification code (AP5).
+
+    Synchronous (not threaded like the reset flow): the registration response
+    is generic either way, and a thread would race the test locmem outbox.
+    A mail failure is logged and NEVER fails registration — the code can be
+    re-requested via verify-email/request/.
+    """
+    from django.conf import settings as dj_settings
+    from django.core.mail import send_mail
+    otp_code = _create_email_otp(user)
+    try:
+        send_mail(
+            subject='Verify your email - NGU Spices',
+            message=f'Your verification code is: {otp_code}\n\nThis code will expire in 10 minutes.',
+            from_email=dj_settings.DEFAULT_FROM_EMAIL or dj_settings.EMAIL_HOST_USER,
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception('Failed to send verification email to %s', user.email)
+
+
 # ==================== CUSTOM THROTTLES ====================
 
 class LoginRateThrottle(AnonRateThrottle):
@@ -124,13 +169,24 @@ class UserRegistrationView(generics.CreateAPIView):
     throttle_classes = [RegisterRateThrottle]
 
     def create(self, request, *args, **kwargs):
+        # AP5/S9: the response is IDENTICAL whether the address is new or
+        # taken — no enumeration. The serializer's own duplicate check stays as
+        # a race-window backstop (it 400s); the pre-check below is the oracle
+        # closer for the common path.
+        email = (request.data.get('email') or '').strip().lower()
+        if email and User.objects.filter(email__iexact=email).exists():
+            return Response(
+                {'detail': 'If this email is new, a verification code was sent.'},
+                status=status.HTTP_201_CREATED,
+            )
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response({
-            'user': UserSerializer(user).data,
-            'message': 'User registered successfully. Please login to continue.'
-        }, status=status.HTTP_201_CREATED)
+        _send_verification_otp(user)
+        return Response(
+            {'detail': 'If this email is new, a verification code was sent.'},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @method_decorator(ensure_csrf_cookie, name='dispatch')
@@ -191,9 +247,20 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request, *args, **kwargs):
         response = super().post(request, *args, **kwargs)
         if response.status_code == 200:
+            # AP5/S1: no session without inbox proof. Invalid credentials already
+            # 401'd inside super().post(); reaching here means the password was
+            # right, so checking the flag leaks nothing new. The minted tokens
+            # are DISCARDED — the 403 body carries no secret.
+            email = (request.data.get('email') or '').strip().lower()
+            user = User.objects.filter(email__iexact=email).first() if email else None
+            if user is not None and not user.email_verified:
+                return Response(
+                    {'detail': 'Email not verified.', 'code': 'email_not_verified'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             access_token = response.data['access']
             refresh_token = response.data['refresh']
-            
+
             # Set both tokens in secure HttpOnly cookies
             set_access_cookie(response, access_token)
             set_refresh_cookie(response, refresh_token)
@@ -408,6 +475,90 @@ class PasswordResetConfirmView(APIView):
         except (User.DoesNotExist, PasswordResetOTP.DoesNotExist):
             return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
 
+# ==================== EMAIL VERIFICATION VIEWS (AP5/S1) ====================
+
+class VerifyEmailRequestView(APIView):
+    """Re-send a verification code to an unverified address (AP5).
+
+    Beyond the plan's verify-email/confirm: without this, an existing account
+    left unverified by the migration (e.g. staff created in Django admin) would
+    have NO way to obtain a code and would be locked out of login for good.
+    Always returns the same generic 200 — no existence oracle (S9).
+    Rate limited per IP; additionally capped per account (5 codes / 24 h) so a
+    victim's inbox cannot be flooded from rotating IPs (same rule AP6 applies
+    to the reset flow).
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [PasswordResetRateThrottle]
+
+    def post(self, request):
+        from datetime import timedelta
+        from django.utils import timezone
+        email = (request.data.get('email') or '').strip().lower()
+        user = User.objects.filter(email__iexact=email).first() if email else None
+        if user is not None and not user.email_verified:
+            recent = PasswordResetOTP.objects.filter(
+                user=user, created_at__gte=timezone.now() - timedelta(hours=24)
+            ).count()
+            if recent < 5:
+                _send_verification_otp(user)
+        return Response(
+            {'detail': 'If this email needs verification, a code was sent.'},
+            status=status.HTTP_200_OK,
+        )
+
+
+class VerifyEmailConfirmView(APIView):
+    """Confirm a verification code and mark the email verified (AP5).
+
+    Mirrors PasswordResetVerifyView's lockout shapes (400 wrong/expired, 429
+    locked) so brute force costs the same. On success the code is consumed,
+    pre-verification sessions die, and the account can log in.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [PasswordResetRateThrottle]
+
+    def post(self, request):
+        email = (request.data.get('email') or '').strip().lower()
+        otp_code = request.data.get('otp_code') or ''
+        if not email or not otp_code:
+            return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            otp_record = PasswordResetOTP.objects.filter(
+                user=user,
+                is_used=False
+            ).latest('created_at')
+        except PasswordResetOTP.DoesNotExist:
+            return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_record.is_expired:
+            return Response({'detail': 'OTP has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp_record.is_locked:
+            return Response({'detail': 'Too many failed attempts. Please request a new OTP.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        if not otp_record.check_otp(otp_code):
+            otp_record.failed_attempts += 1
+            otp_record.save(update_fields=['failed_attempts'])
+            remaining = PasswordResetOTP.MAX_FAILED_ATTEMPTS - otp_record.failed_attempts
+            if remaining > 0:
+                return Response({'detail': f'Invalid OTP. {remaining} attempt(s) remaining.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Too many failed attempts. Please request a new OTP.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        otp_record.is_used = True
+        otp_record.save(update_fields=['is_used'])
+        if not user.email_verified:
+            user.email_verified = True
+            user.save(update_fields=['email_verified'])
+        # Any session minted before proof (none should exist, but be strict).
+        _blacklist_all_for(user)
+        return Response({'success': True}, status=status.HTTP_200_OK)
+
 # ==================== GOOGLE SOCIAL AUTH VIEWS ====================
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
@@ -475,6 +626,8 @@ class GoogleLogin(APIView):
                     name=name,
                     first_name=first_name,
                     last_name=last_name,
+                    # AP5: Google verified this inbox — no OTP needed.
+                    email_verified=True,
                 )
 
             if created:
@@ -499,7 +652,12 @@ class GoogleLogin(APIView):
                     # Update name if previously empty
                     user.name = name
                     user.save(update_fields=['name'])
-                
+                # AP5: Google proved this inbox (verified claim checked above),
+                # so an existing row becomes verified here — no OTP needed.
+                if not user.email_verified:
+                    user.email_verified = True
+                    user.save(update_fields=['email_verified'])
+
             # 4. Generate identical JWT tokens as CustomTokenObtainPairView
             refresh = CustomTokenObtainPairSerializer.get_token(user)
             access = refresh.access_token
@@ -572,6 +730,14 @@ class AdminLoginView(APIView):
             return Response(
                 {'detail': 'Invalid credentials or not an admin account.'},
                 status=status.HTTP_401_UNAUTHORIZED,
+            )
+        # AP5/S1: staff verify once too (see migration grandfathering; staff
+        # created in Django admin can request a code via verify-email/request/).
+        # The staff check stays FIRST so non-staff see the same 401 as before.
+        if not user.email_verified:
+            return Response(
+                {'detail': 'Email not verified.', 'code': 'email_not_verified'},
+                status=status.HTTP_403_FORBIDDEN,
             )
         refresh, access = admin_tokens_for(user)
         response = Response({'success': True, 'user': UserSerializer(user).data})

@@ -15,6 +15,7 @@ def health_check(request):
 from users.views import (
     UserRegistrationView, UserProfileView, CustomTokenObtainPairView, CustomTokenRefreshView, ChangePasswordView,
     PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin,
+    VerifyEmailRequestView, VerifyEmailConfirmView,
     LogoutView, AdminLoginView, AdminGoogleLoginView, AdminTokenRefreshView, AdminLogoutView,
 )
 from products.sitemaps import sitemap_xml, robots_txt
@@ -110,6 +111,8 @@ urlpatterns = [
     path('api/auth/password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('api/auth/password-reset-verify/', PasswordResetVerifyView.as_view(), name='password-reset-verify'),
     path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+    path('api/auth/verify-email/', VerifyEmailConfirmView.as_view(), name='verify-email'),
+    path('api/auth/verify-email/request/', VerifyEmailRequestView.as_view(), name='verify-email-request'),
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
     
     # dj-rest-auth routes were UNMOUNTED (2026-07-25). They exposed a second,

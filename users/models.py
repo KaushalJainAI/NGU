@@ -8,6 +8,10 @@ class User(AbstractUser):
     Custom User model extending Django's AbstractUser
     """
     email = models.EmailField(unique=True)
+    # AP5/S1: proof of inbox ownership. Registration leaves this False until
+    # the OTP is confirmed; Google sign-in sets it (Google verified the inbox).
+    # Login is refused while False. See users/migrations/0010_* grandfathering.
+    email_verified = models.BooleanField(default=False, db_index=True)
     name = models.CharField(max_length=255, blank=True)
     phone = models.CharField(max_length=15, blank=True)
     address = models.TextField(blank=True)
