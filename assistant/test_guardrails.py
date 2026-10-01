@@ -111,9 +111,12 @@ class TestG2PlatformData:
         })
         assert 'cost' not in res and 'stock' not in res
 
-    def test_policy_returns_only_kind_and_content(self, policy_shipping):
+    def test_policy_returns_static_page_content(self, policy_shipping):
+        # AP10: answered from the static pages (assistant/policies.py), not the
+        # retired Policy table — the fixture row is deliberately ignored.
         res = toolkit.tool_get_policy(None, {'kind': 'shipping'})
-        assert set(res) == {'kind', 'content'}
+        assert set(res) == {'kind', 'title', 'content', 'route'}
+        assert res['route'] == '/shipping-policy'
 
     def test_registry_has_no_enumeration_or_admin_tools(self):
         for forbidden in ('list_orders', 'list_users', 'search_customers', 'run_sql', 'get_config'):
