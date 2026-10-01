@@ -1,12 +1,25 @@
 import { API_BASE_URL, authFetch, authFetchForm } from "./config";
 
+export interface ProposalLine {
+  product_id: number;
+  variant_id?: number | null;
+  item_type?: "product" | "combo";
+  quantity: number;
+  label?: string;
+  price?: number;
+}
+
 export interface ProposedAction {
-  type: "add_to_cart" | "checkout" | "navigate" | "escalate_to_human";
+  type: "add_to_cart" | "cart_proposal" | "edit_cart" | "checkout" | "navigate" | "escalate_to_human";
   label: string;
   route?: string;
   product_id?: number;
+  variant_id?: number | null;
   item_type?: "product" | "combo";
   quantity?: number;
+  price?: number;
+  lines?: ProposalLine[];
+  note?: string;
   reason?: string;
 }
 
@@ -50,17 +63,10 @@ export interface ChatMessage {
   content: string;
   sender_name: string;
   created_at: string;
+  // AP10: the saved proposal travels with history so action buttons survive
+  // reload (the widget disables them again once tapped — one tap per button).
+  proposed_action?: ProposedAction | null;
 }
-
-const ANON_KEY = "assistant_anon_session";
-const getAnonSession = (): string => {
-  let id = localStorage.getItem(ANON_KEY);
-  if (!id) {
-    id = (crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`).slice(0, 64);
-    localStorage.setItem(ANON_KEY, id);
-  }
-  return id;
-};
 
 export const assistantAPI = {
   chat: async (
@@ -73,7 +79,6 @@ export const assistantAPI = {
       body: JSON.stringify({
         message,
         conversation_id: conversationId || undefined,
-        anon_session: getAnonSession(),
         language: language || undefined,
       }),
     });

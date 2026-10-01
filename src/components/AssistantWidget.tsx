@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, User, Send, Mic, MicOff, X, Loader2,
-  ArrowRight, ShoppingCart, Plus, ChevronLeft, Shield, AlertTriangle,
+  ArrowRight, ShoppingCart, ShoppingBasket, Plus, Minus, ChevronLeft, Shield, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  assistantAPI, AssistantReply, ProposedAction, ConversationSummary, ChatMessage,
+  assistantAPI, AssistantReply, ProposedAction, ProposalLine, ConversationSummary, ChatMessage,
 } from "@/lib/api/assistant";
+import { cartAPI } from "@/lib/api/cart";
+import { MAX_ITEM_QUANTITY } from "@/config/limits";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
@@ -27,17 +29,95 @@ interface LocalTurn {
   text: string;
   senderName?: string;
   action?: ProposedAction | null;
+  // AP10: once tapped, the button stays disabled — one tap can no longer
+  // repeat (the confirm call runs exactly once).
+  actionUsed?: boolean;
 }
 
 const stripMarkdown = (s: string) =>
   s.replace(/[*_`#]/g, "").replace(/^\s*[-•]\s+/gm, "");
+
+// ─── Cart proposal card (AP10) ──────────────────────────────────────────────
+// One editable card for the whole shopping list: per-line quantity steppers
+// (cart_proposal) and a SINGLE confirm. edit_cart proposals render as a plain
+// list with the same single confirm.
+
+const ProposalCard = ({
+  action, disabled, onConfirm,
+}: {
+  action: ProposedAction;
+  disabled: boolean;
+  onConfirm: (action: ProposedAction) => void;
+}) => {
+  const { t } = useTranslation();
+  const lines: ProposalLine[] = action.lines || [];
+  const editable = action.type === "cart_proposal";
+  const [qtys, setQtys] = useState<number[]>(() =>
+    lines.map((l) => Math.max(1, Math.min(MAX_ITEM_QUANTITY, l.quantity || 1)))
+  );
+  const setQty = (i: number, q: number) =>
+    setQtys((prev) => prev.map((v, j) => (j === i ? Math.max(1, Math.min(MAX_ITEM_QUANTITY, q)) : v)));
+  const confirm = () =>
+    onConfirm({
+      ...action,
+      lines: lines.map((l, i) => ({ ...l, quantity: editable ? qtys[i] : l.quantity })),
+    });
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-2 space-y-1.5">
+      {action.note ? (
+        <p className="text-xs text-muted-foreground px-1">{action.note}</p>
+      ) : null}
+      {lines.map((l, i) => (
+        <div key={i} className="flex items-center gap-2 text-sm">
+          <span className="flex-1 truncate px-1">{l.label || `#${l.product_id}`}</span>
+          {editable ? (
+            <span className="flex items-center gap-1 shrink-0">
+              <Button
+                type="button" size="icon" variant="outline" className="h-6 w-6"
+                disabled={disabled || qtys[i] <= 1}
+                onClick={() => setQty(i, qtys[i] - 1)}
+                aria-label={t('assistant.proposalLess', 'Less')}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="w-6 text-center font-medium">{qtys[i]}</span>
+              <Button
+                type="button" size="icon" variant="outline" className="h-6 w-6"
+                disabled={disabled || qtys[i] >= MAX_ITEM_QUANTITY}
+                onClick={() => setQty(i, qtys[i] + 1)}
+                aria-label={t('assistant.proposalMore', 'More')}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground shrink-0 px-1">
+              × {l.quantity}
+            </span>
+          )}
+        </div>
+      ))}
+      <Button
+        type="button" size="sm" className="w-full gap-1.5"
+        disabled={disabled}
+        onClick={confirm}
+      >
+        <ShoppingBasket className="h-4 w-4" />
+        {action.type === "edit_cart"
+          ? t('assistant.proposalEditConfirm', 'Update cart')
+          : t('assistant.proposalConfirm', 'Add all to cart')}
+      </Button>
+    </div>
+  );
+};
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const AssistantWidget = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { addToCart } = useCart();
+  const { addToCart, updateQuantity, removeFromCart, fetchCartFromBackend } = useCart();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
@@ -148,6 +228,9 @@ const AssistantWidget = () => {
           role: m.role as LocalTurn["role"],
           text: m.content,
           senderName: m.sender_name || undefined,
+          // AP10: saved proposals travel with history so buttons survive
+          // reload (fresh again — the server does not track taps).
+          action: m.proposed_action || null,
         }));
       setTurns(loaded.length ? loaded : [GREETING]);
     } catch {
@@ -274,25 +357,63 @@ const AssistantWidget = () => {
     return () => window.clearInterval(id);
   }, [open, view, handoff, activeConvId, loadThread, mutation.isPending]);
 
-  const handleAction = async (action: ProposedAction) => {
-    switch (action.type) {
-      case "add_to_cart": {
-        const res = await addToCart({
-          id: action.product_id!,
-          itemType: action.item_type || "product",
-          name: "", image: "", price: 0,
-          quantity: action.quantity || 1,
-        });
-        if (res.requiresLogin) navigate("/login");
-        break;
+  // AP10: mark the tapped button used BEFORE running, so one tap can never
+  // repeat (double-tap, reload-while-pending). The confirm itself runs once.
+  const markActionUsed = (index: number) => {
+    setTurns((prev) => prev.map((turn, i) =>
+      i === index ? { ...turn, actionUsed: true } : turn
+    ));
+  };
+
+  const handleAction = async (action: ProposedAction, turnIndex: number) => {
+    markActionUsed(turnIndex);
+    try {
+      switch (action.type) {
+        case "add_to_cart": {
+          const res = await addToCart({
+            id: action.product_id!,
+            itemType: action.item_type || "product",
+            name: action.label, image: "",
+            price: action.price ?? 0,
+            variantId: action.variant_id ?? null,
+            quantity: action.quantity || 1,
+          });
+          if (res.requiresLogin) navigate("/login");
+          break;
+        }
+        case "cart_proposal": {
+          // ONE cart-add call for the whole list (AP10) — never one per line.
+          await cartAPI.sync((action.lines || []).map((l) => ({
+            product_id: l.product_id,
+            item_type: l.item_type || "product",
+            quantity: Math.max(1, Math.min(MAX_ITEM_QUANTITY, l.quantity || 1)),
+            variant_id: l.variant_id ?? null,
+          })));
+          await fetchCartFromBackend();
+          toast.success(t('assistant.proposalAdded', 'Added to cart'));
+          break;
+        }
+        case "edit_cart": {
+          for (const l of action.lines || []) {
+            if ((l.quantity || 0) <= 0) {
+              await removeFromCart(l.product_id, l.item_type || "product", l.variant_id ?? null);
+            } else {
+              await updateQuantity(l.product_id, l.quantity, l.item_type || "product", l.variant_id ?? null);
+            }
+          }
+          toast.success(t('assistant.proposalUpdated', 'Cart updated'));
+          break;
+        }
+        case "checkout":
+        case "navigate":
+          if (action.route) { setOpen(false); navigate(action.route); }
+          break;
+        case "escalate_to_human":
+          toast.info(t('assistant.escalated'));
+          break;
       }
-      case "checkout":
-      case "navigate":
-        if (action.route) { setOpen(false); navigate(action.route); }
-        break;
-      case "escalate_to_human":
-        toast.info(t('assistant.escalated'));
-        break;
+    } catch {
+      toast.error(t('assistant.proposalFailed', 'Could not update the cart — please try again'));
     }
   };
 
@@ -472,12 +593,21 @@ const AssistantWidget = () => {
                         : <ChatMarkdown text={turn.text} />
                       }
                     </div>
-                    {turn.action && (
+                    {turn.action && !turn.actionUsed &&
+                      (turn.action.type === "cart_proposal" || turn.action.type === "edit_cart") && (
+                      <ProposalCard
+                        action={turn.action}
+                        disabled={false}
+                        onConfirm={(a) => handleAction(a, i)}
+                      />
+                    )}
+                    {turn.action && !turn.actionUsed &&
+                      turn.action.type !== "cart_proposal" && turn.action.type !== "edit_cart" && (
                       <Button
                         size="sm"
                         variant="secondary"
                         className="gap-1.5"
-                        onClick={() => handleAction(turn.action!)}
+                        onClick={() => handleAction(turn.action!, i)}
                       >
                         {turn.action.type === "add_to_cart"
                           ? <ShoppingCart className="h-4 w-4" />
@@ -485,6 +615,11 @@ const AssistantWidget = () => {
                         }
                         {turn.action.label}
                       </Button>
+                    )}
+                    {turn.action && turn.actionUsed && (
+                      <p className="text-xs text-muted-foreground px-1">
+                        {t('assistant.proposalDone', 'Done ✓')}
+                      </p>
                     )}
                   </div>
                 </div>
