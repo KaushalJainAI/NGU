@@ -31,6 +31,17 @@ MAX_ORDER_TOTAL = config("MAX_ORDER_TOTAL", default=9_999_999, cast=int)
 # per-transaction cap of ₹1,00,000; orders above this can only be paid via COD.
 MAX_ONLINE_ORDER_TOTAL = config("MAX_ONLINE_ORDER_TOTAL", default=100_000, cast=int)
 
+# --- Cash on delivery abuse caps (AP7b/S7) -----------------------------------
+# A COD order reserves stock with no money down, so unverified throwaways can
+# drain the shelf. Two bounds (owner-tunable via env, see AUDIT §7.5):
+# value per order, and how many unfinished COD orders one account may hold.
+COD_MAX_VALUE = config("COD_MAX_VALUE", default=Decimal("5000"))
+# An order counts as "open" while it can still tie up stock or cash:
+# placed through in-transit. Delivered (goods reached the customer),
+# cancelled and refunded are terminal and don't count.
+COD_OPEN_STATUSES = ('pending', 'confirmed', 'processing', 'shipped', 'delivering')
+COD_MAX_OPEN = config("COD_MAX_OPEN", default=3, cast=int)
+
 # --- Pricing (shipping / tax) ------------------------------------------------
 # Flat shipping fee charged below the free-shipping threshold, and the
 # post-discount subtotal (in rupees) at/above which shipping becomes free.
