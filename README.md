@@ -138,4 +138,3 @@ selected language. The AI assistant also replies in the chosen language.
 ## Deployment
 
 See [DEPLOYMENT.md](../../DEPLOYMENT.md) for EC2 deployment.
-See [HOSTING_PLAN.md](../../HOSTING_PLAN.md) for Cloudflare Pages (free) deployment.
