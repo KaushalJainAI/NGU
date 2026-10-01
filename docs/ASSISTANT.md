@@ -386,7 +386,7 @@ receives the full history including tool observations.
     over-counting English so the estimate stays under the real limit).
    - `MODEL_CONTEXT_TOKENS` (env `ASSISTANT_MODEL_CONTEXT_TOKENS`, default `12000`,
      AP7c) is the hard ceiling — a turn's prompt can never exceed it.
-   - `MAX_OUTPUT_TOKENS` (1000, AP9) and `TOOL_OBS_RESERVE_TOKENS` (8000) are reserved out
+   - `MAX_OUTPUT_TOKENS` (1000, AP9) and `TOOL_OBS_RESERVE_TOKENS` (4000) are reserved out
      of the ceiling so appended `<<DATA>>` tool observations across the loop can't
      overflow the window mid-turn.
   - The view loads at most `MAX_HISTORY_MESSAGES = 500` rows from the DB before the
@@ -455,8 +455,19 @@ in English.
 | `AssistantBurstThrottle` | 10 requests/minute (AP7c) |
 | `AssistantDailyThrottle` | 100 requests/day (AP7c) |
 
-Plus one in-flight turn per account (concurrent POST → 429) and a ~12k-token
-history budget (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
+Plus one in-flight turn per account (concurrent POST → 429, taken BEFORE the
+message is saved so a refused turn leaves nothing in the thread; 180 s dead-man
+TTL) and a ~12k-token prompt ceiling (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
+Of that ceiling, what is left for HISTORY is 12000 − 1000 (reply) − 4000 (tool
+reserve) − ~2,100 (system prompt) ≈ 4,900 estimated tokens, roughly 25–30
+ordinary messages. (The reserve was 8000, which left ~800 — about five
+exchanges.) ⚠ These are env-overridable: a deployed env that still pins
+`ASSISTANT_MODEL_CONTEXT_TOKENS=200000` / `ASSISTANT_TOOL_OBS_RESERVE_TOKENS=8000`
+/ `ASSISTANT_MAX_OUTPUT_TOKENS=600` silently overrides all three defaults.
+
+A turn that carries text AND a lookup ("Let me check…" + `search_products`) is
+not treated as the answer — the loop goes round again so the reply is written
+with the results. Only on the last round is such text returned as-is.
 
 AP10b note on worker isolation (S5): chat currently shares the 3×2 gunicorn
 pool with checkout. The shipped mitigation is bounds, not a separate pool —

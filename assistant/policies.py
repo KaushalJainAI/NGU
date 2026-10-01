@@ -13,7 +13,7 @@ cited in each docstring so the next editor can diff).
 SHIPPING_POLICY = """Shipping policy (see /shipping-policy for details):
 - We ship all across India; no international shipping.
 - Delivery: metro cities 3-5 business days, other cities 5-7, remote areas 7-10.
-- Orders above Rs. 499 ship free; up to Rs. 499 a Rs. 69 delivery charge applies.
+- Orders of Rs. 499 and above ship free; below Rs. 499 a Rs. 69.62 delivery charge applies (Rs. 59 + 18% GST).
 - Orders are processed within 24-48 hours of payment confirmation (next business
   day after weekends/holidays). The courier makes 3 delivery attempts.
 - Once shipped you get a tracking number by email/SMS, also visible on My Orders.

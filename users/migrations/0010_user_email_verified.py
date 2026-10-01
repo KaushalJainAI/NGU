@@ -10,12 +10,17 @@ def grandfather_verified(apps, schema_editor):
 
     - Users with a DELIVERED order paid/placed with that address (they received
       goods and order emails there).
-    - Google-created rows: unusable password + a login on record (Google only
-      lets the flow complete for a verified inbox).
+    - Rows with an unusable password: only Google sign-in creates those, and
+      Google only lets the flow complete for a verified inbox.
+    - Staff and superusers: created by the owner by hand, never by
+      self-registration. Leaving them unverified would lock the owner out of
+      the admin panel on deploy.
 
     Everyone else starts unverified and confirms once via
     POST /api/auth/verify-email/ (OTP at registration, or resend).
     """
+    from django.db.models import Q
+
     User = apps.get_model('users', 'User')
     Order = apps.get_model('orders', 'Order')
     delivered_ids = (
@@ -24,11 +29,9 @@ def grandfather_verified(apps, schema_editor):
     User.objects.filter(pk__in=delivered_ids, email_verified=False).update(email_verified=True)
     # Unusable passwords ALWAYS start with '!' regardless of PASSWORD_HASHERS
     # (see django.contrib.auth.hashers.UNUSABLE_PASSWORD_PREFIX), so this is
-    # hasher-agnostic: last_login + no usable password == signed in via Google.
-    User.objects.filter(
-        email_verified=False,
-        last_login__isnull=False,
-        password__startswith='!',
+    # hasher-agnostic. No last_login condition: Google sign-in never stamps it.
+    User.objects.filter(email_verified=False).filter(
+        Q(password__startswith='!') | Q(is_staff=True) | Q(is_superuser=True)
     ).update(email_verified=True)
 
 

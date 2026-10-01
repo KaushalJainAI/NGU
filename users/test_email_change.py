@@ -38,10 +38,11 @@ class TestChangeEmail:
         assert bearer.post(CHANGE_URL, {'new_email': 'a@b.com'}, format='json').status_code == 400
         r = bearer.post(CHANGE_URL, {'new_email': 'a@b.com', 'current_password': 'Wrong!'},
                         format='json')
-        assert r.status_code == 401
+        # 400, not 401: a 401 reads as "session expired" and logs the user out.
+        assert r.status_code == 400
         r2 = bearer.post(CHANGE_URL, {'new_email': 'a@b.com', 'current_password': 'Wrong!',
                                       'otp_code': '000000'}, format='json')
-        assert r2.status_code == 401
+        assert r2.status_code == 400
 
     def test_taken_address_rejected(self, bearer, test_user2):
         r = bearer.post(CHANGE_URL, {'new_email': test_user2.email,

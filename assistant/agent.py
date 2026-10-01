@@ -68,7 +68,11 @@ MODEL_CONTEXT_TOKENS = int(os.getenv('ASSISTANT_MODEL_CONTEXT_TOKENS', '12000'))
 # Headroom reserved out of the ceiling for the reply and for <<DATA>> tool
 # observations appended across up to MAX_ITERATIONS loop cycles, so the running
 # prompt can't blow past MODEL_CONTEXT_TOKENS mid-turn.
-TOOL_OBS_RESERVE_TOKENS = int(os.getenv('ASSISTANT_TOOL_OBS_RESERVE_TOKENS', '8000'))
+# What is left for HISTORY is ceiling - reply - this reserve - system prompt
+# (~2,100 estimated tokens). At 8000 that was ~800 tokens: the assistant forgot
+# after about five exchanges and the "start a new chat" notice showed almost at
+# once. 4000 leaves ~4,900 (roughly 25-30 ordinary messages).
+TOOL_OBS_RESERVE_TOKENS = int(os.getenv('ASSISTANT_TOOL_OBS_RESERVE_TOKENS', '4000'))
 # Safety bound on how many rows the view loads from the DB before the agent
 # token-trims them (a runaway thread must not pull an unbounded queryset).
 MAX_HISTORY_MESSAGES = int(os.getenv('ASSISTANT_MAX_HISTORY_MESSAGES', '500'))
@@ -274,7 +278,7 @@ class Agent:
 
         pending_action = None
         escalate = False
-        for _ in range(MAX_ITERATIONS):
+        for iteration in range(MAX_ITERATIONS):
             # AP2: a provider error (timeout, 5xx, revoked key) must be a
             # friendly reply, NOT a 500 and NOT a human escalation.
             try:
@@ -298,12 +302,17 @@ class Agent:
 
             # Execute every requested call in this round (A3: one round may
             # look up haldi AND jeera AND dhaniya). Observations feed back as
-            # DATA for the next round — unless the model already wrote its
-            # reply, in which case this round's calls are its last word.
+            # DATA for the next round.
+            # `awaiting_answer`: this round produced something the model has
+            # not seen yet (a lookup result, or a rejection). Text sent in the
+            # SAME round was written before that — typically "Let me check
+            # that for you" — so it is not the answer.
+            awaiting_answer = False
             for call in calls:
                 name = call.get('name')
                 args = call.get('args') if isinstance(call.get('args'), dict) else {}
                 if name in self._read_tools:
+                    awaiting_answer = True
                     observation = self._run_read_tool(name, self.user, args)
                     sources.append({'tool': name, 'args': args})
                     messages.append(('assistant', f'[{name} called]'))
@@ -311,6 +320,7 @@ class Agent:
                 elif name in self._action_builders and self._build_action is not None:
                     action, err = self._build_action(name, self.user, args)
                     if action is None:
+                        awaiting_answer = True
                         messages.append(('assistant', f'[{name} called]'))
                         messages.append((
                             'user',
@@ -329,11 +339,17 @@ class Agent:
                             name, {'recorded': True, 'label': action.get('label', '')})))
                 else:
                     # Unknown/invalid tool name -> tell the model, don't execute.
+                    awaiting_answer = True
                     messages.append((
                         'user',
                         f'"{name}" is not a valid tool. Use only the listed '
                         f'tools or answer in plain text.',
                     ))
+
+            last_round = iteration == MAX_ITERATIONS - 1
+            if awaiting_answer and not last_round:
+                # Go round again so the reply is written WITH the results.
+                continue
 
             if content and content.strip():
                 reply = self._clean_reply(content)

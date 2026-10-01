@@ -1,6 +1,15 @@
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
 from django.db import models
 from spices_backend.validators import validate_file_size, validate_image_extension, validate_image_content
+
+
+class UserManager(DjangoUserManager):
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        # A superuser is made by the owner at the shell (createsuperuser), never
+        # by self-registration, so its inbox needs no OTP proof — without this
+        # a fresh owner account is refused by the admin login (email_not_verified).
+        extra_fields.setdefault('email_verified', True)
+        return super().create_superuser(username, email, password, **extra_fields)
 
 
 class User(AbstractUser):
@@ -26,6 +35,8 @@ class User(AbstractUser):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = UserManager()
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
@@ -56,12 +67,26 @@ class User(AbstractUser):
 
 class PasswordResetOTP(models.Model):
     """
-    Model to store OTPs for password reset requests.
+    Model to store emailed 6-digit codes. The name is historical: the table
+    also carries email-verification and change-email codes, told apart by
+    `purpose`. Each purpose has its OWN live code and its OWN daily quota, so
+    requesting one kind can neither cancel nor use up another.
     """
     MAX_FAILED_ATTEMPTS = 5
+    MAX_CODES_PER_DAY = 5
+
+    PURPOSE_RESET = 'reset'
+    PURPOSE_VERIFY = 'verify'
+    PURPOSE_CHANGE_EMAIL = 'change_email'
+    PURPOSE_CHOICES = [
+        (PURPOSE_RESET, 'Password reset'),
+        (PURPOSE_VERIFY, 'Email verification'),
+        (PURPOSE_CHANGE_EMAIL, 'Change email'),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_otps')
     otp_code = models.CharField(max_length=255)
+    purpose = models.CharField(max_length=16, choices=PURPOSE_CHOICES, default=PURPOSE_RESET)
     reset_token = models.CharField(max_length=100, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()

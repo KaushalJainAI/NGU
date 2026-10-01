@@ -339,6 +339,7 @@ REST_FRAMEWORK = {
         'register': '3/minute',  # Registration: 3 per minute
         'contact': '5/hour',     # Contact form: 5 per hour
         'password_reset': '10/day',  # Password reset OTP: 10 per day
+        'email_verify': '30/hour',   # verify-email confirm + resend, per IP
         # AP7c/S5+S8: 10/min burst (one slow multi-call turn already occupies
         # a gunicorn slot for seconds) and 100/day hard cap (500 turns x up to
         # 4 LLM calls each was an uncapped spend path on free accounts).
@@ -610,6 +611,8 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+# Without a timeout a stalled SMTP server blocks the sending thread for good.
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 
 
 # Logging

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
@@ -46,14 +47,41 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'username', 'email', 'name', 'password', 'password2', 'first_name', 'last_name', 'phone',
             'address', 'city', 'state', 'pincode'
         ]
+        # The model-derived UniqueValidators are replaced by validate_email /
+        # validate_username below, which know about the `existing` row the
+        # registration view may be re-registering over.
+        extra_kwargs = {
+            'email': {'validators': []},
+            'username': {'validators': [UnicodeUsernameValidator()]},
+        }
 
     def validate_email(self, value):
         # Canonicalise and reject case-insensitive duplicates up front, so a
         # clean 400 is returned instead of a DB IntegrityError, and so an
         # account can't be shadowed by a case variant of an existing email.
         value = value.strip().lower()
-        if User.objects.filter(email__iexact=value).exists():
+        # The registration view passes the row it already found as `existing`
+        # and answers generically for it, so that case must not 400 here (it
+        # would reveal the address is taken). Without that context — or if a
+        # racing signup created the row after the view looked — this stays the
+        # clean-400 backstop in front of the DB unique constraint.
+        existing = self.context.get('existing')
+        qs = User.objects.filter(email__iexact=value)
+        if existing is not None:
+            qs = qs.exclude(pk=existing.pk)
+        if qs.exists():
             raise serializers.ValidationError("A user with this email already exists.")
+        return value
+
+    def validate_username(self, value):
+        # Re-registering over one's own unclaimed row must be able to keep (or
+        # re-send) the same username.
+        existing = self.context.get('existing')
+        qs = User.objects.filter(username=value)
+        if existing is not None:
+            qs = qs.exclude(pk=existing.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A user with that username already exists.")
         return value
 
     def validate(self, attrs):
@@ -64,6 +92,21 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')
         user = User.objects.create_user(**validated_data)
+        return user
+
+    def overwrite(self, user):
+        """Replace an unclaimed account's details with this registration's."""
+        data = dict(self.validated_data)
+        data.pop('password2')
+        password = data.pop('password')
+        data.pop('email', None)
+        for field in ('name', 'first_name', 'last_name', 'phone',
+                      'address', 'city', 'state', 'pincode'):
+            data.setdefault(field, '')
+        for field, value in data.items():
+            setattr(user, field, value)
+        user.set_password(password)
+        user.save()
         return user
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

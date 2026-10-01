@@ -469,11 +469,13 @@ class TestEmailNormalization:
         # exists — latest() can never be ambiguous.
         user = User.objects.get(email="case@example.com")
         PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
-        record = PasswordResetOTP(user=user, expires_at=timezone.now() + timedelta(minutes=10))
+        record = PasswordResetOTP(user=user, purpose=PasswordResetOTP.PURPOSE_VERIFY,
+                                  expires_at=timezone.now() + timedelta(minutes=10))
         record.set_otp("123456")
         record.save()
         confirm = api_client.post("/api/auth/verify-email/",
-                                  {"email": "case@example.com", "otp_code": "123456"},
+                                  {"email": "case@example.com", "otp_code": "123456",
+                                   "password": "TestPass123!"},
                                   format="json")
         assert confirm.status_code == 200
         for typed in ("case@example.com", "CASE@example.com", "Case@Example.Com"):

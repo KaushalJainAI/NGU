@@ -152,28 +152,49 @@ class AssistantChatView(APIView):
         ]
 
     def post(self, request):
-        user, conversation, message, language, history, is_first_turn, paused = \
-            _prepare_customer_turn(request)
-        if paused is not None:
-            return Response(paused)
         # AP7c/S5: one in-flight turn per account. A multi-call turn occupies a
         # gunicorn slot for seconds; parallel turns from one account multiply
         # that (and the LLM bill). cache.add is set-if-absent: losers get 429.
-        # The 60 s TTL is a dead-man's release if the worker dies mid-turn.
-        from django.core.cache import cache
-        inflight_key = f'ngu:chat:inflight:{user.pk}'
-        if not cache.add(inflight_key, 1, timeout=60):
-            return Response({'detail': 'A reply is already in progress.'},
-                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+        # Taken BEFORE the message is saved — a refused turn must leave nothing
+        # behind, or the thread shows a question nobody ever answers.
+        inflight_key = _claim_turn(request.user)
+        if inflight_key is None:
+            return _turn_in_progress()
         try:
+            user, conversation, message, language, history, is_first_turn, paused = \
+                _prepare_customer_turn(request)
+            if paused is not None:
+                return Response(paused)
             completion = getattr(request, '_assistant_completion', None)
             agent = Agent(user, completion=completion)
             result = agent.run(message, history=history, language=language)
             payload = _finalize_turn(conversation, message, result, is_first_turn)
             return Response(payload)
         finally:
-            if inflight_key is not None:
-                cache.delete(inflight_key)
+            _release_turn(inflight_key)
+
+
+# Dead-man's release if the worker dies mid-turn. Must outlast the slowest
+# possible turn (MAX_ITERATIONS LLM calls, each up to timeout x 2 attempts =
+# 160 s) or the guard lapses while the turn it guards is still running.
+INFLIGHT_TTL_SECONDS = 180
+
+
+def _claim_turn(user):
+    """Returns the lock key, or None if this account already has a turn running."""
+    from django.core.cache import cache
+    key = f'ngu:chat:inflight:{user.pk}'
+    return key if cache.add(key, 1, timeout=INFLIGHT_TTL_SECONDS) else None
+
+
+def _release_turn(key):
+    from django.core.cache import cache
+    cache.delete(key)
+
+
+def _turn_in_progress():
+    return Response({'detail': 'A reply is already in progress.'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
 def _finalize_turn(conversation, message, result, is_first_turn):
@@ -245,21 +266,17 @@ class AssistantChatStreamView(APIView):
     throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
 
     def post(self, request):
-        import json as _json
-        from django.core.cache import cache
         from django.http import StreamingHttpResponse
 
-        user, conversation, message, language, history, is_first_turn, paused = \
-            _prepare_customer_turn(request)
-        if paused is not None:
-            return StreamingHttpResponse(
-                self._events(paused), content_type='text/event-stream')
-
-        inflight_key = f'ngu:chat:inflight:{user.pk}'
-        if not cache.add(inflight_key, 1, timeout=60):
-            return Response({'detail': 'A reply is already in progress.'},
-                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+        inflight_key = _claim_turn(request.user)
+        if inflight_key is None:
+            return _turn_in_progress()
         try:
+            user, conversation, message, language, history, is_first_turn, paused = \
+                _prepare_customer_turn(request)
+            if paused is not None:
+                return StreamingHttpResponse(
+                    self._events(paused), content_type='text/event-stream')
             completion = getattr(request, '_assistant_completion', None)
             agent = Agent(user, completion=completion)
             result = agent.run(message, history=history, language=language)
@@ -267,7 +284,7 @@ class AssistantChatStreamView(APIView):
             return StreamingHttpResponse(
                 self._events(payload), content_type='text/event-stream')
         finally:
-            cache.delete(inflight_key)
+            _release_turn(inflight_key)
 
     @staticmethod
     def _events(payload):

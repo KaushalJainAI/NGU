@@ -100,3 +100,35 @@ class TestTruncation:
         assert out['reason'] == 'ok'
         assert CONTINUED_SUFFIX in out['reply']
         assert out['reply'].startswith('Here is a very long list')
+
+
+@pytest.mark.django_db
+class TestPreambleIsNotTheAnswer:
+    def test_text_sent_with_a_lookup_is_not_returned_as_the_reply(
+            self, monkeypatch, test_category, db):
+        """Models often say "let me check" in the same turn as the tool call.
+        That sentence was written before the lookup ran; the customer must get
+        the answer written after it."""
+        _product(db, test_category, 'Haldi Powder')
+        _script(
+            monkeypatch,
+            _turn(content='Let me check that for you.',
+                  calls=[('search_products', {'query': 'haldi'})]),
+            _turn(content='Yes, Haldi Powder is Rs 100.'),
+        )
+        out = Agent(None).run('do you have haldi?')
+        assert out['reply'] == 'Yes, Haldi Powder is Rs 100.'
+        assert out['reason'] == 'ok'
+
+    def test_text_with_a_lookup_on_the_last_round_is_still_returned(
+            self, monkeypatch, test_category, db):
+        """Out of rounds: some text beats the loop-exhausted apology."""
+        _product(db, test_category, 'Haldi Powder')
+        looking = _turn(calls=[('search_products', {'query': 'haldi'})])
+        _script(
+            monkeypatch, looking, looking, looking,
+            _turn(content='Haldi Powder is Rs 100.',
+                  calls=[('search_products', {'query': 'haldi'})]),
+        )
+        out = Agent(None).run('do you have haldi?')
+        assert out['reply'] == 'Haldi Powder is Rs 100.'
