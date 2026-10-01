@@ -54,12 +54,13 @@ export const deleteExpense = (id: number) =>
 export const getBooksSummary = (from: string, to: string) =>
   api.get<BooksSummary>('/admin/books/summary/', { params: { from, to } }).then(r => r.data);
 
-export const exportExpensesCsv = async () => {
-  const res = await api.get('/expenses/export/', { responseType: 'blob' });
+// The same month the page is showing — not every expense ever entered.
+export const exportExpensesCsv = async (from: string, to: string) => {
+  const res = await api.get('/expenses/export/', { params: { from, to }, responseType: 'blob' });
   const objectUrl = window.URL.createObjectURL(res.data as Blob);
   const a = document.createElement('a');
   a.href = objectUrl;
-  a.download = 'expenses.csv';
+  a.download = `expenses-${from}-to-${to}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();

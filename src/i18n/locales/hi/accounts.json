@@ -15,6 +15,37 @@
     "expenses": "ख़र्च",
     "saveFailed": "ख़र्च सहेजा नहीं जा सका।",
     "deleteConfirm": "यह ख़र्च हटाएँ?",
-    "itc": "जीएसटी का दावा किया जा सकता है"
+    "itc": "जीएसटी का दावा किया जा सकता है",
+    "vendor": "विक्रेता",
+    "gstInAmount": "शामिल जीएसटी",
+    "billNumber": "बिल नंबर",
+    "paymentMode": "भुगतान का तरीका",
+    "category": {
+      "raw_material": "कच्चा माल / ख़रीद",
+      "packaging": "पैकेजिंग",
+      "marketing": "मार्केटिंग",
+      "rent_utilities": "किराया और बिजली-पानी",
+      "salary": "वेतन और मज़दूरी",
+      "other": "अन्य"
+    },
+    "mode": {
+      "cash": "नकद",
+      "bank": "बैंक ट्रांसफ़र",
+      "upi": "UPI",
+      "card": "कार्ड"
+    },
+    "costsBreakdown": "लागत का ब्योरा",
+    "gatewayFees": "पेमेंट गेटवे फ़ीस",
+    "courierCost": "कूरियर लागत",
+    "cash": "नकद",
+    "onlineReceived": "ऑनलाइन प्राप्त",
+    "codReceived": "COD नकद प्राप्त",
+    "refundsPaid": "लौटाए गए रिफ़ंड",
+    "codOutstanding": "COD अभी वसूलना बाकी",
+    "gstWorking": "जीएसटी का हिसाब",
+    "gstOnInvoices": "इनवॉइस पर जीएसटी",
+    "gstCreditNotes": "क्रेडिट नोट",
+    "gstOnExpenses": "ख़र्चों पर जीएसटी (दावा योग्य)",
+    "gstOnGateway": "गेटवे फ़ीस पर जीएसटी"
   }
 }

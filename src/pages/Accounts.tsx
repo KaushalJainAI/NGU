@@ -28,8 +28,26 @@ const thisMonth = () => {
   return { from: start, to: end, month: `${now.getFullYear()}-${pad(now.getMonth() + 1)}` };
 };
 
-const money = (n: string | number) =>
-  `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const isoToday = () => {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+};
+
+// Sign before the symbol: a loss reads "−₹1,682.00", not "₹-1,682.00".
+const money = (n: string | number) => {
+  const value = Number(n || 0);
+  const abs = Math.abs(value).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${value < 0 ? '−' : ''}₹${abs}`;
+};
+
+/** One label/amount row in a breakdown card; `bold` marks the closing line. */
+const Line = ({ label, value, bold }: { label: string; value: string; bold?: boolean }) => (
+  <div className={`flex justify-between gap-3 ${bold ? 'border-t pt-1 font-semibold' : ''}`}>
+    <span className={bold ? '' : 'text-muted-foreground'}>{label}</span>
+    <span>{value}</span>
+  </div>
+);
 
 const CATEGORIES = ['raw_material', 'packaging', 'marketing', 'rent_utilities', 'salary', 'other'];
 const MODES = ['cash', 'bank', 'upi', 'card'];
@@ -69,7 +87,10 @@ const Accounts = () => {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyForm, date: range.from.slice(0, 7) + '-01' });
+    // Today when the selected month is the current one; otherwise the 1st of
+    // the month being looked at, so a back-dated entry lands in that month.
+    const today = isoToday();
+    setForm({ ...emptyForm, date: today >= range.from && today <= range.to ? today : range.from });
     setDialogOpen(true);
   };
   const openEdit = (e: Expense) => {
@@ -191,6 +212,42 @@ const Accounts = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* The working behind the totals above, so each figure can be checked. */}
+          <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{t('accounts.costsBreakdown')}</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Line label={t('accounts.gatewayFees')} value={money(summary.costs.gateway_fees_ex_gst)} />
+                <Line label={t('accounts.courierCost')} value={money(summary.costs.courier_cost)} />
+                {summary.costs.expenses_by_category.map(c => (
+                  <Line key={c.category}
+                    label={t(`accounts.category.${c.category}`, { defaultValue: c.label })}
+                    value={money(c.cost)} />
+                ))}
+                <Line bold label={t('common.total')} value={money(costsTotal)} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{t('accounts.cash')}</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Line label={t('accounts.onlineReceived')} value={money(summary.cash.online_received)} />
+                <Line label={t('accounts.codReceived')} value={money(summary.cash.cod_received)} />
+                <Line label={t('accounts.refundsPaid')} value={`−${money(summary.cash.refunds_paid)}`} />
+                <Line bold label={t('accounts.codOutstanding')} value={money(summary.cash.cod_outstanding_now)} />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">{t('accounts.gstWorking')}</CardTitle></CardHeader>
+              <CardContent className="space-y-1 text-sm">
+                <Line label={t('accounts.gstOnInvoices')} value={money(summary.gst.output_tax)} />
+                <Line label={t('accounts.gstCreditNotes')} value={`−${money(summary.gst.credit_note_tax)}`} />
+                <Line label={t('accounts.gstOnExpenses')} value={`−${money(summary.gst.input_tax_expenses)}`} />
+                <Line label={t('accounts.gstOnGateway')} value={`−${money(summary.gst.input_tax_gateway)}`} />
+                <Line bold label={t('accounts.gstToPay')} value={money(summary.gst.estimated_net_gst)} />
+              </CardContent>
+            </Card>
+          </div>
         </>
       ) : null}
 
@@ -198,7 +255,7 @@ const Accounts = () => {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{t('accounts.expenses', { defaultValue: 'Expenses' })}</CardTitle>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={exportExpensesCsv}>
+            <Button variant="outline" size="sm" onClick={() => exportExpensesCsv(range.from, range.to)}>
               <Download className="mr-2 h-4 w-4" />
               {t('gst.downloadCsv')}
             </Button>
@@ -223,7 +280,7 @@ const Accounts = () => {
                 {(expenses || []).map(e => (
                   <TableRow key={e.id}>
                     <TableCell>{e.date}</TableCell>
-                    <TableCell>{e.category}</TableCell>
+                    <TableCell>{t(`accounts.category.${e.category}`, { defaultValue: e.category })}</TableCell>
                     <TableCell className="text-muted-foreground">{e.description || e.vendor}</TableCell>
                     <TableCell className="text-right">{money(e.amount)}</TableCell>
                     <TableCell className="text-right">
@@ -251,14 +308,14 @@ const Accounts = () => {
             <div>
               <Label>{t('common.type')}</Label>
               <Select value={form.category} onValueChange={v => setForm({ ...form, category: v })}>
-                <SelectTrigger><span>{form.category}</span></SelectTrigger>
+                <SelectTrigger><span>{t(`accounts.category.${form.category}`)}</span></SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {CATEGORIES.map(c => <SelectItem key={c} value={c}>{t(`accounts.category.${c}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Vendor</Label>
+              <Label>{t('accounts.vendor')}</Label>
               <Input value={form.vendor} onChange={e => setForm({ ...form, vendor: e.target.value })} />
             </div>
             <div>
@@ -271,7 +328,7 @@ const Accounts = () => {
                 <Input type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
               </div>
               <div>
-                <Label>GST</Label>
+                <Label>{t('accounts.gstInAmount')}</Label>
                 <Input type="number" step="0.01" value={form.gst_amount} onChange={e => setForm({ ...form, gst_amount: e.target.value })} />
               </div>
             </div>
@@ -280,15 +337,15 @@ const Accounts = () => {
               {t('accounts.itc', { defaultValue: 'GST can be claimed' })}
             </label>
             <div>
-              <Label>Bill no</Label>
+              <Label>{t('accounts.billNumber')}</Label>
               <Input value={form.bill_number} onChange={e => setForm({ ...form, bill_number: e.target.value })} />
             </div>
             <div>
-              <Label>Mode</Label>
+              <Label>{t('accounts.paymentMode')}</Label>
               <Select value={form.payment_mode} onValueChange={v => setForm({ ...form, payment_mode: v })}>
-                <SelectTrigger><span>{form.payment_mode}</span></SelectTrigger>
+                <SelectTrigger><span>{t(`accounts.mode.${form.payment_mode}`)}</span></SelectTrigger>
                 <SelectContent>
-                  {MODES.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  {MODES.map(m => <SelectItem key={m} value={m}>{t(`accounts.mode.${m}`)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

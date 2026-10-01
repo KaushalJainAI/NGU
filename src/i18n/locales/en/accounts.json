@@ -15,6 +15,37 @@
     "expenses": "Expenses",
     "saveFailed": "Could not save the expense.",
     "deleteConfirm": "Delete this expense?",
-    "itc": "GST can be claimed"
+    "itc": "GST can be claimed",
+    "vendor": "Vendor",
+    "gstInAmount": "GST included",
+    "billNumber": "Bill number",
+    "paymentMode": "Paid by",
+    "category": {
+      "raw_material": "Raw material / purchases",
+      "packaging": "Packaging",
+      "marketing": "Marketing",
+      "rent_utilities": "Rent & utilities",
+      "salary": "Salary & wages",
+      "other": "Other"
+    },
+    "mode": {
+      "cash": "Cash",
+      "bank": "Bank transfer",
+      "upi": "UPI",
+      "card": "Card"
+    },
+    "costsBreakdown": "Costs breakdown",
+    "gatewayFees": "Payment gateway fees",
+    "courierCost": "Courier cost",
+    "cash": "Cash",
+    "onlineReceived": "Received online",
+    "codReceived": "COD cash received",
+    "refundsPaid": "Refunds paid",
+    "codOutstanding": "COD still to collect (now)",
+    "gstWorking": "GST working",
+    "gstOnInvoices": "GST on invoices",
+    "gstCreditNotes": "Credit notes",
+    "gstOnExpenses": "GST on expenses (claimable)",
+    "gstOnGateway": "GST on gateway fees"
   }
 }
