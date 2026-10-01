@@ -12,13 +12,18 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'email_verified', 'name', 'first_name', 'last_name', 'phone',
                   'address', 'city', 'state', 'pincode', 'profile_picture', 'created_at',
                   'is_staff']
-        read_only_fields = ['id', 'created_at', 'is_staff', 'email_verified']
+        # AP6/S3: `email` is read-only here — the login identifier changes ONLY
+        # via POST /api/auth/change-email/ (current password + OTP to the new
+        # address). A PATCH carrying an email is ignored by DRF, and
+        # UserProfileView additionally answers 400 pointing at the endpoint.
+        read_only_fields = ['id', 'created_at', 'is_staff', 'email_verified', 'email']
 
     def validate_email(self, value):
-        # Profile updates can change email too, so apply the same canonical,
-        # case-insensitive uniqueness rule as registration — otherwise a case
-        # variant of another account's email hits the DB unique constraint and
-        # 500s instead of returning a clean 400 (and the rule is bypassed).
+        # AP6: profile updates can NO LONGER change the email (read-only —
+        # changes go through POST /api/auth/change-email/ with password + OTP
+        # proof). This validator stays for the registration serializer's twin
+        # and any admin use: same canonical, case-insensitive uniqueness rule,
+        # otherwise a case variant hits the DB unique constraint and 500s.
         value = value.strip().lower()
         qs = User.objects.filter(email__iexact=value)
         if self.instance is not None:

@@ -103,11 +103,13 @@ def admin_tokens_for(user):
 # ==================== EMAIL VERIFICATION (AP5/S1) ====================
 
 def _create_email_otp(user):
-    """Mint a 6-digit verification OTP for a user (AP5).
+    """Mint a 6-digit email OTP for a user (AP5; reused by AP6 change-email).
 
     REUSES the PasswordResetOTP table — no second OTP model. Previous live OTPs
     are consumed first so only one code is valid at a time (same rule as the
-    reset flow, which prevents cross-talk in both directions).
+    reset flow, which prevents cross-talk in both directions). Returns the
+    saved record; the plaintext code rides along as `record.plain_code`
+    (in-memory only, never persisted).
     """
     import secrets
     from datetime import timedelta
@@ -119,7 +121,23 @@ def _create_email_otp(user):
     record = PasswordResetOTP(user=user, expires_at=timezone.now() + timedelta(minutes=10))
     record.set_otp(otp_code)
     record.save()
-    return otp_code
+    record.plain_code = otp_code
+    return record
+
+
+def _send_code_email(to_email, otp_code, subject):
+    """Deliver a 6-digit code; failures are logged, never raised (AP5/AP6)."""
+    from django.core.mail import send_mail
+    try:
+        send_mail(
+            subject=subject,
+            message=f'Your verification code is: {otp_code}\n\nThis code will expire in 10 minutes.',
+            from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
+            recipient_list=[to_email],
+            fail_silently=False,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception('Failed to send email code to %s', to_email)
 
 
 def _send_verification_otp(user):
@@ -130,19 +148,8 @@ def _send_verification_otp(user):
     A mail failure is logged and NEVER fails registration — the code can be
     re-requested via verify-email/request/.
     """
-    from django.conf import settings as dj_settings
-    from django.core.mail import send_mail
-    otp_code = _create_email_otp(user)
-    try:
-        send_mail(
-            subject='Verify your email - NGU Spices',
-            message=f'Your verification code is: {otp_code}\n\nThis code will expire in 10 minutes.',
-            from_email=dj_settings.DEFAULT_FROM_EMAIL or dj_settings.EMAIL_HOST_USER,
-            recipient_list=[user.email],
-            fail_silently=False,
-        )
-    except Exception:  # noqa: BLE001
-        logger.exception('Failed to send verification email to %s', user.email)
+    record = _create_email_otp(user)
+    _send_code_email(user.email, record.plain_code, 'Verify your email - NGU Spices')
 
 
 # ==================== CUSTOM THROTTLES ====================
@@ -199,7 +206,19 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
-    
+
+    def update(self, request, *args, **kwargs):
+        # AP6/S3: the login email no longer changes here (read-only on the
+        # serializer, so DRF would silently ignore it). Answer 400 with a
+        # pointer instead of pretending the change happened.
+        email = request.data.get('email')
+        if isinstance(email, str) and email.strip().lower() != (request.user.email or '').lower():
+            return Response(
+                {'email': ['Change your login email via POST /api/auth/change-email/.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().update(request, *args, **kwargs)
+
 from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle
 
@@ -234,6 +253,108 @@ class ChangePasswordView(APIView):
         _blacklist_all_for(user)
         return Response({'detail': 'Password updated successfully'}, status=status.HTTP_200_OK)
 
+
+class ChangeEmailView(APIView):
+    """Change the login email in two steps, with proof at both ends (AP6/S3).
+
+    Call 1 `{new_email, current_password}`: re-proves the password, checks the
+    new address is a valid unused email, mails it a 6-digit OTP (reusing the
+    `PasswordResetOTP` table via `_create_email_otp`), returns
+    `{'detail': 'Code sent.'}`. The `reset_token` column doubles as the pending
+    address so call 2 can confirm the code belongs to THIS request.
+    Call 2 `{new_email, current_password, otp_code}`: re-proves the password
+    again (the session alone is not enough — it may be hijacked), checks the
+    code against the pending row, then swaps the email, marks it verified (the
+    OTP proved the new inbox), revokes every OTHER session, and notifies the
+    OLD address. The caller's own cookies keep working (documented).
+    Per-user throttled; the 5-attempt code lockout bounds guessing.
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [UserRateThrottle]
+
+    def post(self, request):
+        from django.core.validators import validate_email as django_validate_email
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        user = request.user
+        new_email = (request.data.get('new_email') or '').strip().lower()
+        current_password = request.data.get('current_password') or ''
+        otp_code = request.data.get('otp_code') or ''
+
+        if not new_email or not current_password:
+            return Response(
+                {'detail': 'Both new_email and current_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not user.check_password(current_password):
+            return Response(
+                {'detail': 'Current password is incorrect.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        try:
+            django_validate_email(new_email)
+        except DjangoValidationError:
+            return Response({'new_email': ['Enter a valid email address.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if new_email == (user.email or '').lower():
+            return Response({'new_email': ['This is already your login email.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            # Authenticated-only oracle, per-user throttled (see class
+            # docstring); anonymous enumeration stays closed (AP5/S9).
+            return Response({'new_email': ['This email is already in use.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not otp_code:
+            record = _create_email_otp(user)
+            # reset_token doubles as the pending address: call 2 must present
+            # the SAME new_email the code was mailed to.
+            record.reset_token = new_email
+            record.save(update_fields=['reset_token'])
+            _send_code_email(new_email, record.plain_code, 'Verify your new email - NGU Spices')
+            return Response({'detail': 'Code sent.'}, status=status.HTTP_200_OK)
+
+        try:
+            otp_record = PasswordResetOTP.objects.filter(
+                user=user, is_used=False
+            ).latest('created_at')
+        except PasswordResetOTP.DoesNotExist:
+            return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
+        if (otp_record.reset_token or '').lower() != new_email:
+            return Response({'detail': 'Invalid OTP or email.'}, status=status.HTTP_400_BAD_REQUEST)
+        if otp_record.is_expired:
+            return Response({'detail': 'OTP has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
+        if otp_record.is_locked:
+            return Response({'detail': 'Too many failed attempts. Please request a new OTP.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+        if not otp_record.check_otp(otp_code):
+            otp_record.failed_attempts += 1
+            otp_record.save(update_fields=['failed_attempts'])
+            remaining = PasswordResetOTP.MAX_FAILED_ATTEMPTS - otp_record.failed_attempts
+            if remaining > 0:
+                return Response({'detail': f'Invalid OTP. {remaining} attempt(s) remaining.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Too many failed attempts. Please request a new OTP.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        old_email = user.email
+        otp_record.is_used = True
+        otp_record.reset_token = None
+        otp_record.save(update_fields=['is_used', 'reset_token'])
+        user.email = new_email
+        user.email_verified = True
+        user.save(update_fields=['email', 'email_verified'])
+        _blacklist_all_for(user)
+        try:
+            from django.core.mail import send_mail
+            send_mail(
+                subject='Your login email was changed - NGU Spices',
+                message=(f'Your login email was changed to {new_email}. '
+                         f'If this was not you, contact us immediately.'),
+                from_email=settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER,
+                recipient_list=[old_email],
+                fail_silently=False,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception('Failed to send change-email notice to %s', old_email)
+        return Response({'success': True}, status=status.HTTP_200_OK)
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -294,7 +415,7 @@ class CustomTokenRefreshView(TokenRefreshView):
 
 
 # ==================== PASSWORD RESET VIEWS ====================
-import random
+import secrets
 from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
@@ -325,11 +446,27 @@ class PasswordResetRequestView(APIView):
         email = serializer.validated_data['email']
 
         try:
-            user = User.objects.get(email=email)
-            
-            # Generate 6-digit OTP
-            otp_code = f"{random.randint(100000, 999999)}"
-            
+            # AP6/S10: case-insensitive lookup — stored emails are lower-cased,
+            # so `Me@Gmail.com` must find the same row. (The serializer already
+            # validated the SHAPE; this is the canonical lookup.)
+            user = User.objects.get(email__iexact=email.strip().lower())
+
+            # AP6/S10: per-account cap — 5 codes per 24 h even from rotating
+            # IPs, so a victim's inbox cannot be flooded. The response stays
+            # the generic 200 either way (no oracle); the IP throttle stays.
+            recent_codes = PasswordResetOTP.objects.filter(
+                user=user, created_at__gte=timezone.now() - timedelta(hours=24)
+            ).count()
+            if recent_codes >= 5:
+                return Response(
+                    {'detail': 'If an account exists with this email, an OTP has been sent.'},
+                    status=status.HTTP_200_OK
+                )
+
+            # Generate 6-digit OTP from a cryptographic source (AP6/S10 —
+            # `random` is predictable; OTPs must not be).
+            otp_code = f"{secrets.randbelow(900000) + 100000}"
+
             # Invalidate previous unexpired OTPs for this user
             PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
             
@@ -392,9 +529,9 @@ class PasswordResetVerifyView(APIView):
         
         email = serializer.validated_data['email']
         otp_code = serializer.validated_data['otp_code']
-        
+
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email.strip().lower())  # AP6/S10
             # Get the latest unused OTP for this user (regardless of the code submitted)
             otp_record = PasswordResetOTP.objects.filter(
                 user=user,
@@ -445,9 +582,9 @@ class PasswordResetConfirmView(APIView):
         email = serializer.validated_data['email']
         reset_token = serializer.validated_data['reset_token']
         new_password = serializer.validated_data['new_password']
-        
+
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email__iexact=email.strip().lower())  # AP6/S10
             # Find the OTP record by reset_token
             otp_record = PasswordResetOTP.objects.get(
                 user=user,
@@ -686,7 +823,9 @@ class GoogleLogin(APIView):
             if msg == 'Google account email is not verified':
                 return Response({'detail': msg}, status=status.HTTP_401_UNAUTHORIZED)
             # google-auth raises ValueError for a bad signature/aud/issuer/expiry.
-            return Response({'detail': 'Invalid Google token', 'error': msg}, status=status.HTTP_401_UNAUTHORIZED)
+            # AP6/S14: the raw library string (`msg`) is never returned — it
+            # leaks provider internals and varies by backend version.
+            return Response({'detail': 'Invalid Google token'}, status=status.HTTP_401_UNAUTHORIZED)
         except (KeyError, IntegrityError) as e:
             # Misconfigured SOCIALACCOUNT_PROVIDERS, or a racing signup on the
             # same email. Neither is the caller's fault — don't leak a 500.

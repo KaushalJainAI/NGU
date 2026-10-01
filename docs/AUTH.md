@@ -37,7 +37,7 @@ HttpOnly cookies (tokens are never returned in the response body):
 
 | Cookie | Value | Max-Age | Flags |
 |--------|-------|---------|-------|
-| `access_token` | Short-lived JWT | `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` — currently 1 hour | HttpOnly, SameSite=Lax, Secure=True in prod |
+| `access_token` | Short-lived JWT | `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` — 15 minutes (AP6; was 1 hour) | HttpOnly, SameSite=Lax, Secure=True in prod |
 | `refresh_token` | Long-lived JWT | `SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']` — currently 7 days | HttpOnly, SameSite=Lax, Secure=True in prod |
 
 `Secure` is `not settings.DEBUG` — cookies are plain-HTTP in local dev, HTTPS-only in
@@ -60,7 +60,7 @@ Handled by `CustomTokenRefreshView`. If the request body does not include a `ref
 field, the view falls back to `request.COOKIES.get('refresh_token')`. This means the
 frontend can call the endpoint with an empty body `{}` and the cookie is used automatically.
 
-On success a fresh `access_token` cookie is set (same flags, 1-hour max-age). If refresh
+On success a fresh `access_token` cookie is set (same flags, 15-minute max-age). If refresh
 token rotation is enabled in SimpleJWT settings, a new `refresh_token` cookie is also set.
 
 ### Logout (`POST /api/auth/logout/`)
@@ -251,6 +251,17 @@ the OTP is validated.
 
 ---
 
+## Change Email (`POST /api/auth/change-email/`)
+
+Two steps, proof at both ends (AP6/S3). Call 1 `{new_email, current_password}`
+re-proves the password, validates the new address (format + unused), and mails it
+an OTP (`PasswordResetOTP` row whose `reset_token` column holds the pending address).
+Call 2 adds `otp_code` (password required again — the session alone may be hijacked):
+the code is checked against the pending row, then the email swaps, `email_verified`
+is set (the OTP proved the new inbox), every other session is revoked, and the OLD
+address gets a "your login email changed" notice. `PATCH /api/auth/profile/` with a
+differing email is a 400 pointing here — the profile never changes the login identifier.
+
 ## Change Password (`POST /api/auth/change-password/`)
 
 Requires the current session (authenticated). Accepts `{old_password, new_password}`.
@@ -271,7 +282,8 @@ their remaining minutes; the refresh path dies immediately.
 | Tokens encrypted in transit | Secure=True (prod) |
 | Login brute-force | 5/min rate limit + OTP for reset |
 | Email enumeration | Constant-time dummy branch on reset request; uniform 201 on register, generic 200 on verify resend |
-| OTP brute-force | 5-attempt lock, 10-minute expiry (reset + verification codes) |
+| OTP brute-force | 5-attempt lock, 10-minute expiry (reset + verification + change-email codes); `secrets` randomness; 5 codes per account per 24 h (AP6) |
+| Silent email takeover (S3) | Login email changes only via password + new-inbox OTP; old address notified (AP6) |
 | Pre-hijack via registration (S1) | `email_verified` gate on login (AP5); Google sign-in kills pre-existing passwords + sessions (AP4) |
 | Stale sessions after credential change (S4) | Password change/reset revokes all refresh tokens, both scopes (AP3) |
 | Google token forgery | Server-side `verify_oauth2_token` against Google certs |

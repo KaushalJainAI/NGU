@@ -483,24 +483,29 @@ class TestEmailNormalization:
 
 @pytest.mark.django_db
 class TestProfileEmailUpdate:
-    """G8 — the profile update path must apply the same email rules, not 500."""
+    """AP6/S3 — the login email no longer changes via profile at all.
 
-    def test_case_variant_of_other_user_rejected_cleanly(self, authenticated_client, test_user):
+    Any differing address is a 400 pointing at change-email/ (never a silent
+    ignore, never a 500); re-sending your own address (any case) still works.
+    """
+
+    def test_profile_email_change_rejected_with_pointer(self, authenticated_client, test_user):
         # another account owns victim@example.com
         User.objects.create_user(username="victim", email="victim@example.com", password="x")
         r = authenticated_client.patch("/api/auth/profile/", {"email": "VICTIM@example.com"}, format="json")
-        assert r.status_code == 400            # clean validation error, NOT a 500
+        assert r.status_code == 400
+        assert "change-email" in str(r.data)
         test_user.refresh_from_db()
         assert test_user.email != "victim@example.com"
 
-    def test_profile_email_is_normalized(self, authenticated_client, test_user):
+    def test_profile_email_change_to_fresh_address_rejected(self, authenticated_client, test_user):
         r = authenticated_client.patch("/api/auth/profile/", {"email": "New.Me@Example.COM"}, format="json")
-        assert r.status_code == 200
+        assert r.status_code == 400
         test_user.refresh_from_db()
-        assert test_user.email == "new.me@example.com"
+        assert test_user.email != "new.me@example.com"
 
     def test_can_keep_own_email_unchanged(self, authenticated_client, test_user):
-        # PATCHing the same email (any case) must not trip the uniqueness check on self.
+        # PATCHing the same email (any case) must not trip the guard.
         r = authenticated_client.patch(
             "/api/auth/profile/", {"email": test_user.email.upper(), "city": "Pune"}, format="json")
         assert r.status_code == 200
@@ -627,3 +632,32 @@ class TestResetConfirm:
             "new_password": "Mismatch123!", "confirm_password": "Different123!",
         }, format="json")
         assert r.status_code == 400
+
+
+@pytest.mark.django_db
+class TestResetHardening:
+    """AP6/S10 — cryptographic OTPs, case-insensitive lookup, per-account cap."""
+
+    def test_otp_comes_from_secrets(self, api_client, test_user, monkeypatch):
+        """Pin randbelow to 0: the mailed code must be exactly '100000'."""
+        monkeypatch.setattr("secrets.randbelow", lambda n: 0)
+        r = api_client.post(REQ_URL, {"email": test_user.email}, format="json")
+        assert r.status_code == 200
+        ok = api_client.post(VERIFY_URL, {"email": test_user.email, "otp_code": "100000"},
+                             format="json")
+        assert ok.status_code == 200 and ok.json().get("reset_token")
+
+    def test_mixed_case_email_receives_otp(self, api_client, test_user):
+        before = PasswordResetOTP.objects.filter(user=test_user).count()
+        r = api_client.post(REQ_URL, {"email": test_user.email.upper()}, format="json")
+        assert r.status_code == 200
+        assert PasswordResetOTP.objects.filter(user=test_user).count() == before + 1
+
+    def test_sixth_request_in_24h_sends_nothing(self, api_client, test_user):
+        for _ in range(5):
+            _seed_otp(test_user, "111111")
+        count_before = PasswordResetOTP.objects.filter(user=test_user).count()
+        r = api_client.post(REQ_URL, {"email": test_user.email}, format="json")
+        assert r.status_code == 200
+        assert r.json() == {"detail": "If an account exists with this email, an OTP has been sent."}
+        assert PasswordResetOTP.objects.filter(user=test_user).count() == count_before

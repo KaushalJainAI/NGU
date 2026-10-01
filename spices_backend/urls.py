@@ -14,6 +14,7 @@ def health_check(request):
 
 from users.views import (
     UserRegistrationView, UserProfileView, CustomTokenObtainPairView, CustomTokenRefreshView, ChangePasswordView,
+    ChangeEmailView,
     PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin,
     VerifyEmailRequestView, VerifyEmailConfirmView,
     LogoutView, AdminLoginView, AdminGoogleLoginView, AdminTokenRefreshView, AdminLogoutView,
@@ -108,6 +109,7 @@ urlpatterns = [
     path('api/auth/admin/logout/', AdminLogoutView.as_view(), name='admin-logout'),
     path('api/auth/profile/', UserProfileView.as_view(), name='profile'),
     path('api/auth/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('api/auth/change-email/', ChangeEmailView.as_view(), name='change-email'),
     path('api/auth/password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('api/auth/password-reset-verify/', PasswordResetVerifyView.as_view(), name='password-reset-verify'),
     path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),

@@ -355,8 +355,11 @@ REST_FRAMEWORK = {
 }
 
 # JWT Configuration
+# AP6: access is 15 minutes (was 1 hour) — a stolen access cookie is useful for
+# minutes, not an hour. Refresh rotation (7 d) already exists, and the auth
+# cookie max-ages derive from these lifetimes, so no cookie change is needed.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
