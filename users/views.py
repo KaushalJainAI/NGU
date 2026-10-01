@@ -480,10 +480,25 @@ class GoogleLogin(APIView):
             if created:
                 user.set_unusable_password()
                 user.save()
-            elif not user.name and name:
-                # Update name if previously empty
-                user.name = name
-                user.save(update_fields=['name'])
+            else:
+                # AP4/S1-interim: Google proved inbox ownership
+                # (verify_google_id_token requires email_verified), so a usable
+                # password on this row is either the attacker's (someone
+                # pre-registered this address) or a legacy credential. Kill it
+                # and evict every session — the owner keeps working through this
+                # Google session; anyone else must go through password-reset,
+                # which proves inbox ownership. AP5 adds real email
+                # verification; until then this closes the takeover window.
+                # Trade-off (documented): password-then-Google users lose
+                # password login here and must reset once.
+                if user.has_usable_password():
+                    user.set_unusable_password()
+                    user.save(update_fields=['password'])
+                    _blacklist_all_for(user)
+                if not user.name and name:
+                    # Update name if previously empty
+                    user.name = name
+                    user.save(update_fields=['name'])
                 
             # 4. Generate identical JWT tokens as CustomTokenObtainPairView
             refresh = CustomTokenObtainPairSerializer.get_token(user)
