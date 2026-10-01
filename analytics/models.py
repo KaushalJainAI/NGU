@@ -26,6 +26,10 @@ class UserEvent(models.Model):
         ('checkout_started', 'Checkout Started'),
         ('checkout_completed', 'Checkout Completed'),
         ('checkout_abandoned', 'Checkout Abandoned'),
+        # AP11: voice-ordering funnel (short names — event_type is capped at
+        # 20 chars). Fired by the storefront for "say your shopping list".
+        ('voice_used', 'Voice Input Used'),
+        ('voice_confirmed', 'Voice Proposal Confirmed'),
     ]
 
     user = models.ForeignKey(
