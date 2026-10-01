@@ -7,12 +7,12 @@ import {
 } from '@/api/dashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { KpiCard } from '@/components/insights/KpiCard';
 import {
   Package, ShoppingCart, MessagesSquare, AlertTriangle,
-  IndianRupee, PackageCheck, CheckCircle2, ArrowRight, MailOpen, MessageCircle,
+  PackageCheck, CheckCircle2, ArrowRight, MailOpen, MessageCircle,
   Banknote, Receipt, Truck,
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from 'react-i18next';
 
 /** One "needs your attention" card: plain sentence + a button that jumps
@@ -31,7 +31,9 @@ interface ActionItem {
 const DashboardSkeleton = () => (
   <div className="space-y-6" aria-busy="true">
     <Skeleton className="h-9 w-64" />
-    <div className="grid gap-4 grid-cols-2">
+    <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <Skeleton className="h-28" />
+      <Skeleton className="h-28" />
       <Skeleton className="h-28" />
       <Skeleton className="h-28" />
     </div>
@@ -134,6 +136,49 @@ const Dashboard = () => {
       to: '/orders?status=pending',
       icon: AlertTriangle,
     },
+    {
+      key: 'unshipped-aged',
+      count: actions.orders_unshipped_aged ?? 0,
+      sentence: t('dashboard.action.unshippedAged', { count: actions.orders_unshipped_aged ?? 0 }),
+      buttonLabel: t('dashboard.action.viewOrders'),
+      to: '/orders?status=confirmed',
+      icon: Truck,
+      urgent: true,
+    },
+    {
+      key: 'out-of-stock',
+      count: actions.out_of_stock_count ?? 0,
+      sentence: t('dashboard.action.outOfStock', { count: actions.out_of_stock_count ?? 0 }),
+      buttonLabel: t('dashboard.action.stockButton'),
+      to: '/products?stock=low',
+      icon: Package,
+      urgent: true,
+    },
+    {
+      key: 'invoices-missing',
+      count: actions.invoices_missing ?? 0,
+      sentence: t('dashboard.action.invoicesMissing', { count: actions.invoices_missing ?? 0 }),
+      buttonLabel: t('dashboard.action.viewOrders'),
+      to: '/orders',
+      icon: Receipt,
+      urgent: true,
+    },
+    {
+      key: 'unclassified-hsn',
+      count: actions.unclassified_hsn_count ?? 0,
+      sentence: t('dashboard.action.unclassifiedHsn', { count: actions.unclassified_hsn_count ?? 0 }),
+      buttonLabel: t('dashboard.action.openGst'),
+      to: '/gst',
+      icon: Receipt,
+    },
+    {
+      key: 'failed-payments',
+      count: actions.failed_payments_today ?? 0,
+      sentence: t('dashboard.action.failedPayments', { count: actions.failed_payments_today ?? 0 }),
+      buttonLabel: t('dashboard.action.viewOrders'),
+      to: '/orders?status=pending',
+      icon: AlertTriangle,
+    },
   ].filter(item => item.count > 0);
 
   const hour = new Date().getHours();
@@ -144,6 +189,8 @@ const Dashboard = () => {
         ? t('dashboard.greetingAfternoon')
         : t('dashboard.greetingEvening');
 
+  const topSellers = actions?.top_products_7d ?? [];
+
   return (
     <div className="space-y-6">
       <div>
@@ -151,150 +198,75 @@ const Dashboard = () => {
         <p className="text-muted-foreground">{t('dashboard.subtitle')}</p>
       </div>
 
-      {/* Today at a glance */}
-      <div className="grid gap-4 grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.todaysSales')}</CardTitle>
-            <IndianRupee className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">₹{Number(actions?.today_revenue || 0).toLocaleString('en-IN')}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t('dashboard.includesGst', {
-                amount: Number(actions?.today_gst_collected || 0).toLocaleString('en-IN'),
-              })}
-            </p>
-            {/* The headline stays GROSS — it is what reconciles against gateway
-                settlements — but gross alone reads as net, so the netted figure
-                is stated whenever refunds actually moved it. */}
-            {Number(actions?.today_revenue || 0) !== Number(actions?.today_net_revenue || 0) && (
-              <p className="text-xs text-orange-600 mt-0.5">
-                {t('dashboard.netOfRefunds', {
-                  amount: Number(actions?.today_net_revenue || 0).toLocaleString('en-IN'),
-                })}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.todaysOrders')}</CardTitle>
-            <ShoppingCart className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{actions?.today_orders ?? 0}</div>
-          </CardContent>
-        </Card>
+      {/* Four KPI cards: real (paid/booked) sales with period comparisons. */}
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        <div>
+          <KpiCard
+            title={t('dashboard.salesToday')}
+            value={`₹${Number(actions?.today_sales ?? 0).toLocaleString('en-IN')}`}
+            delta={actions?.today_sales_delta_pct ?? null}
+            hint={t('dashboard.vsLastWeek')}
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            {t('dashboard.onlineCodSplit', {
+              online: Number(actions?.today_online_received ?? 0).toLocaleString('en-IN'),
+              cod: Number(actions?.today_cod_booked ?? 0).toLocaleString('en-IN'),
+            })}
+          </p>
+        </div>
+        <KpiCard
+          title={t('dashboard.ordersToday')}
+          value={String(actions?.today_real_orders ?? 0)}
+        />
+        <KpiCard
+          title={t('dashboard.avgOrder')}
+          value={`₹${Number(actions?.today_aov ?? 0).toLocaleString('en-IN')}`}
+        />
+        <KpiCard
+          title={t('dashboard.thisMonth')}
+          value={`₹${Number(actions?.mtd_sales ?? 0).toLocaleString('en-IN')}`}
+          delta={actions?.mtd_sales_delta_pct ?? null}
+          hint={t('dashboard.vsPrevMtd')}
+        />
       </div>
 
-      {/* GST + delivery economics.
-          The GST tile reports two FACTS and stops: what we sold, and what tax
-          we collected on it. It deliberately does not answer "how much do I
-          owe" — that needs input credit on every purchase (ingredients,
-          packaging, courier, rent), none of which this system tracks. Deciding
-          what to pay is the owner's call, made in their books. */}
+      {/* Action inbox */}
+      <div>
+        <h2 className="text-xl font-semibold mb-3">{t('dashboard.needsAttention')}</h2>
+        {actionItems.length === 0 ? (
+          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900">
+            <CardContent className="flex items-center gap-3 py-6">
+              <CheckCircle2 className="h-8 w-8 text-green-600" />
+              <div>
+                <p className="font-semibold">{t('dashboard.allCaughtUp')}</p>
+                <p className="text-sm text-muted-foreground">
+                  {t('dashboard.allCaughtUpBody')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {actionItems.map(item => (
+              <Card key={item.key} className={item.urgent ? 'border-amber-300' : undefined}>
+                <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <item.icon className={`h-6 w-6 flex-shrink-0 ${item.urgent ? 'text-amber-600' : 'text-primary'}`} />
+                    <p className="font-medium">{item.sentence}</p>
+                  </div>
+                  <Button onClick={() => navigate(item.to)} className="flex-shrink-0">
+                    {item.buttonLabel}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* COD cash + top sellers side by side. */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.gstThisMonth')}</CardTitle>
-            <Receipt className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            {/* Lead with the NET figure — collected minus reversed by refunds —
-                because that is the tax actually still in hand. The gross
-                number is broken out underneath so the two reconcile. */}
-            <div className="text-3xl font-bold">
-              ₹{Number(actions?.mtd_gst_net_collected || 0).toLocaleString('en-IN')}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {t('dashboard.gstToday', {
-                amount: Number(actions?.today_gst_net_collected || 0).toLocaleString('en-IN'),
-              })}
-            </p>
-            <div className="mt-2 space-y-0.5 text-xs">
-              {/* The sales side of the same fact: tax collected means nothing
-                  without the value it was collected on. */}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t('dashboard.soldExclGst')}</span>
-                <span>₹{Number(actions?.mtd_taxable_sales || 0).toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">{t('dashboard.gstCollectedOnIt')}</span>
-                <span>₹{Number(actions?.mtd_gst_collected || 0).toLocaleString('en-IN')}</span>
-              </div>
-              {Number(actions?.mtd_gst_refunded || 0) > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">{t('dashboard.returnedWithRefunds')}</span>
-                  <span className="text-orange-600">
-                    −₹{Number(actions.mtd_gst_refunded).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              )}
-              {/* GST we PAID Razorpay on their fee — the one input credit this
-                  system has evidence for. Listed separately, never subtracted:
-                  netting one input out of many would turn an honest fact into
-                  a fake payable. */}
-              {Number(actions?.mtd_gateway_tax || 0) > 0 && (
-                <div className="flex justify-between border-t pt-0.5">
-                  <span className="text-muted-foreground">
-                    {t('dashboard.gatewayFeeGst')}
-                  </span>
-                  <span className="text-green-600">
-                    ₹{Number(actions.mtd_gateway_tax).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground mt-2 leading-snug">
-              {t('dashboard.gstNotePrefix')}
-              <strong>{t('dashboard.gstNoteStrong')}</strong>
-              {t('dashboard.gstNoteSuffix')}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">{t('dashboard.deliveryToday')}</CardTitle>
-            <Truck className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t('dashboard.deliveryCollected')}</span>
-              <span className="font-semibold">
-                ₹{Number(actions?.today_shipping_collected || 0).toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t('dashboard.deliveryCourierCost')}</span>
-              <span className="font-semibold">
-                ₹{Number(actions?.today_shipping_cost || 0).toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm border-t pt-1">
-              <span className="text-muted-foreground">{t('dashboard.deliveryMargin')}</span>
-              <span
-                className={
-                  Number(actions?.today_shipping_margin || 0) >= 0
-                    ? 'font-bold text-green-600'
-                    : 'font-bold text-red-600'
-                }
-              >
-                ₹{Number(actions?.today_shipping_margin || 0).toLocaleString('en-IN')}
-              </span>
-            </div>
-            <p className="text-[11px] text-muted-foreground pt-1">
-              {actions?.today_shipping_cost_recorded
-                ? t('dashboard.deliveryAvg', {
-                    count: actions.today_shipping_cost_recorded,
-                    amount: Number(actions.today_avg_shipping_cost || 0).toLocaleString('en-IN'),
-                  })
-                : t('dashboard.deliveryNoCost')}
-            </p>
-          </CardContent>
-        </Card>
-
         {/* COD cash. Revenue above is accrued at order date whether or not the
             money arrived; this tile is the other half — what is actually in
             hand. Cash sitting with a courier for weeks is the single easiest
@@ -333,41 +305,38 @@ const Dashboard = () => {
             </p>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Action inbox */}
-      <div>
-        <h2 className="text-xl font-semibold mb-3">{t('dashboard.needsAttention')}</h2>
-        {actionItems.length === 0 ? (
-          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-900">
-            <CardContent className="flex items-center gap-3 py-6">
-              <CheckCircle2 className="h-8 w-8 text-green-600" />
-              <div>
-                <p className="font-semibold">{t('dashboard.allCaughtUp')}</p>
-                <p className="text-sm text-muted-foreground">
-                  {t('dashboard.allCaughtUpBody')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {actionItems.map(item => (
-              <Card key={item.key} className={item.urgent ? 'border-amber-300' : undefined}>
-                <CardContent className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <item.icon className={`h-6 w-6 flex-shrink-0 ${item.urgent ? 'text-amber-600' : 'text-primary'}`} />
-                    <p className="font-medium">{item.sentence}</p>
-                  </div>
-                  <Button onClick={() => navigate(item.to)} className="flex-shrink-0">
-                    {item.buttonLabel}
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">{t('dashboard.topSellers')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {topSellers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('dashboard.topSellersEmpty')}</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="font-medium pb-1">{t('dashboard.topColProduct')}</th>
+                    <th className="font-medium pb-1 text-right">{t('dashboard.topColUnits')}</th>
+                    <th className="font-medium pb-1 text-right">{t('dashboard.topColRevenue')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topSellers.map(item => (
+                    <tr key={item.name} className="border-t">
+                      <td className="py-1.5 pr-2">{item.name}</td>
+                      <td className="py-1.5 text-right">{item.units}</td>
+                      <td className="py-1.5 text-right">
+                        ₹{Number(item.revenue ?? 0).toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Recent orders */}
@@ -379,23 +348,27 @@ const Dashboard = () => {
           <div className="space-y-4">
             {stats?.recentOrders && stats.recentOrders.length > 0 ? (
               stats.recentOrders.map((order) => (
-                <div
+                <button
                   key={order.id}
-                  className="flex items-center justify-between border-b pb-3 last:border-0"
+                  onClick={() => navigate(`/orders?search=ORD-${String(order.id).padStart(6, '0')}`)}
+                  className="flex w-full items-center justify-between border-b pb-3 text-left last:border-0"
                 >
                   <div>
                     <p className="font-medium">{order.customerName}</p>
                     <p className="text-sm text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString()}
+                      {new Date(order.createdAt).toLocaleString()}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="font-medium">₹{Number(order.totalAmount).toFixed(2)}</p>
                     <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                       {t(`orderStatus.${order.status}`, { defaultValue: order.status })}
+                    </span>{' '}
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                      {order.paymentMethod} · {t(`paymentStatus.${order.paymentStatus}`, { defaultValue: order.paymentStatus })}
                     </span>
                   </div>
-                </div>
+                </button>
               ))
             ) : (
               <p className="text-center text-muted-foreground">{t('dashboard.noRecentOrders')}</p>
@@ -403,6 +376,17 @@ const Dashboard = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* GST month line linking to the report. */}
+      <p className="text-sm text-muted-foreground">
+        {t('dashboard.gstMonthLine', {
+          amount: Number(actions?.mtd_gst_net_collected || 0).toLocaleString('en-IN'),
+        })}{' '}
+        —{' '}
+        <Button variant="link" className="px-0 text-sm" onClick={() => navigate('/gst')}>
+          {t('dashboard.openGstReport')}
+        </Button>
+      </p>
     </div>
   );
 };

@@ -6,6 +6,14 @@ export interface RecentOrder {
   totalAmount: number;
   status: string;
   createdAt: string;
+  paymentMethod: string;
+  paymentStatus: string;
+}
+
+export interface TopProduct {
+  name: string;
+  units: number;
+  revenue: string;
 }
 
 export interface DashboardStats {
@@ -100,6 +108,23 @@ export interface DashboardActions {
    * result look filed-ready when it isn't.
    */
   mtd_gateway_tax: string;
+  /** WP5 rebuild — real (paid/booked) sales. Money is a string, counts are numbers. */
+  today_sales: string;
+  today_real_orders: number;
+  today_aov: string;
+  today_online_received: string;
+  today_cod_booked: string;
+  last_week_same_day_sales: string;
+  today_sales_delta_pct: number | null;
+  mtd_sales: string;
+  prev_mtd_sales: string;
+  mtd_sales_delta_pct: number | null;
+  orders_unshipped_aged: number;
+  out_of_stock_count: number;
+  invoices_missing: number;
+  failed_payments_today: number;
+  unclassified_hsn_count: number;
+  top_products_7d: TopProduct[];
 }
 
 export const getDashboardActions = () =>
