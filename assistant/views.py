@@ -134,7 +134,10 @@ class AssistantChatView(APIView):
         proposed_action = result.get('proposed_action')
 
         # Escalation: flag thread for human attention (no ChatSession created).
-        if result.get('escalate') and not conversation.needs_human:
+        # AP2: an LLM provider failure (reason llm_error) is never an escalation
+        # even if a future caller sets escalate alongside it — the friendly
+        # fallback is still persisted below so history shows it.
+        if result.get('escalate') and result.get('reason') != 'llm_error' and not conversation.needs_human:
             conversation.needs_human = True
             conversation.save(update_fields=['needs_human', 'updated_at'])
 
@@ -154,6 +157,7 @@ class AssistantChatView(APIView):
                 'proposed_action': proposed_action,
                 'escalate': bool(result.get('escalate')),
                 'llm_used': result.get('llm_used'),
+                'reason': result.get('reason', 'ok'),
             },
         )
 

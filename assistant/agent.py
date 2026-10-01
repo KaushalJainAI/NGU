@@ -27,6 +27,12 @@ MAX_ITERATIONS = 4
 MAX_MESSAGE_LEN = 1000         # input cap for a single *new* user turn (also enforced in the view)
 MAX_OUTPUT_TOKENS = int(os.getenv('ASSISTANT_MAX_OUTPUT_TOKENS', '600'))
 
+# AP2: bound every LLM round trip so one slow provider response cannot hold a
+# gunicorn slot indefinitely (3 workers x 2 threads = 6 slots shared with
+# checkout). One retry only — more retries multiply tail latency for everyone.
+LLM_REQUEST_TIMEOUT = int(os.getenv('ASSISTANT_LLM_TIMEOUT', '20'))
+LLM_MAX_RETRIES = 1
+
 # --- Conversation memory -----------------------------------------------------
 # The assistant remembers as much of the thread as fits under a token budget,
 # instead of a fixed message count. History is trimmed newest-first until the
@@ -82,11 +88,14 @@ def _build_llm():
                 temperature=0.2,
                 max_tokens=MAX_OUTPUT_TOKENS,
                 extra_body=openrouter_extra_body(),
+                request_timeout=LLM_REQUEST_TIMEOUT,
+                max_retries=LLM_MAX_RETRIES,
             )
         from langchain.chat_models import init_chat_model
         return init_chat_model(
             model_name, model_provider=provider,
             temperature=0.2, api_key=api_key, max_tokens=MAX_OUTPUT_TOKENS,
+            request_timeout=LLM_REQUEST_TIMEOUT, max_retries=LLM_MAX_RETRIES,
         )
     except Exception as e:
         logger.error("Assistant LLM init failed (%s/%s): %s", provider, model_name, e)
@@ -168,7 +177,7 @@ class Agent:
         if not self.llm_available:
             return {'reply': FALLBACK_REPLY, 'proposed_action': None,
                     'sources': sources, 'escalate': True, 'llm_used': False,
-                    'history_truncated': False}
+                    'history_truncated': False, 'reason': 'llm_unavailable'}
 
         # Build the message list: system + language directive + history + new turn.
         system_text = self._system_prompt + '\n\n' + language_directive(language)
@@ -211,7 +220,17 @@ class Agent:
 
         repaired = False
         for _ in range(MAX_ITERATIONS):
-            raw = self._complete(messages)
+            # AP2: a provider error (timeout, 5xx, revoked key) must be a
+            # friendly reply, NOT a 500 and NOT a human escalation. Only the
+            # customer's explicit request escalates (AP9 reworks the rest).
+            try:
+                raw = self._complete(messages)
+            except Exception:
+                logger.exception("Assistant LLM call failed")
+                return {'reply': FALLBACK_REPLY, 'proposed_action': None,
+                        'sources': sources, 'escalate': False, 'llm_used': True,
+                        'title': None, 'history_truncated': history_truncated,
+                        'reason': 'llm_error'}
             env = _parse_envelope(raw)
 
             if env is None:
@@ -254,12 +273,13 @@ class Agent:
             title = self._clean_title(env.get('title'))
             return {'reply': reply, 'proposed_action': proposed_action,
                     'sources': sources, 'escalate': escalate, 'llm_used': True,
-                    'title': title, 'history_truncated': history_truncated}
+                    'title': title, 'history_truncated': history_truncated,
+                    'reason': 'ok'}
 
         # Loop exhausted or unrecoverable -> safe fallback.
         return {'reply': FALLBACK_REPLY, 'proposed_action': None,
                 'sources': sources, 'escalate': True, 'llm_used': True, 'title': None,
-                'history_truncated': history_truncated}
+                'history_truncated': history_truncated, 'reason': 'loop_exhausted'}
 
     # ------------------------------------------------------------------
     def _clean_reply(self, reply):
