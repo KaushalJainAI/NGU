@@ -1171,6 +1171,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             if raw_url:
                 from django.core.validators import URLValidator
                 from django.core.exceptions import ValidationError as DjangoValidationError
+                # The column is 500 wide; Postgres would 500 on anything longer.
+                if len(raw_url) > 500:
+                    return Response(
+                        {'tracking_url': ['This link is too long (500 characters at most).']},
+                        status=status.HTTP_400_BAD_REQUEST)
                 try:
                     URLValidator(schemes=['http', 'https'])(raw_url)
                 except DjangoValidationError:

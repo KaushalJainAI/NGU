@@ -85,7 +85,14 @@ def issue_credit_note_for_refund(refund):
             return None
     pos = (invoice.snapshot or {}).get('place_of_supply', {}) or {}
     interstate = bool(pos.get('interstate'))
-    rows = _snapshot_rows(credit_note_tax_rows(refund), interstate)
+    tax_rows = credit_note_tax_rows(refund)
+    if not tax_rows and Decimal(str(refund.amount or 0)) > 0:
+        # A refund that reverses no tax is a refund of nil-rated goods (papad):
+        # `credit_note_tax_rows` scales by tax share, so it has nothing to
+        # scale and returns no rows. The credited VALUE is still real and must
+        # appear under the 0% slab, or the state-wise report overstates it.
+        tax_rows = [{'rate': 0.0, 'taxable_value': refund.amount, 'tax_amount': 0}]
+    rows = _snapshot_rows(tax_rows, interstate)
     issued_at = refund.created_at or timezone.now()
     series = f"CN/{financial_year_label(issued_at)}"
     number, sequence = _allocate(series)

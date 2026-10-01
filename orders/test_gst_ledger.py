@@ -167,6 +167,26 @@ class TestLedgerArithmetic:
         assert inter_rows and inter_rows[0]['gross_igst'] > 0
         assert inter_rows[0]['gross_cgst'] == 0 and inter_rows[0]['gross_sgst'] == 0
 
+    def test_nil_rated_refund_shows_in_state_wise_credit(
+            self, authenticated_client, test_user, test_category):
+        # Refunding 0% goods reverses no tax, but the credited VALUE must still
+        # land in the 0% slab of the state-wise report.
+        product = _product(test_category, name="Papad", rate="0", hsn="19059040")
+        order = _order_via_checkout(authenticated_client, test_user, product)
+        order.payment_status = 'paid'
+        order.save(update_fields=['payment_status'])
+        issue_invoice(order)
+        refund = record_refund(order, Decimal('105.00'), source='admin', mark_refunded=True)
+        assert refund.tax_amount == 0
+        note = CreditNote.objects.get(refund=refund)
+        assert note.snapshot['rows'] == [{
+            'rate': '0.0', 'taxable_value': '105.00', 'tax_amount': '0.00',
+            'cgst': '0.00', 'sgst': '0.00', 'igst': '0.00'}]
+        today = timezone.localdate()
+        rows = b2c_by_state(today - timedelta(days=1), today + timedelta(days=1))
+        nil = [r for r in rows if r['rate'] == 0.0]
+        assert nil and nil[0]['credit_taxable_value'] == Decimal('105.00')
+
     def test_documents_gap_zero(self, authenticated_client, test_user, test_category):
         product = _product(test_category)
         for _ in range(2):

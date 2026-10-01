@@ -1494,6 +1494,14 @@ class TestCourierTrackingEmail:
         assert test_order.tracking_url == ''
         assert test_order.tracking_number == ''
 
+    def test_overlong_url_400_changes_nothing(self, admin_client, test_order):
+        r = admin_client.patch(f"{URL}{test_order.id}/", {
+            'tracking_url': 'https://track.example/' + 'a' * 500,
+        }, format='json')
+        assert r.status_code == 400
+        test_order.refresh_from_db()
+        assert test_order.tracking_url == ''
+
     def test_resending_same_values_sends_no_second_email(
             self, admin_client, test_order, monkeypatch):
         sent = self._capture(monkeypatch)
