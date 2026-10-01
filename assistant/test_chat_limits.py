@@ -9,8 +9,7 @@ from assistant.agent import MODEL_CONTEXT_TOKENS, Agent
 
 
 def _env(final_reply='ok'):
-    return json.dumps({'thought': 't', 'tool': None, 'args': {},
-                       'final_reply': final_reply, 'proposed_action': None})
+    return {'content': final_reply, 'tool_calls': [], 'finish': 'stop'}
 
 
 def _stub_llm(monkeypatch, reply='ok'):

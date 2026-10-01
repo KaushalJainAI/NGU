@@ -29,15 +29,18 @@ class TestLLMFailure:
         assert out['reason'] == 'llm_error'
         assert out['llm_used'] is True
 
-    def test_garbage_twice_still_escalates(self, monkeypatch):
-        # AP2 keeps the bad-JSON path unchanged (AP9 reworks it).
+    def test_empty_turns_exhaust_without_escalation(self, monkeypatch):
+        # AP9: no envelope to be malformed — turns with no readable content
+        # nudge and then exhaust the loop (friendly capacity reply, no human).
         monkeypatch.setattr('assistant.agent._build_llm', lambda: object())
-        it = iter(['not json', 'still not json'])
+        blank = {'content': '', 'tool_calls': [], 'finish': 'stop'}
+        it = iter([dict(blank) for _ in range(6)])
         monkeypatch.setattr('assistant.agent.Agent._complete',
                             lambda self, messages: next(it))
         out = Agent(None).run('hi')
-        assert out['escalate'] is True
+        assert out['escalate'] is False
         assert out['reason'] == 'loop_exhausted'
+        assert 'fewer' in out['reply'].lower()
 
     def test_endpoint_does_not_flag_human_on_llm_error(self, authenticated_client, monkeypatch):
         monkeypatch.setattr('assistant.agent._build_llm', lambda: object())

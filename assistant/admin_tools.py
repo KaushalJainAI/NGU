@@ -289,6 +289,50 @@ ADMIN_READ_TOOLS = {
 }
 
 
+def _fn(name, description, properties, required=()):
+    return {
+        'type': 'function',
+        'function': {
+            'name': name,
+            'description': description,
+            'parameters': {
+                'type': 'object',
+                'properties': properties,
+                'required': list(required),
+            },
+        },
+    }
+
+
+# Native function-calling schemas (AP9). Same contract as tools.TOOL_SCHEMAS:
+# guidance only — validation stays server-side. No action schemas: the admin
+# persona is read-only and is never bound to any.
+ADMIN_TOOL_SCHEMAS = [
+    _fn('sales_summary', 'Revenue, order count and average order value.',
+        {'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
+    _fn('count_orders', 'How many orders match a status and/or period.',
+        {'status': {'type': 'string', 'description': 'Order status, or unshipped.'},
+         'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
+    _fn('list_recent_orders', 'Recent orders with number, customer, status, total.',
+        {'status': {'type': 'string', 'description': 'Filter by status.'},
+         'limit': {'type': 'integer', 'description': 'Max rows.'},
+         'include_contact': {'type': 'boolean', 'description': 'Full contact ONLY when asked.'}}),
+    _fn('low_stock_products', 'Products at or below their alert threshold.',
+        {'limit': {'type': 'integer', 'description': 'Max rows.'}}),
+    _fn('top_products', 'Best sellers by units for a period.',
+        {'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'},
+         'limit': {'type': 'integer', 'description': 'Max rows.'}}),
+    _fn('product_stock', 'Stock level of a product by name.',
+        {'name': {'type': 'string', 'description': 'Partial product name.'}}, ['name']),
+    _fn('find_customer', 'Look up customers by name, email or phone.',
+        {'query': {'type': 'string', 'description': 'Name, email or phone fragment.'},
+         'include_contact': {'type': 'boolean', 'description': 'Full contact ONLY when asked.'}},
+        ['query']),
+    _fn('search_report', 'Top and zero-result searches for a period.',
+        {'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
+]
+
+
 def run_admin_read_tool(name, user, args):
     handler = ADMIN_READ_TOOLS.get(name)
     if handler is None:

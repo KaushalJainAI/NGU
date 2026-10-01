@@ -1,13 +1,22 @@
 """The assistant agent loop.
 
-A bounded, server-side ReAct-style loop. The LLM is advisory only: it returns a
-strict JSON envelope each step. Read tools execute here (scoped to the user);
-write intents come back as proposals the UI must confirm. Guardrails:
+A bounded, server-side ReAct-style loop over NATIVE function calls (AP9). The
+LLM is advisory only: it calls functions, read tools execute here (scoped to
+the user by the view), and write intents come back as proposals the UI must
+confirm. Guardrails:
 - max 4 tool iterations per turn (G4)
-- closed tool registry + strict validation (G3)
+- closed tool registry + strict server-side validation (G3)
 - untrusted retrieved data wrapped in <<DATA>> markers / spotlighting (G3)
-- one repair retry then safe fallback on bad output (G3)
+- provider errors and unparseable output degrade to a friendly reply that
+  NEVER escalates to a human (AP2/A4)
+- only the customer's explicit request escalates, via escalate_to_human (AP9)
 - graceful degrade when the LLM is unavailable (G4)
+
+Turn contract (internal, also the unit-test seam): _complete() returns
+{'content': str|None, 'tool_calls': [{'name': str, 'args': dict}],
+ 'finish': 'stop'|'length'}. run() returns {reply, proposed_action|None,
+sources, escalate, llm_used, title, history_truncated, reason} with
+reason in {ok, llm_error, loop_exhausted, customer_asked, llm_unavailable}.
 """
 
 import json
@@ -16,7 +25,10 @@ import os
 
 from dotenv import load_dotenv
 
-from .prompts import SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT, FALLBACK_REPLY, language_directive
+from .prompts import (
+    SYSTEM_PROMPT, ADMIN_SYSTEM_PROMPT, FALLBACK_REPLY, LOOP_EXHAUSTED_REPLY,
+    HONEST_HANDOFF_REPLY, CONTINUED_SUFFIX, language_directive,
+)
 from . import tools as toolkit
 from . import admin_tools
 
@@ -25,7 +37,10 @@ logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 4
 MAX_MESSAGE_LEN = 1000         # input cap for a single *new* user turn (also enforced in the view)
-MAX_OUTPUT_TOKENS = int(os.getenv('ASSISTANT_MAX_OUTPUT_TOKENS', '600'))
+# AP9: 1000 replaces 600 — replies cut off at 600 tokens were unparseable
+# under the old envelope, and long list answers (especially in Indic scripts)
+# need the headroom. Truncation is now detected via finish_reason instead.
+MAX_OUTPUT_TOKENS = int(os.getenv('ASSISTANT_MAX_OUTPUT_TOKENS', '1000'))
 
 # AP2: bound every LLM round trip so one slow provider response cannot hold a
 # gunicorn slot indefinitely (3 workers x 2 threads = 6 slots shared with
@@ -105,25 +120,44 @@ def _build_llm():
         return None
 
 
-def _parse_envelope(raw):
-    """Extract the JSON envelope from a model response. Returns dict or None."""
-    if not isinstance(raw, str):
-        raw = getattr(raw, 'content', '') or ''
-    text = raw.strip()
-    # Strip ```json fences if present.
-    if text.startswith('```'):
-        text = text.strip('`')
-        if text.lower().startswith('json'):
-            text = text[4:]
-    # Grab the outermost object.
-    start, end = text.find('{'), text.rfind('}')
-    if start == -1 or end == -1 or end < start:
-        return None
+def _normalize_response(resp):
+    """Provider reply (or test double) -> normalized turn dict. Never raises:
+    anything unrecognisable becomes an unparseable turn, which run() degrades
+    to the friendly llm_error fallback (never a 500, never an escalation)."""
     try:
-        obj = json.loads(text[start:end + 1])
-        return obj if isinstance(obj, dict) else None
-    except (ValueError, TypeError):
-        return None
+        content = getattr(resp, 'content', None)
+        if isinstance(content, list):
+            # Multi-block content (some providers): keep text parts only.
+            parts = []
+            for block in content:
+                if isinstance(block, dict):
+                    parts.append(str(block.get('text', '')))
+                else:
+                    parts.append(str(getattr(block, 'text', block) or ''))
+            content = ' '.join(p for p in parts if p)
+        if content is not None and not isinstance(content, str):
+            content = str(content)
+        calls = []
+        for tc in (getattr(resp, 'tool_calls', None) or []):
+            if isinstance(tc, dict):
+                fn = tc.get('function') or {}
+                name = tc.get('name') or fn.get('name')
+                args = tc.get('args', {})
+                call_id = tc.get('id')
+            else:
+                fn = getattr(tc, 'function', None)
+                name = getattr(tc, 'name', None) or getattr(fn, 'name', None)
+                args = getattr(tc, 'args', {})
+                call_id = getattr(tc, 'id', None)
+            if not name or not isinstance(args, dict):
+                continue
+            calls.append({'name': name, 'args': args, 'id': call_id})
+        meta = getattr(resp, 'response_metadata', None) or {}
+        finish = meta.get('finish_reason') or getattr(resp, 'finish_reason', None) or 'stop'
+        return {'content': content, 'tool_calls': calls, 'finish': finish}
+    except Exception:
+        logger.exception('Assistant response normalisation failed')
+        return {'content': None, 'tool_calls': [], 'finish': 'stop', 'unparseable': True}
 
 
 def _spotlight(label, data):
@@ -134,8 +168,8 @@ def _spotlight(label, data):
 class Agent:
     def __init__(self, user, completion=None, persona='customer'):
         """`user` is the authenticated user (or AnonymousUser/None).
-        `completion` is an optional callable(messages)->str for tests; if not
-        given, the real LLM is used.
+        `completion` is an optional callable(messages)->turn-dict for tests; if
+        not given, the real LLM is used with native function calling.
         `persona` selects the toolset + system prompt: 'customer' (default) uses
         the public/user-scoped tools; 'admin' uses the read-only reporting tools
         (admin_tools) and MUST only be constructed from an IsAdminUser endpoint —
@@ -151,12 +185,27 @@ class Agent:
             self._run_read_tool = admin_tools.run_admin_read_tool
             self._action_builders = {}          # admin assistant is read-only
             self._build_action = None
+            self._schemas = admin_tools.ADMIN_TOOL_SCHEMAS
         else:
             self._system_prompt = SYSTEM_PROMPT
             self._read_tools = toolkit.READ_TOOLS
             self._run_read_tool = toolkit.run_read_tool
             self._action_builders = toolkit.ACTION_BUILDERS
             self._build_action = toolkit.build_action
+            self._schemas = toolkit.TOOL_SCHEMAS + toolkit.ACTION_SCHEMAS
+
+        if self._llm is not None:
+            binder = getattr(self._llm, 'bind_tools', None)
+            if not callable(binder):
+                # Test doubles stub _build_llm with a bare object() (they stub
+                # _complete anyway) — leave it; a real client always binds.
+                logger.warning('Assistant LLM has no bind_tools; continuing unbound.')
+            else:
+                try:
+                    self._llm = binder(self._schemas)
+                except Exception:
+                    logger.exception('Assistant tool binding failed; degrading.')
+                    self._llm = None
 
     @property
     def llm_available(self):
@@ -165,15 +214,17 @@ class Agent:
     def _complete(self, messages):
         if self._completion is not None:
             return self._completion(messages)
-        resp = self._llm.invoke(messages)
-        return getattr(resp, 'content', resp)
+        return _normalize_response(self._llm.invoke(messages))
 
     def run(self, message, history=None, language=None):
         """Run one user turn. Returns a dict:
-        { reply, proposed_action|None, sources, escalate, llm_used }.
+        { reply, proposed_action|None, sources, escalate, llm_used,
+          title, history_truncated, reason }.
 
         `language` is the customer-selected reply language code (e.g. 'en',
-        'hi', 'hinglish'); it only steers final_reply, not the JSON envelope."""
+        'hi', 'hinglish'); it only steers the final reply text, never the
+        function names or args (which stay English). Only an explicit
+        escalate_to_human call sets escalate (reason customer_asked)."""
         message = (message or '').strip()[:MAX_MESSAGE_LEN]
         sources = []
 
@@ -221,67 +272,95 @@ class Agent:
                 messages.append(('user', h.get('content', '')))
         messages.append(('user', message))
 
-        repaired = False
+        pending_action = None
+        escalate = False
         for _ in range(MAX_ITERATIONS):
             # AP2: a provider error (timeout, 5xx, revoked key) must be a
-            # friendly reply, NOT a 500 and NOT a human escalation. Only the
-            # customer's explicit request escalates (AP9 reworks the rest).
+            # friendly reply, NOT a 500 and NOT a human escalation.
             try:
-                raw = self._complete(messages)
+                turn = self._complete(messages)
             except Exception:
                 logger.exception("Assistant LLM call failed")
                 return {'reply': FALLBACK_REPLY, 'proposed_action': None,
                         'sources': sources, 'escalate': False, 'llm_used': True,
                         'title': None, 'history_truncated': history_truncated,
                         'reason': 'llm_error'}
-            env = _parse_envelope(raw)
+            # AP9/A4: anything that is not a well-formed turn degrades to the
+            # same friendly fallback — and NEVER flags a human.
+            if not isinstance(turn, dict) or turn.get('unparseable'):
+                logger.warning('Assistant unparseable turn; friendly fallback.')
+                return {'reply': FALLBACK_REPLY, 'proposed_action': None,
+                        'sources': sources, 'escalate': False, 'llm_used': True,
+                        'title': None, 'history_truncated': history_truncated,
+                        'reason': 'llm_error'}
+            calls = turn.get('tool_calls') or []
+            content = turn.get('content')
 
-            if env is None:
-                if not repaired:
-                    repaired = True
+            # Execute every requested call in this round (A3: one round may
+            # look up haldi AND jeera AND dhaniya). Observations feed back as
+            # DATA for the next round — unless the model already wrote its
+            # reply, in which case this round's calls are its last word.
+            for call in calls:
+                name = call.get('name')
+                args = call.get('args') if isinstance(call.get('args'), dict) else {}
+                if name in self._read_tools:
+                    observation = self._run_read_tool(name, self.user, args)
+                    sources.append({'tool': name, 'args': args})
+                    messages.append(('assistant', f'[{name} called]'))
+                    messages.append(('user', _spotlight(name, observation)))
+                elif name in self._action_builders and self._build_action is not None:
+                    action, err = self._build_action(name, self.user, args)
+                    if action is None:
+                        messages.append(('assistant', f'[{name} called]'))
+                        messages.append((
+                            'user',
+                            f'Action "{name}" was rejected: {err or "invalid"}. '
+                            f'Answer without it.',
+                        ))
+                    else:
+                        # First valid proposal wins; later ones in the same
+                        # turn are dropped (multi-proposals arrive in AP10).
+                        if pending_action is None:
+                            pending_action = action
+                        if action.get('type') == 'escalate_to_human':
+                            escalate = True
+                        messages.append(('assistant', f'[{name} called]'))
+                        messages.append(('user', _spotlight(
+                            name, {'recorded': True, 'label': action.get('label', '')})))
+                else:
+                    # Unknown/invalid tool name -> tell the model, don't execute.
                     messages.append((
                         'user',
-                        'Your previous response was not valid JSON. Reply with ONLY '
-                        'the JSON envelope object described in the instructions.',
+                        f'"{name}" is not a valid tool. Use only the listed '
+                        f'tools or answer in plain text.',
                     ))
-                    continue
-                break  # give up -> fallback below
 
-            tool = env.get('tool')
-            args = env.get('args') if isinstance(env.get('args'), dict) else {}
+            if content and content.strip():
+                reply = self._clean_reply(content)
+                if turn.get('finish') == 'length' and reply:
+                    # AP9/A4: cut off by the output limit, not a failure — say
+                    # so instead of escalating.
+                    reply = f'{reply}\n\n{CONTINUED_SUFFIX}'
+                if not reply and escalate:
+                    reply = HONEST_HANDOFF_REPLY
+                if not reply:
+                    reply = FALLBACK_REPLY
+                return {'reply': reply, 'proposed_action': pending_action,
+                        'sources': sources, 'escalate': escalate, 'llm_used': True,
+                        'title': self._make_title(message, history),
+                        'history_truncated': history_truncated,
+                        'reason': 'customer_asked' if escalate else 'ok'}
 
-            # READ tool requested -> execute, feed observation back as DATA.
-            if tool and tool in self._read_tools:
-                observation = self._run_read_tool(tool, self.user, args)
-                sources.append({'tool': tool, 'args': args})
-                messages.append(('assistant', json.dumps(env, ensure_ascii=False)))
-                messages.append(('user', _spotlight(tool, observation)))
-                continue
+            # No readable reply this round — nudge once more; the loop cap
+            # turns persistence into loop_exhausted, not an escalation.
+            messages.append((
+                'user',
+                'Please answer the customer now in plain text (no tool call needed).',
+            ))
 
-            # Unknown/invalid tool name -> tell the model, don't execute.
-            if tool and tool not in self._read_tools:
-                messages.append((
-                    'user',
-                    f'"{tool}" is not a valid read tool. Use only the listed tools '
-                    f'or set tool to null and answer.',
-                ))
-                continue
-
-            # No read tool -> this is the final answer.
-            reply = env.get('final_reply')
-            reply = self._clean_reply(reply)
-            proposed_action, escalate = self._resolve_action(env.get('proposed_action'))
-            if proposed_action is None and not reply:
-                reply = FALLBACK_REPLY
-            title = self._clean_title(env.get('title'))
-            return {'reply': reply, 'proposed_action': proposed_action,
-                    'sources': sources, 'escalate': escalate, 'llm_used': True,
-                    'title': title, 'history_truncated': history_truncated,
-                    'reason': 'ok'}
-
-        # Loop exhausted or unrecoverable -> safe fallback.
-        return {'reply': FALLBACK_REPLY, 'proposed_action': None,
-                'sources': sources, 'escalate': True, 'llm_used': True, 'title': None,
+        # Loop exhausted: a capacity problem, not a human problem (A4).
+        return {'reply': LOOP_EXHAUSTED_REPLY, 'proposed_action': None,
+                'sources': sources, 'escalate': False, 'llm_used': True, 'title': None,
                 'history_truncated': history_truncated, 'reason': 'loop_exhausted'}
 
     # ------------------------------------------------------------------
@@ -301,23 +380,14 @@ class Agent:
         text = re.sub(r'https?://\S+', '', text)
         return text.strip()[:1500]
 
-    def _clean_title(self, title):
-        """Sanitise the LLM-generated thread title (first turn only)."""
-        if not isinstance(title, str) or not title.strip():
+    def _make_title(self, message, history):
+        """First-turn thread title, derived server-side (AP9).
+
+        Deterministic — no LLM round spent on it: the opening words of the
+        customer's first message, sanitised. Later turns return None (the view
+        only stamps a title once).
+        """
+        if history:
             return None
         from django.utils.html import strip_tags
-        return strip_tags(title).strip()[:80] or None
-
-    def _resolve_action(self, proposed):
-        """Validate a proposed_action from the model and build it (G5).
-        Returns (action_dict|None, escalate_bool)."""
-        if not isinstance(proposed, dict):
-            return None, False
-        name = proposed.get('tool')
-        if name not in self._action_builders or self._build_action is None:
-            return None, False
-        action, _err = self._build_action(name, self.user, proposed.get('args') or {})
-        if action is None:
-            return None, False
-        escalate = action.get('type') == 'escalate_to_human'
-        return action, escalate
+        return strip_tags(' '.join(message.split()[:8])).strip()[:80] or None

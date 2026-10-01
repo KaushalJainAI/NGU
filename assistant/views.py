@@ -143,13 +143,22 @@ class AssistantChatView(APIView):
 
             proposed_action = result.get('proposed_action')
 
-            # Escalation: flag thread for human attention (no ChatSession created).
-            # AP2: an LLM provider failure (reason llm_error) is never an escalation
-            # even if a future caller sets escalate alongside it — the friendly
-            # fallback is still persisted below so history shows it.
-            if result.get('escalate') and result.get('reason') != 'llm_error' and not conversation.needs_human:
+            # Escalation (AP9): ONLY an explicit escalate_to_human call from the
+            # model — i.e. the customer asked for a human — flags the thread.
+            # Failures and loop exhaustion never do (reasons llm_error /
+            # loop_exhausted). The owner is notified immediately by email, not
+            # in the next morning digest (A5 was: flag with no notification).
+            if result.get('reason') == 'customer_asked' and not conversation.needs_human:
                 conversation.needs_human = True
                 conversation.save(update_fields=['needs_human', 'updated_at'])
+                from orders.emails import _send_async as _notify_async
+                _notify_async(
+                    subject=f'Chat needs a human — thread {conversation.conversation_id}',
+                    message=(f'A customer asked for human help.\n\n'
+                             f'Thread: {conversation.conversation_id}\n'
+                             f'Last message: {message[:500]}'),
+                    recipient=getattr(settings, 'ADMIN_ALERT_EMAIL', '') or None,
+                )
 
             # Auto-set thread title from the LLM on the first turn.
             if is_first_turn and result.get('title') and not conversation.title:

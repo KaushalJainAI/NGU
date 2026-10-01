@@ -489,6 +489,81 @@ ACTION_BUILDERS = {
 ALL_TOOL_NAMES = set(READ_TOOLS) | set(ACTION_BUILDERS)
 
 
+# ----------------------------------------------------------------------------
+# Native function-calling schemas (AP9). The model is bound to these; several
+# may be called in ONE round (multi-item lookups). Schemas only GUIDE the
+# model — argument validation still happens server-side in each handler (G3).
+# ----------------------------------------------------------------------------
+def _fn(name, description, properties, required=()):
+    return {
+        'type': 'function',
+        'function': {
+            'name': name,
+            'description': description,
+            'parameters': {
+                'type': 'object',
+                'properties': properties,
+                'required': list(required),
+            },
+        },
+    }
+
+
+def _str(desc):
+    return {'type': 'string', 'description': desc}
+
+
+def _int(desc):
+    return {'type': 'integer', 'description': desc}
+
+
+def _bool(desc):
+    return {'type': 'boolean', 'description': desc}
+
+
+TOOL_SCHEMAS = [
+    _fn('search_products', 'Fuzzy-find products/combos by name or Hinglish term.',
+        {'query': _str('What the customer named, e.g. haldi, garam masala.')}, ['query']),
+    _fn('browse_products', 'Structured catalogue browse/filter.',
+        {'category': _str('Category name or slug.'), 'min_price': {'type': 'number'},
+         'max_price': {'type': 'number'},
+         'spice_form': _str('whole, powder, crushed or mixed.'),
+         'on_offer': _bool('Only discounted items.'), 'in_stock': _bool('Only in-stock items.'),
+         'include_combos': _bool('Include combos (default true).'),
+         'sort': _str('price_asc, price_desc, featured or newest.'),
+         'limit': _int('Max rows (default 8, max 20).')}),
+    _fn('get_product_details', 'Price, weight and description for ONE product/combo.',
+        {'slug': _str('Product or combo slug.')}, ['slug']),
+    _fn('get_product_reviews', 'Rating summary + recent reviews for ONE item.',
+        {'slug': _str('Product or combo slug.'), 'limit': _int('Max reviews (default 5).')},
+        ['slug']),
+    _fn('list_categories', "The store's product categories.", {}),
+    _fn('get_policy', 'Shipping or return policy text.',
+        {'kind': _str('shipping or return.')}, ['kind']),
+    _fn('get_order_status', "Quick status of ONE of the user's orders.",
+        {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
+    _fn('get_order_details', "Line items of ONE of the user's orders.",
+        {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
+    _fn('list_my_orders', "The user's recent orders.",
+        {'limit': _int('Max orders (default 6).')}),
+    _fn('get_cart', "The user's current cart contents.", {}),
+]
+
+ACTION_SCHEMAS = [
+    _fn('add_to_cart', 'PROPOSE adding one item (customer confirms in the app).',
+        {'product_id': _int('Product or combo id.'),
+         'item_type': _str('product or combo.'),
+         'quantity': _int('Units (clamped server-side).')}, ['product_id']),
+    _fn('checkout', 'PROPOSE going to checkout.', {}),
+    _fn('navigate', 'PROPOSE opening an in-store page.',
+        {'route': _str('e.g. /products, /cart, /my-orders.')}, ['route']),
+    _fn('escalate_to_human', 'Flag the thread for a human. Call ONLY when the '
+         'customer explicitly asks for a human — never for failures you can '
+         'describe yourself.',
+        {'reason': _str('What the customer asked for, in their words.')}),
+]
+
+
 def run_read_tool(name, user, args):
     """Execute a read tool by name. Returns an observation dict."""
     handler = READ_TOOLS.get(name)
