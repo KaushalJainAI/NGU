@@ -138,8 +138,11 @@ class TestDashboardReportsGstAndDelivery:
 
     def test_stats_expose_gst_and_delivery(self, admin_client, test_order):
         from django.core.cache import cache
+        from orders.invoicing import issue_invoice
         test_order.shipping_cost = Decimal("40.00")
         test_order.save(update_fields=["shipping_cost"])
+        # MTD GST is on the invoice basis — the order only counts once invoiced.
+        issue_invoice(test_order)
         cache.clear()   # dashboard_stats caches for 60s
 
         d = admin_client.get("/api/dashboard/actions/").json()
