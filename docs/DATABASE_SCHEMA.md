@@ -9,7 +9,7 @@ standard `created_at`/`updated_at` timestamps are omitted unless notable.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| **User** | Custom user extending `AbstractUser` | `email` (login field, unique), `name`, `phone`, `address`, `city`, `state`, `pincode`, `profile_picture` |
+| **User** | Custom user extending `AbstractUser` | `email` (login field, unique), `email_verified` (AP5/S1 — login refused while false), `name`, `phone`, `address`, `city`, `state`, `pincode`, `profile_picture` |
 | **PasswordResetOTP** | OTP tokens for password reset flow | `user` (FK), `otp_code`, `reset_token`, `expires_at`, `is_used`, `failed_attempts` |
 
 `email` is the `USERNAME_FIELD` — users log in with email, not username.
@@ -112,7 +112,7 @@ orders remain accurate even if the product is later renamed or repriced.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| **UserEvent** | Single behavioral interaction | `user` (FK), `event_type` (view/click/add_to_cart/remove_from_cart/favorite/search/purchase), `product` (FK, nullable), `combo` (FK, nullable), `category` (FK, nullable), `created_at` |
+| **UserEvent** | Single behavioral interaction | `user` (FK), `event_type` (view/click/add_to_cart/remove_from_cart/favorite/search/purchase/page_view/checkout_started/checkout_completed/checkout_abandoned + AP11 `voice_used`/`voice_confirmed`), `product` (FK, nullable), `combo` (FK, nullable), `category` (FK, nullable), `created_at` |
 
 Events are ingested via `POST /api/events/` and aggregated by `products/personalization.py`
 to power `GET /api/recommendations/`.
@@ -182,5 +182,5 @@ order containing the item; `is_hidden` is toggled by admins via `POST
 
 ## Improvement plan notes (2026-10-01)
 
-- orders.CreditNote (reason refund/cancellation, CN/<FY>/<seq> via InvoiceCounter), Order.place_of_supply_is_fallback, Order.courier_name/	racking_url, dmin_panel.Expense.
+- orders.CreditNote (reason refund/cancellation, CN/<FY>/<seq> via InvoiceCounter), Order.place_of_supply_is_fallback, Order.courier_name/tracking_url, admin_panel.Expense.
 

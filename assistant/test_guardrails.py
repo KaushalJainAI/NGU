@@ -29,18 +29,29 @@ def policy_shipping(db):
     return Policy.objects.create(type='shipping', content='We ship in 3-5 days.')
 
 
+def _turn(content=None, calls=(), finish='stop'):
+    """One scripted native-tool turn (AP9 contract)."""
+    return {'content': content,
+            'tool_calls': [{'name': n, 'args': a} for n, a in calls],
+            'finish': finish}
+
+
 def _script(monkeypatch, *responses):
-    """Make the agent's LLM return the given strings in order."""
+    """Make the agent's LLM return the given turn-dicts in order."""
     it = iter(responses)
     monkeypatch.setattr('assistant.agent._build_llm', lambda: object())
     monkeypatch.setattr('assistant.agent.Agent._complete', lambda self, messages: next(it))
 
 
-def _env(tool=None, args=None, final_reply=None, proposed_action=None):
-    return json.dumps({
-        'thought': 't', 'tool': tool, 'args': args or {},
-        'final_reply': final_reply, 'proposed_action': proposed_action,
-    })
+def _env(tool=None, args=None, final_reply=None, proposed_action=None, action=None):
+    calls = []
+    if tool:
+        calls.append((tool, args or {}))
+    if proposed_action:
+        calls.append((proposed_action['tool'], proposed_action.get('args') or {}))
+    if action:
+        calls.append((action['tool'], action.get('args') or {}))
+    return _turn(content=final_reply, calls=calls)
 
 
 # ==================== G1 — cross-user data isolation ====================
@@ -100,9 +111,12 @@ class TestG2PlatformData:
         })
         assert 'cost' not in res and 'stock' not in res
 
-    def test_policy_returns_only_kind_and_content(self, policy_shipping):
+    def test_policy_returns_static_page_content(self, policy_shipping):
+        # AP10: answered from the static pages (assistant/policies.py), not the
+        # retired Policy table — the fixture row is deliberately ignored.
         res = toolkit.tool_get_policy(None, {'kind': 'shipping'})
-        assert set(res) == {'kind', 'content'}
+        assert set(res) == {'kind', 'title', 'content', 'route'}
+        assert res['route'] == '/shipping-policy'
 
     def test_registry_has_no_enumeration_or_admin_tools(self):
         for forbidden in ('list_orders', 'list_users', 'search_customers', 'run_sql', 'get_config'):
@@ -120,11 +134,22 @@ class TestG3Injection:
         assert out['reply'] == 'Done'
         assert out['sources'] == []  # nothing executed
 
-    def test_malformed_output_falls_back_safely(self, monkeypatch):
-        _script(monkeypatch, 'not json at all', 'still not json')
+    def test_plain_text_is_the_reply(self, monkeypatch):
+        # AP9/A4: there is no envelope to be malformed — any text content IS
+        # the reply. Nothing to parse, nothing to escalate.
+        _script(monkeypatch, _turn(content='not json at all'))
         out = Agent(None).run('hi')
         assert out['llm_used'] is True
-        assert out['escalate'] is True
+        assert out['escalate'] is False
+        assert out['reply'] == 'not json at all'
+
+    def test_garbage_turn_degrades_without_escalation(self, monkeypatch):
+        # A turn that is not even a dict (provider garbage) -> friendly
+        # fallback, never a human flag (AP9/A4).
+        _script(monkeypatch, 'broken', 'broken')
+        out = Agent(None).run('hi')
+        assert out['escalate'] is False
+        assert out['reason'] == 'llm_error'
         assert 'trouble' in out['reply'].lower()
 
     def test_indirect_injection_in_proposal_is_clamped_not_executed(self, test_product, test_user, monkeypatch):
@@ -144,11 +169,14 @@ class TestG3Injection:
 @pytest.mark.django_db
 class TestG4Abuse:
     def test_loop_stops_at_max_iterations(self, policy_shipping, monkeypatch):
-        # Model keeps calling a read tool forever; loop must bail to fallback.
+        # Model keeps calling a read tool forever; loop must bail to the
+        # friendly capacity reply — a capacity problem, not a human problem.
         many = [_env(tool='get_policy', args={'kind': 'shipping'})] * 10
         _script(monkeypatch, *many)
         out = Agent(None).run('policy?')
-        assert out['escalate'] is True  # exhausted -> safe fallback
+        assert out['reason'] == 'loop_exhausted'
+        assert out['escalate'] is False
+        assert 'fewer' in out['reply'].lower()
 
     def test_message_over_length_rejected(self, authenticated_client):
         resp = authenticated_client.post(
@@ -217,10 +245,12 @@ class TestG6OutputAudit:
         meta = conv.messages.get(role='assistant').meta
         assert 'sources' in meta and 'proposed_action' in meta
 
-    def test_escalation_flags_thread_for_human(self, authenticated_client, monkeypatch):
-        """Unified chat: escalation flags the thread (needs_human). The separate
-        support.ChatSession system has been removed entirely."""
-        _script(monkeypatch, 'broken', 'broken')  # forces fallback -> escalate
+    def test_customer_asked_escalation_flags_thread_for_human(self, authenticated_client, monkeypatch):
+        """Unified chat: ONLY an explicit escalate_to_human call flags the
+        thread (needs_human) — failures never do (AP9/A4)."""
+        _script(monkeypatch, _env(
+            action={'tool': 'escalate_to_human', 'args': {'reason': 'wants a person'}},
+            final_reply='Connecting you.'))
         resp = authenticated_client.post('/api/assistant/chat/', {'message': 'help'}, format='json')
         assert resp.status_code == 200
         conv = AssistantConversation.objects.get(conversation_id=resp.data['conversation_id'])

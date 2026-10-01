@@ -60,7 +60,12 @@ def api_client():
 
 @pytest.fixture
 def test_user(db):
-    """Creates and returns a regular test user."""
+    """Creates and returns a regular test user.
+
+    AP5: verified — fixtures model established (grandfathered) users whose
+    inbox is proven, so the hundreds of login flows keep testing login, not
+    verification. The unverified path is covered in test_email_verification.py.
+    """
     user = User.objects.create_user(
         username='testuser',
         email='testuser@example.com',
@@ -71,7 +76,8 @@ def test_user(db):
         address='123 Test Street',
         city='Test City',
         state='Test State',
-        pincode='123456'
+        pincode='123456',
+        email_verified=True,
     )
     return user
 
@@ -85,7 +91,8 @@ def test_user2(db):
         password='TestPass123!',
         first_name='Another',
         last_name='User',
-        phone='0987654321'
+        phone='0987654321',
+        email_verified=True,
     )
     return user
 
@@ -98,7 +105,8 @@ def test_admin(db):
         email='admin@example.com',
         password='AdminPass123!',
         first_name='Admin',
-        last_name='User'
+        last_name='User',
+        email_verified=True,
     )
     return admin
 

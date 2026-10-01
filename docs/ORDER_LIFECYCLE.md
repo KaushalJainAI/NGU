@@ -165,6 +165,14 @@ total_amount        = discounted_subtotal + shipping_charge + shipping_tax
     `DailySalesRollup.cod_collected` buckets confirmations by **confirmation
     date**, like refunds, because the order being settled is rarely that day's.
 
+- **COD placement is guarded (AP7b/S7).** A COD order reserves stock with no
+  money down, so checkout requires all three *before* the transaction: a
+  verified email (`email_verified`, 400 `email_not_verified`), a total at or
+  under `COD_MAX_VALUE` (default ₹5,000, 400 `cod_value`), and fewer than
+  `COD_MAX_OPEN` (default 3) unfinished COD orders in
+  `pending/confirmed/processing/shipped/delivering` (400 `cod_limit`). Tunables
+  live in `spices_backend/limits.py` (`COD_OPEN_STATUSES` documents what counts
+  as open). Tests: `orders/test_cod_guard.py`.
 - **Refunds reverse GST.** `orders.OrderRefund` is the ledger; `orders/refunds.py::
   record_refund` is the single write path. ⚠ **Since 2026-08-01 refunds are
   MANUAL-ONLY:** the `refund.processed` webhook branch is commented out, so the
@@ -531,7 +539,6 @@ combo lines are explicitly excluded from the decrement loop.
 
 ## Improvement plan notes (2026-10-01)
 
-- Order.courier_name + Order.tracking_url are set on the admin PATCH (single call with the tracking number, so one shipped email). The shipped email names the courier and links the tracking URL; My Orders shows both.
-- Recording a refund (status=refunded + ecord_refund) emails the customer via send_refund_recorded_email with the recorded amount, and issues a CN/<FY>/<seq> credit note (orders.CreditNote, reason refund/cancellation). Cancelling an invoiced unpaid order issues a cancellation note instead.
-- place_of_supply_state_code cannot change once an invoice exists (400).
-
+- `Order.courier_name` + `Order.tracking_url` are set on the admin PATCH (single call with the tracking number, so one shipped email). The shipped email names the courier and carries the tracking link; a link must be http(s) and at most 500 characters.
+- Recording a refund (`status=refunded` + `record_refund`) emails the customer via `send_refund_recorded_email` with the recorded amount, and issues a `CN/<FY>/<seq>` credit note when the order has an invoice. Cancelling an invoiced order while no money is held issues a `cancellation` credit note for the remaining invoice value.
+- `place_of_supply_state_code` cannot change once an invoice exists (400).

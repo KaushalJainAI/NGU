@@ -8,19 +8,68 @@ automatically on every subsequent request.
 
 ## Token Lifecycle
 
+### Registration + email verification (`POST /api/auth/register/`, `/api/auth/verify-email/`)
+
+Handled by `UserRegistrationView` (`users/views.py`). For a valid form the response
+is **always** `201 {'detail': 'If this email is new, a verification code was sent.'}`
+— whether the address is new or already registered — and an invalid form 400s the
+same way in both cases, so registration never reveals which emails have accounts
+(S9). What happens behind that response:
+
+| The address is… | Effect |
+|---|---|
+| new | Account created with `email_verified=False`; a 6-digit code is mailed. |
+| an **unclaimed** row (unverified, never logged in, not staff) | Its password and details are **replaced** by this registration and a fresh code is mailed. A squatter who registered someone else's address cannot keep their password once the owner signs up. |
+| any other existing row | Untouched. Its owner gets one "you already have an account" notice per day. |
+
+Codes live in the `PasswordResetOTP` table, told apart by its `purpose` column
+(`reset` / `verify` / `change_email`). Each purpose has its own live code and its
+own quota of 5 codes per account per 24 h, so a stranger spamming "forgot
+password" can neither cancel nor use up the owner's verification codes. Account
+mail is sent from a background thread (`_send_auth_email`; inline under tests);
+a mail failure is logged and never fails the request.
+
+- `POST /api/auth/verify-email/` `{email, otp_code, password}` → consumes the code,
+  sets `email_verified=True`, revokes pre-verification sessions, returns
+  `{'success': True}`. **The password is required and must be the account's
+  current one.** The code proves the inbox; the password proves the person holding
+  the code is the one who set the credentials. Without it, an attacker could
+  register a victim's address with their own password and wait for the victim to
+  type the code that arrives — verifying the attacker's password. A wrong password
+  reads exactly like a wrong code and counts toward the 5-attempt lock (400 / 429,
+  10-minute expiry).
+- `POST /api/auth/verify-email/request/` `{email}` → re-sends a code to an
+  unverified address (this is how accounts left unverified by the migration obtain
+  one). Always the same generic 200; capped at 5 verification codes per account
+  per 24 h.
+- Clients: the storefront sends new sign-ups to `/verify-email`, and sends a login
+  that answers `403 email_not_verified` there too (requesting a fresh code first);
+  the admin panel's login form grows a code field on the same 403. Both hold the
+  password the user just typed and replay the login after verifying.
+- A superuser made with `createsuperuser` is created verified (`UserManager`).
+  Staff made any other way verify once at the panel login.
+- Existing accounts were grandfathered by migration `users/0010`: delivered-order
+  owners, rows with an unusable password (Google-created), and staff/superusers start
+  verified; everyone else confirms once.
+
 ### Login (`POST /api/auth/login/`)
 
 Handled by `CustomTokenObtainPairView` (`users/views.py`). On success the server sets two
-HttpOnly cookies and also returns the token values in the response body (for clients that
-need them, e.g. server-side rendering):
+HttpOnly cookies (tokens are never returned in the response body):
 
 | Cookie | Value | Max-Age | Flags |
 |--------|-------|---------|-------|
-| `access_token` | Short-lived JWT | `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` — currently 1 hour | HttpOnly, SameSite=Lax, Secure=True in prod |
+| `access_token` | Short-lived JWT | `SIMPLE_JWT['ACCESS_TOKEN_LIFETIME']` — 15 minutes (AP6; was 1 hour) | HttpOnly, SameSite=Lax, Secure=True in prod |
 | `refresh_token` | Long-lived JWT | `SIMPLE_JWT['REFRESH_TOKEN_LIFETIME']` — currently 7 days | HttpOnly, SameSite=Lax, Secure=True in prod |
 
 `Secure` is `not settings.DEBUG` — cookies are plain-HTTP in local dev, HTTPS-only in
 production.
+
+Unverified emails cannot log in: valid credentials with `email_verified=False`
+return `403 {'detail': 'Email not verified.', 'code': 'email_not_verified'}` and
+set no cookies (the freshly minted tokens are discarded, never leaked in the
+403 body). `POST /api/auth/admin/login/` applies the same gate after the staff
+check, so non-staff still see the unchanged 401.
 
 All three views that set these cookies (login, refresh, Google) go through the shared
 `set_access_cookie()` / `set_refresh_cookie()` helpers in `users/views.py`, which read
@@ -33,7 +82,7 @@ Handled by `CustomTokenRefreshView`. If the request body does not include a `ref
 field, the view falls back to `request.COOKIES.get('refresh_token')`. This means the
 frontend can call the endpoint with an empty body `{}` and the cookie is used automatically.
 
-On success a fresh `access_token` cookie is set (same flags, 1-hour max-age). If refresh
+On success a fresh `access_token` cookie is set (same flags, 15-minute max-age). If refresh
 token rotation is enabled in SimpleJWT settings, a new `refresh_token` cookie is also set.
 
 ### Logout (`POST /api/auth/logout/`)
@@ -68,6 +117,7 @@ non-staff accounts client-side as well.
 | `/auth/login/` | `LoginRateThrottle` | `login` | 5/minute (per IP) |
 | `/auth/register/` | `RegisterRateThrottle` | `register` | 3/minute (per IP) |
 | `/auth/password-reset-*` | `PasswordResetRateThrottle` | `password_reset` | 10/day (per IP) |
+| `/auth/verify-email/`, `/auth/verify-email/request/` | `EmailVerifyRateThrottle` | `email_verify` | 30/hour (per IP), plus 5 verification codes per account per 24 h |
 
 Limits are configured in `DEFAULT_THROTTLE_RATES` in Django settings and applied at the
 view level — not globally.
@@ -121,9 +171,15 @@ Frontend                  Backend                    Google
    `kaushaljain7000@gmail.com`), with a numeric suffix appended if that username is
    taken — the bare local part collides across domains (`a@x.com` vs `a@y.com`).
 4. On first login: `set_unusable_password()` is called — Google-only users cannot log in
-   via email/password until they explicitly set one via `change-password`.
-5. On subsequent logins: name is updated if it was previously blank; everything else
-   is left unchanged.
+   via email/password until they explicitly set one via `change-password`. The row is
+   created with `email_verified=True` (Google proved the inbox; no OTP needed).
+5. On subsequent logins: an inactive account is refused (403). If the row's email was
+   **never verified** and it has a usable password (someone registered the address
+   with a password first — the S1 pre-hijack case), the password is made unusable and
+   every session for that user is revoked; the row is then marked verified. A
+   **verified** account keeps its password — its owner chose it, and wiping it would
+   silently break password login (for staff, the admin panel) just for using Google
+   once. Name is updated if it was previously blank.
 6. The same `CustomTokenObtainPairSerializer.get_token(user)` is used as for password
    login — OAuth users get identical JWT cookies.
 7. Response status is `201 Created` for new users, `200 OK` for returning users.
@@ -209,6 +265,10 @@ Client                    Backend
 ```
 
 After success the `reset_token` is nulled out so the same token cannot be reused.
+Every outstanding refresh token for the user (customer and admin) is revoked first
+(AP3), so whoever was in before the reset no longer is. The reset also sets
+`email_verified=True`: the emailed code proved the inbox, and without it an
+unverified account would reset successfully and still be refused at login.
 
 **Why three steps (not two)?** Separating verify (step 2) from confirm (step 3) means the
 user proves they have access to the email before their new password travels over the
@@ -217,12 +277,30 @@ the OTP is validated.
 
 ---
 
+## Change Email (`POST /api/auth/change-email/`)
+
+Two steps, proof at both ends (AP6/S3). Call 1 `{new_email, current_password}`
+re-proves the password, validates the new address (format + unused), and mails it
+an OTP (`PasswordResetOTP` row whose `reset_token` column holds the pending address).
+Call 2 adds `otp_code` (password required again — the session alone may be hijacked):
+the code is checked against the pending row, then the email swaps, `email_verified`
+is set (the OTP proved the new inbox), every session is revoked and the caller's own
+cookies are re-issued, and the OLD address gets a "your login email changed" notice.
+A wrong current password is a 400 (a 401 would make the SPA treat the session as
+expired and log the user out). Codes are capped at 5 per account per 24 h. `PATCH /api/auth/profile/` with a
+differing email is a 400 pointing here — the profile never changes the login identifier.
+
 ## Change Password (`POST /api/auth/change-password/`)
 
 Requires the current session (authenticated). Accepts `{old_password, new_password}`.
 Validates `old_password` via `check_password()`, then runs Django's `validate_password()`
-validators on the new one before saving. No token refresh is needed after a password change
-— existing cookies remain valid.
+validators on the new one before saving. Every outstanding refresh token for the user
+(customer and admin) is then revoked (AP3/S4): other devices must log in again. The
+caller's own cookies are re-issued in the same response (`_reissue_session`, in the
+scope the request came in on) — revoking everything includes the caller's own refresh
+token, so without that the person changing their password would be logged out at the
+next refresh. Stateless access tokens on other devices live out their remaining
+minutes (≤ 15); the refresh path dies immediately.
 
 ---
 
@@ -234,8 +312,11 @@ validators on the new one before saving. No token refresh is needed after a pass
 | Tokens not sent to wrong origin | SameSite=Lax |
 | Tokens encrypted in transit | Secure=True (prod) |
 | Login brute-force | 5/min rate limit + OTP for reset |
-| Email enumeration | Constant-time dummy branch on reset request |
-| OTP brute-force | 5-attempt lock, 10-minute expiry |
+| Email enumeration | Constant-time dummy branch on reset request; uniform 201 on register, generic 200 on verify resend |
+| OTP brute-force | 5-attempt lock, 10-minute expiry (reset + verification + change-email codes); `secrets` randomness; 5 codes per account per 24 h **per purpose** |
+| Silent email takeover (S3) | Login email changes only via password + new-inbox OTP; old address notified (AP6) |
+| Pre-hijack via registration (S1) | `email_verified` gate on login (AP5); verification needs the code AND the password; re-registering replaces an unclaimed row; Google sign-in kills an unverified row's password + sessions |
+| Stale sessions after credential change (S4) | Password change/reset/email change revokes all refresh tokens, both scopes (AP3); the caller's own session is re-issued |
 | Google token forgery | Server-side `verify_oauth2_token` against Google certs |
 | Google unverified-email takeover | `email_verified` claim required before any account match |
 | CSRF | Cookie + `X-CSRFToken` header double-submit |

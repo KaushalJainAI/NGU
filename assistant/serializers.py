@@ -5,9 +5,10 @@ from .models import AssistantConversation, AssistantMessage
 
 
 class AssistantChatRequestSerializer(serializers.Serializer):
+    # AP10: chat is login-only — the anonymous-session arg is gone (the model
+    # column stays as a vestigial field; no code path reads it anymore).
     message = serializers.CharField(max_length=MAX_MESSAGE_LEN, trim_whitespace=True)
     conversation_id = serializers.UUIDField(required=False, allow_null=True)
-    anon_session = serializers.CharField(max_length=64, required=False, allow_blank=True)
     language = serializers.CharField(max_length=16, required=False, allow_blank=True)
 
 
@@ -51,10 +52,19 @@ class ConversationSummarySerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    # AP10: the saved proposal travels WITH history so action buttons survive
+    # reload (the widget disables them again client-side once tapped — one tap
+    # can no longer repeat). Nothing else from the audit meta is exposed.
+    proposed_action = serializers.SerializerMethodField()
+
     class Meta:
         model = AssistantMessage
-        fields = ['id', 'role', 'content', 'sender_name', 'created_at']
+        fields = ['id', 'role', 'content', 'sender_name', 'created_at', 'proposed_action']
         read_only_fields = fields
+
+    def get_proposed_action(self, obj):
+        action = (obj.meta or {}).get('proposed_action')
+        return action if isinstance(action, dict) else None
 
 
 class AdminReplySerializer(serializers.Serializer):

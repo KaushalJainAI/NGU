@@ -61,6 +61,7 @@ from admin_panel.models import Coupon
 from spices_backend.limits import (
     MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL, MAX_ONLINE_ORDER_TOTAL,
     SHIPPING_CHARGE, FREE_SHIPPING_THRESHOLD,
+    COD_MAX_VALUE, COD_MAX_OPEN, COD_OPEN_STATUSES,
 )
 from spices_backend.abuse import flag_suspicious
 from spices_backend.timeranges import range_filter
@@ -748,6 +749,34 @@ class OrderViewSet(viewsets.ModelViewSet):
                 {'error': f'Online payment is limited to ₹{MAX_ONLINE_ORDER_TOTAL:,} per order. '
                           f'Please choose Cash on Delivery or reduce your order.'},
                 status=status.HTTP_400_BAD_REQUEST)
+
+        # AP7b/S7: COD reserves stock with no money down, so gate it. All three
+        # must hold (checked pre-transaction, beside the ONLINE cap above):
+        # proven inbox, sane value, few enough unfinished COD orders.
+        if serializer.validated_data.get('payment_method') == 'COD':
+            if not request.user.email_verified:
+                return Response(
+                    {'code': 'email_not_verified',
+                     'error': 'Please verify your email before placing a Cash on Delivery order.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            if total_amount > COD_MAX_VALUE:
+                flag_suspicious(request, reason='order.cod_value', value=str(total_amount))
+                return Response(
+                    {'code': 'cod_value',
+                     'error': f'Cash on Delivery is limited to ₹{COD_MAX_VALUE:,} per order. '
+                              f'Please pay online or reduce your order.'},
+                    status=status.HTTP_400_BAD_REQUEST)
+            open_cod = Order.objects.filter(
+                user=request.user, payment_method='COD',
+                status__in=COD_OPEN_STATUSES, is_deleted=False,
+            ).count()
+            if open_cod >= COD_MAX_OPEN:
+                flag_suspicious(request, reason='order.cod_open_limit', value=str(open_cod))
+                return Response(
+                    {'code': 'cod_limit',
+                     'error': 'You have too many unfinished Cash on Delivery orders. '
+                              'Please wait for delivery or cancel one before ordering again.'},
+                    status=status.HTTP_400_BAD_REQUEST)
 
         # Create order in transaction
         try:

@@ -77,116 +77,71 @@ def _paginate(qs, request):
 # Chat endpoint (AI responds)
 # ---------------------------------------------------------------------------
 
+def _prepare_customer_turn(request):
+    """Shared preamble for the chat + stream endpoints (AP10b).
+
+    Chat is login-only (AP10: anonymous-session paths removed), so `user` is
+    always the authenticated user. Returns
+    (user, conversation, message, language, history, is_first_turn,
+    paused_payload) where paused_payload is a ready response dict when a human
+    is handling the thread (no LLM call), else None. Blank messages 400 in the
+    serializer (trimmed to empty); over-length messages 400 on max_length.
+    """
+    ser = AssistantChatRequestSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+    data = ser.validated_data
+    message = data['message'].strip()
+    user = request.user
+    conversation = AssistantChatView.get_conversation(data.get('conversation_id'), user)
+    # Human handoff: a team member is on this thread, so the AI stays out of
+    # it entirely. The customer's message is still persisted and the thread
+    # is re-flagged for attention — silence must never mean a lost message.
+    if conversation.is_ai_paused:
+        admin = conversation.ai_paused_by
+        handled_by = (admin.get_full_name() or admin.email) if admin else ''
+        AssistantMessage.objects.create(
+            conversation=conversation, role='user', content=message
+        )
+        fields = ['updated_at']
+        if not conversation.needs_human:
+            conversation.needs_human = True
+            fields.append('needs_human')
+        conversation.save(update_fields=fields)
+        return user, conversation, message, data.get('language') or '', [], False, {
+            'conversation_id': str(conversation.conversation_id),
+            'reply': '',
+            'proposed_action': None,
+            'sources': [],
+            'history_truncated': False,
+            'ai_paused': True,
+            'handled_by': handled_by,
+        }
+
+    is_first_turn = not conversation.messages.filter(role='assistant').exists()
+    history = AssistantChatView.load_history(conversation)
+
+    AssistantMessage.objects.create(
+        conversation=conversation, role='user', content=message
+    )
+    return user, conversation, message, data.get('language') or '', history, is_first_turn, None
+
+
 class AssistantChatView(APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
 
-    def post(self, request):
-        ser = AssistantChatRequestSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
-        data = ser.validated_data
-        message = data['message'].strip()
-        if not message:
-            return Response({'error': 'Empty message'}, status=status.HTTP_400_BAD_REQUEST)
-
-        user = request.user if request.user and request.user.is_authenticated else None
-        anon_session = '' if user else (data.get('anon_session') or '')
-
-        conversation = self._get_or_create_conversation(
-            data.get('conversation_id'), user, anon_session
-        )
-        # Human handoff: a team member is on this thread, so the AI stays out of
-        # it entirely. The customer's message is still persisted and the thread
-        # is re-flagged for attention — silence must never mean a lost message.
-        if conversation.is_ai_paused:
-            admin = conversation.ai_paused_by
-            handled_by = (admin.get_full_name() or admin.email) if admin else ''
-            AssistantMessage.objects.create(
-                conversation=conversation, role='user', content=message
-            )
-            fields = ['updated_at']
-            if not conversation.needs_human:
-                conversation.needs_human = True
-                fields.append('needs_human')
-            conversation.save(update_fields=fields)
-            return Response({
-                'conversation_id': str(conversation.conversation_id),
-                'reply': '',
-                'proposed_action': None,
-                'sources': [],
-                'history_truncated': False,
-                'ai_paused': True,
-                'handled_by': handled_by,
-            })
-
-        is_first_turn = not conversation.messages.filter(role='assistant').exists()
-
-        history = self._load_history(conversation)
-
-        AssistantMessage.objects.create(
-            conversation=conversation, role='user', content=message
-        )
-
-        completion = getattr(request, '_assistant_completion', None)
-        agent = Agent(user, completion=completion)
-        result = agent.run(message, history=history, language=data.get('language') or '')
-
-        proposed_action = result.get('proposed_action')
-
-        # Escalation: flag thread for human attention (no ChatSession created).
-        if result.get('escalate') and not conversation.needs_human:
-            conversation.needs_human = True
-            conversation.save(update_fields=['needs_human', 'updated_at'])
-
-        # Auto-set thread title from the LLM on the first turn.
-        if is_first_turn and result.get('title') and not conversation.title:
-            conversation.title = result['title']
-            conversation.save(update_fields=['title', 'updated_at'])
-        else:
-            conversation.save(update_fields=['updated_at'])
-
-        AssistantMessage.objects.create(
-            conversation=conversation,
-            role='assistant',
-            content=result.get('reply', ''),
-            meta={
-                'sources': result.get('sources', []),
-                'proposed_action': proposed_action,
-                'escalate': bool(result.get('escalate')),
-                'llm_used': result.get('llm_used'),
-            },
-        )
-
-        return Response({
-            'conversation_id': str(conversation.conversation_id),
-            'reply': result.get('reply', ''),
-            'proposed_action': proposed_action,
-            'sources': result.get('sources', []),
-            # True once the thread no longer fits the model's context window and
-            # its oldest turns were dropped from the prompt. The client shows a
-            # "start a new chat" notice — the assistant is now answering without
-            # the earliest part of this conversation.
-            'history_truncated': bool(result.get('history_truncated')),
-            'ai_paused': False,
-            'handled_by': '',
-        })
-
-    # ------------------------------------------------------------------
-    def _get_or_create_conversation(self, conversation_id, user, anon_session):
+    @staticmethod
+    def get_conversation(conversation_id, user):
         """G1: a conversation can only be resumed by its own owner."""
         if conversation_id:
-            qs = AssistantConversation.objects.filter(conversation_id=conversation_id)
-            if user:
-                qs = qs.filter(user=user)
-            else:
-                qs = qs.filter(user__isnull=True, anon_session=anon_session) \
-                    if anon_session else qs.none()
-            existing = qs.first()
+            existing = AssistantConversation.objects.filter(
+                conversation_id=conversation_id, user=user).first()
             if existing:
                 return existing
-        return AssistantConversation.objects.create(user=user, anon_session=anon_session)
+        return AssistantConversation.objects.create(user=user)
 
-    def _load_history(self, conversation):
+    @staticmethod
+    def load_history(conversation):
         # Load the most recent messages (bounded to avoid an unbounded queryset
         # on a runaway thread); the agent then token-trims to the context budget.
         msgs = conversation.messages.filter(role__in=['user', 'assistant', 'admin']) \
@@ -195,6 +150,152 @@ class AssistantChatView(APIView):
             {'role': m.role, 'content': m.content, 'sender_name': m.sender_name}
             for m in reversed(list(msgs))
         ]
+
+    def post(self, request):
+        # AP7c/S5: one in-flight turn per account. A multi-call turn occupies a
+        # gunicorn slot for seconds; parallel turns from one account multiply
+        # that (and the LLM bill). cache.add is set-if-absent: losers get 429.
+        # Taken BEFORE the message is saved — a refused turn must leave nothing
+        # behind, or the thread shows a question nobody ever answers.
+        inflight_key = _claim_turn(request.user)
+        if inflight_key is None:
+            return _turn_in_progress()
+        try:
+            user, conversation, message, language, history, is_first_turn, paused = \
+                _prepare_customer_turn(request)
+            if paused is not None:
+                return Response(paused)
+            completion = getattr(request, '_assistant_completion', None)
+            agent = Agent(user, completion=completion)
+            result = agent.run(message, history=history, language=language)
+            payload = _finalize_turn(conversation, message, result, is_first_turn)
+            return Response(payload)
+        finally:
+            _release_turn(inflight_key)
+
+
+# Dead-man's release if the worker dies mid-turn. Must outlast the slowest
+# possible turn (MAX_ITERATIONS LLM calls, each up to timeout x 2 attempts =
+# 160 s) or the guard lapses while the turn it guards is still running.
+INFLIGHT_TTL_SECONDS = 180
+
+
+def _claim_turn(user):
+    """Returns the lock key, or None if this account already has a turn running."""
+    from django.core.cache import cache
+    key = f'ngu:chat:inflight:{user.pk}'
+    return key if cache.add(key, 1, timeout=INFLIGHT_TTL_SECONDS) else None
+
+
+def _release_turn(key):
+    from django.core.cache import cache
+    cache.delete(key)
+
+
+def _turn_in_progress():
+    return Response({'detail': 'A reply is already in progress.'},
+                    status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+
+def _finalize_turn(conversation, message, result, is_first_turn):
+    """Escalation/email, title stamp, persist, payload. Shared by the chat and
+    stream endpoints so both persist exactly the same turn (AP10b)."""
+    proposed_action = result.get('proposed_action')
+
+    # Escalation (AP9): ONLY an explicit escalate_to_human call from the
+    # model — i.e. the customer asked for a human — flags the thread.
+    # Failures and loop exhaustion never do (reasons llm_error /
+    # loop_exhausted). The owner is notified immediately by email, not
+    # in the next morning digest (A5 was: flag with no notification).
+    if result.get('reason') == 'customer_asked' and not conversation.needs_human:
+        conversation.needs_human = True
+        conversation.save(update_fields=['needs_human', 'updated_at'])
+        from orders.emails import _send_async as _notify_async
+        _notify_async(
+            subject=f'Chat needs a human — thread {conversation.conversation_id}',
+            message=(f'A customer asked for human help.\n\n'
+                     f'Thread: {conversation.conversation_id}\n'
+                     f'Last message: {message[:500]}'),
+            recipient=getattr(settings, 'ADMIN_ALERT_EMAIL', '') or None,
+        )
+
+    # Auto-set thread title on the first turn.
+    if is_first_turn and result.get('title') and not conversation.title:
+        conversation.title = result['title']
+        conversation.save(update_fields=['title', 'updated_at'])
+    else:
+        conversation.save(update_fields=['updated_at'])
+
+    AssistantMessage.objects.create(
+        conversation=conversation,
+        role='assistant',
+        content=result.get('reply', ''),
+        meta={
+            'sources': result.get('sources', []),
+            'proposed_action': proposed_action,
+            'escalate': bool(result.get('escalate')),
+            'llm_used': result.get('llm_used'),
+            'reason': result.get('reason', 'ok'),
+        },
+    )
+
+    return {
+        'conversation_id': str(conversation.conversation_id),
+        'reply': result.get('reply', ''),
+        'proposed_action': proposed_action,
+        'sources': result.get('sources', []),
+        # True once the thread no longer fits the model's context window and
+        # its oldest turns were dropped from the prompt. The client shows a
+        # "start a new chat" notice — the assistant is now answering without
+        # the earliest part of this conversation.
+        'history_truncated': bool(result.get('history_truncated')),
+        'ai_paused': False,
+        'handled_by': '',
+    }
+
+
+class AssistantChatStreamView(APIView):
+    """Server-sent events for one assistant turn (AP10b).
+
+    Same preamble, throttles, in-flight guard, agent run and persistence as
+    POST /api/assistant/chat/ — only the DELIVERY differs: `meta`, `reply`
+    chunks, then `done` carrying the full payload. The old route is
+    byte-identical (its tests assert the body, not the transport).
+    """
+    permission_classes = [IsAuthenticated]
+    throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
+
+    def post(self, request):
+        from django.http import StreamingHttpResponse
+
+        inflight_key = _claim_turn(request.user)
+        if inflight_key is None:
+            return _turn_in_progress()
+        try:
+            user, conversation, message, language, history, is_first_turn, paused = \
+                _prepare_customer_turn(request)
+            if paused is not None:
+                return StreamingHttpResponse(
+                    self._events(paused), content_type='text/event-stream')
+            completion = getattr(request, '_assistant_completion', None)
+            agent = Agent(user, completion=completion)
+            result = agent.run(message, history=history, language=language)
+            payload = _finalize_turn(conversation, message, result, is_first_turn)
+            return StreamingHttpResponse(
+                self._events(payload), content_type='text/event-stream')
+        finally:
+            _release_turn(inflight_key)
+
+    @staticmethod
+    def _events(payload):
+        import json as _json
+        yield 'event: meta\n' + 'data: ' + _json.dumps(
+            {'conversation_id': payload.get('conversation_id')}) + '\n\n'
+        reply = payload.get('reply') or ''
+        for i in range(0, len(reply), 120):
+            yield 'event: reply\n' + 'data: ' + _json.dumps(
+                {'chunk': reply[i:i + 120]}) + '\n\n'
+        yield 'event: done\n' + 'data: ' + _json.dumps(payload, default=str) + '\n\n'
 
 
 # ---------------------------------------------------------------------------

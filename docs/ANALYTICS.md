@@ -242,7 +242,7 @@ bucketing, counter accumulation (bounded-row property), the rollup command
 
 ## Improvement plan notes (2026-10-01)
 
-- Dashboard ctions (cache 
+- Dashboard actions (cache 
 gu:dashboard:actions:v2) reports real sales only (paid online + all COD), with last-week/last-month comparisons, unshipped-aged/out-of-stock/missing-invoice/unclassified-HSN/failed-payment attention counts, and top sellers. MTD GST collected/refunded/net come from the invoice-basis ledger (orders/gst_ledger.py).
-- /api/admin/books/summary/ (see dmin_panel/books.py) estimates monthly profit and GST from invoices, credit notes, gateway fees, courier costs and Expense rows; always is_estimate: true.
+- /api/admin/books/summary/ (see admin_panel/books.py) estimates monthly profit and GST from invoices, credit notes, gateway fees, courier costs and Expense rows; always is_estimate: true.
 

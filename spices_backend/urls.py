@@ -13,7 +13,9 @@ def health_check(request):
 
 from users.views import (
     UserRegistrationView, UserProfileView, CustomTokenObtainPairView, CustomTokenRefreshView, ChangePasswordView,
+    ChangeEmailView,
     PasswordResetRequestView, PasswordResetVerifyView, PasswordResetConfirmView, GoogleLogin,
+    VerifyEmailRequestView, VerifyEmailConfirmView,
     LogoutView, AdminLoginView, AdminGoogleLoginView, AdminTokenRefreshView, AdminLogoutView,
 )
 from products.sitemaps import sitemap_xml, robots_txt
@@ -41,6 +43,7 @@ from admin_panel.views import (
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
     AssistantChatView,
+    AssistantChatStreamView,
     AdminAssistantChatView,
     AssistantTranscribeView,
     ConversationListCreateView,
@@ -110,9 +113,12 @@ urlpatterns = [
     path('api/auth/admin/logout/', AdminLogoutView.as_view(), name='admin-logout'),
     path('api/auth/profile/', UserProfileView.as_view(), name='profile'),
     path('api/auth/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('api/auth/change-email/', ChangeEmailView.as_view(), name='change-email'),
     path('api/auth/password-reset-request/', PasswordResetRequestView.as_view(), name='password-reset-request'),
     path('api/auth/password-reset-verify/', PasswordResetVerifyView.as_view(), name='password-reset-verify'),
     path('api/auth/password-reset-confirm/', PasswordResetConfirmView.as_view(), name='password-reset-confirm'),
+    path('api/auth/verify-email/', VerifyEmailConfirmView.as_view(), name='verify-email'),
+    path('api/auth/verify-email/request/', VerifyEmailRequestView.as_view(), name='verify-email-request'),
     path('api/auth/google/', GoogleLogin.as_view(), name='google_login'),
     
     # dj-rest-auth routes were UNMOUNTED (2026-07-25). They exposed a second,
@@ -182,6 +188,7 @@ urlpatterns = [
     # NOTE: the static `admin/` route is declared before the `<uuid>` routes so
     # it is matched first and never shadowed.
     path('api/assistant/chat/', AssistantChatView.as_view(), name='assistant-chat'),
+    path('api/assistant/chat/stream/', AssistantChatStreamView.as_view(), name='assistant-chat-stream'),
     path('api/assistant/admin-chat/', AdminAssistantChatView.as_view(), name='assistant-admin-chat'),
     path('api/assistant/transcribe/', AssistantTranscribeView.as_view(), name='assistant-transcribe'),
     path('api/assistant/conversations/admin/', AdminConversationListView.as_view(), name='assistant-admin-list'),

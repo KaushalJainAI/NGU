@@ -127,7 +127,7 @@ Complete reference for all API endpoints and their permission requirements.
 | `register` | 3/minute | Registration endpoint |
 | `contact` | 5/hour | Contact form submission |
 | `assistant` | 20/minute | AI assistant burst |
-| `assistant_day` | 500/day | AI assistant daily cap (cost guard) |
+| `assistant_day` | 100/day | AI assistant daily cap (cost guard, AP7c — was 500/day) |
 
 ---
 

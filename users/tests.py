@@ -36,12 +36,14 @@ class TestUserRegistration:
         }
         response = api_client.post(self.url, data, format='json')
         assert response.status_code == status.HTTP_201_CREATED
-        assert 'user' in response.data
-        assert response.data['user']['email'] == 'newuser@example.com'
-        assert User.objects.filter(email='newuser@example.com').exists()
-    
+        # AP5/S9: generic response — no user object, no existence signal.
+        assert response.data == {'detail': 'If this email is new, a verification code was sent.'}
+        user = User.objects.get(email='newuser@example.com')
+        assert user.email_verified is False  # unusable until OTP confirmed
+
     def test_register_duplicate_email(self, api_client, test_user):
-        """Test registration fails with duplicate email."""
+        """Test registration with a duplicate email is indistinguishable (S9)."""
+        count_before = User.objects.count()
         data = {
             'username': 'anotheruser',
             'email': test_user.email,  # Duplicate
@@ -49,7 +51,9 @@ class TestUserRegistration:
             'password2': 'StrongPass123!',
         }
         response = api_client.post(self.url, data, format='json')
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_201_CREATED
+        assert response.data == {'detail': 'If this email is new, a verification code was sent.'}
+        assert User.objects.count() == count_before
     
     def test_register_duplicate_username(self, api_client, test_user):
         """Test registration fails with duplicate username."""
@@ -450,12 +454,30 @@ class TestEmailNormalization:
     def test_case_variant_registration_rejected(self, api_client):
         first = api_client.post(REGISTER_URL, _reg_payload("u1", "dup@example.com"), format="json")
         assert first.status_code in (200, 201)
+        # AP5/S9: same generic 201 as a fresh address — existence stays hidden.
         second = api_client.post(REGISTER_URL, _reg_payload("u2", "DUP@example.com"), format="json")
-        assert second.status_code == 400
+        assert second.status_code == 201
         assert User.objects.filter(email__iexact="dup@example.com").count() == 1
 
     def test_login_is_case_insensitive(self, api_client):
+        from datetime import timedelta
+        from django.utils import timezone
+        from users.models import PasswordResetOTP
         api_client.post(REGISTER_URL, _reg_payload("u1", "case@example.com"), format="json")
+        # AP5: confirm the OTP first (known code via a model row), then log in.
+        # Consume the registration-issued code first so exactly one live OTP
+        # exists — latest() can never be ambiguous.
+        user = User.objects.get(email="case@example.com")
+        PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+        record = PasswordResetOTP(user=user, purpose=PasswordResetOTP.PURPOSE_VERIFY,
+                                  expires_at=timezone.now() + timedelta(minutes=10))
+        record.set_otp("123456")
+        record.save()
+        confirm = api_client.post("/api/auth/verify-email/",
+                                  {"email": "case@example.com", "otp_code": "123456",
+                                   "password": "TestPass123!"},
+                                  format="json")
+        assert confirm.status_code == 200
         for typed in ("case@example.com", "CASE@example.com", "Case@Example.Com"):
             r = api_client.post(LOGIN_URL, {"email": typed, "password": "TestPass123!"}, format="json")
             assert r.status_code == 200, f"login failed for {typed!r}"
@@ -463,24 +485,29 @@ class TestEmailNormalization:
 
 @pytest.mark.django_db
 class TestProfileEmailUpdate:
-    """G8 — the profile update path must apply the same email rules, not 500."""
+    """AP6/S3 — the login email no longer changes via profile at all.
 
-    def test_case_variant_of_other_user_rejected_cleanly(self, authenticated_client, test_user):
+    Any differing address is a 400 pointing at change-email/ (never a silent
+    ignore, never a 500); re-sending your own address (any case) still works.
+    """
+
+    def test_profile_email_change_rejected_with_pointer(self, authenticated_client, test_user):
         # another account owns victim@example.com
         User.objects.create_user(username="victim", email="victim@example.com", password="x")
         r = authenticated_client.patch("/api/auth/profile/", {"email": "VICTIM@example.com"}, format="json")
-        assert r.status_code == 400            # clean validation error, NOT a 500
+        assert r.status_code == 400
+        assert "change-email" in str(r.data)
         test_user.refresh_from_db()
         assert test_user.email != "victim@example.com"
 
-    def test_profile_email_is_normalized(self, authenticated_client, test_user):
+    def test_profile_email_change_to_fresh_address_rejected(self, authenticated_client, test_user):
         r = authenticated_client.patch("/api/auth/profile/", {"email": "New.Me@Example.COM"}, format="json")
-        assert r.status_code == 200
+        assert r.status_code == 400
         test_user.refresh_from_db()
-        assert test_user.email == "new.me@example.com"
+        assert test_user.email != "new.me@example.com"
 
     def test_can_keep_own_email_unchanged(self, authenticated_client, test_user):
-        # PATCHing the same email (any case) must not trip the uniqueness check on self.
+        # PATCHing the same email (any case) must not trip the guard.
         r = authenticated_client.patch(
             "/api/auth/profile/", {"email": test_user.email.upper(), "city": "Pune"}, format="json")
         assert r.status_code == 200
@@ -607,3 +634,32 @@ class TestResetConfirm:
             "new_password": "Mismatch123!", "confirm_password": "Different123!",
         }, format="json")
         assert r.status_code == 400
+
+
+@pytest.mark.django_db
+class TestResetHardening:
+    """AP6/S10 — cryptographic OTPs, case-insensitive lookup, per-account cap."""
+
+    def test_otp_comes_from_secrets(self, api_client, test_user, monkeypatch):
+        """Pin randbelow to 0: the mailed code must be exactly '100000'."""
+        monkeypatch.setattr("secrets.randbelow", lambda n: 0)
+        r = api_client.post(REQ_URL, {"email": test_user.email}, format="json")
+        assert r.status_code == 200
+        ok = api_client.post(VERIFY_URL, {"email": test_user.email, "otp_code": "100000"},
+                             format="json")
+        assert ok.status_code == 200 and ok.json().get("reset_token")
+
+    def test_mixed_case_email_receives_otp(self, api_client, test_user):
+        before = PasswordResetOTP.objects.filter(user=test_user).count()
+        r = api_client.post(REQ_URL, {"email": test_user.email.upper()}, format="json")
+        assert r.status_code == 200
+        assert PasswordResetOTP.objects.filter(user=test_user).count() == before + 1
+
+    def test_sixth_request_in_24h_sends_nothing(self, api_client, test_user):
+        for _ in range(5):
+            _seed_otp(test_user, "111111")
+        count_before = PasswordResetOTP.objects.filter(user=test_user).count()
+        r = api_client.post(REQ_URL, {"email": test_user.email}, format="json")
+        assert r.status_code == 200
+        assert r.json() == {"detail": "If an account exists with this email, an OTP has been sent."}
+        assert PasswordResetOTP.objects.filter(user=test_user).count() == count_before

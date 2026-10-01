@@ -16,7 +16,9 @@ import logging
 import re
 from decimal import Decimal
 
-from products.models import Product, ProductCombo, Category
+from django.db.models import F, Q
+
+from products.models import Product, ProductCombo, ProductVariant, Category, default_variant_for
 from products.recommendations import build_suggestions
 
 logger = logging.getLogger(__name__)
@@ -37,8 +39,10 @@ LOGIN_REQUIRED = {
 # ----------------------------------------------------------------------------
 NAV_STATIC_ROUTES = {
     '/', '/products', '/combos', '/offer-zone', '/cart', '/billing',
-    '/my-orders', '/favorites', '/about', '/contact', '/track-order',
+    '/my-orders', '/favorites', '/about', '/contact',
     '/shipping-policy', '/return-policy',
+    # NOTE: no /track-order — the storefront has no such route (AP10). Tracking
+    # lives on /my-orders via get_tracking.
 }
 _PRODUCT_ROUTE = re.compile(r'^/products/([\w-]+)$')
 _COMBO_ROUTE = re.compile(r'^/combos/([\w-]+)$')
@@ -112,10 +116,28 @@ def _order_number(order):
 # READ TOOLS (executed server-side inside the agent loop)
 # ----------------------------------------------------------------------------
 def tool_search_products(user, args):
+    """AP10: size-aware rows. Product hits carry their active pack sizes
+    (`variants`: variant_id, weight label, price, in_stock) so "500 g haldi"
+    resolves to the right size instead of the default. Combos have no sizes."""
     query = args.get('query')
     if not isinstance(query, str) or not query.strip():
         return {'error': 'bad_args', 'message': 'query is required'}
     payload = build_suggestions(query.strip()[:100], limit=6)
+    product_ids = [s['id'] for s in payload['suggestions'] if s['type'] == 'product']
+    variants_by_product = {}
+    if product_ids:
+        for v in ProductVariant.objects.filter(
+                product_id__in=product_ids, is_active=True
+                ).order_by('display_order', 'weight'):
+            variants_by_product.setdefault(v.product_id, []).append({
+                'variant_id': v.id,
+                'weight': v.formatted_weight,
+                'price': float(v.final_price),
+                'in_stock': v.stock > 0,
+            })
+    for s in payload['suggestions']:
+        if s['type'] == 'product':
+            s['variants'] = variants_by_product.get(s['id'], [])
     return {'query': payload['query'], 'results': payload['suggestions']}
 
 
@@ -139,14 +161,89 @@ def tool_list_categories(user, args):
 
 
 def tool_get_policy(user, args):
-    from admin_panel.models import Policy
+    """AP10: policy text comes from assistant/policies.py — transcribed from the
+    storefront's locale strings (the SAME source the static pages render), NOT
+    the retired admin_panel.Policy table (no rows, no routes)."""
+    from .policies import POLICIES
     kind = args.get('kind')
-    if kind not in ('shipping', 'return'):
-        return {'error': 'bad_args', 'message': "kind must be 'shipping' or 'return'"}
-    policy = Policy.objects.filter(type=kind).first()
-    if not policy:
-        return {'error': 'not_found', 'message': f'No {kind} policy is published.'}
-    return {'kind': kind, 'content': policy.content[:2000]}
+    if kind not in POLICIES:
+        return {'error': 'bad_args', 'message': "kind must be 'shipping' or 'return'",
+                'route': '/shipping-policy'}
+    title, content, route = POLICIES[kind]
+    return {'kind': kind, 'title': title, 'content': content, 'route': route}
+
+
+def tool_get_offers(user, args):
+    """Currently redeemable coupon offers. Public fields only (AP10): code,
+    human-readable offer, minimum order and expiry — never usage counters or
+    assignment internals. User-specific coupons appear only for their owner."""
+    from django.utils import timezone
+    from admin_panel.models import Coupon
+    now = timezone.now()
+    qs = Coupon.objects.filter(is_active=True)
+    qs = qs.filter(Q(valid_until__isnull=True) | Q(valid_until__gte=now))
+    qs = qs.filter(Q(max_usage__isnull=True) | Q(usage_count__lt=F('max_usage')))
+    if user is not None and getattr(user, 'is_authenticated', False):
+        qs = qs.filter(Q(assigned_user__isnull=True) | Q(assigned_user=user))
+    else:
+        qs = qs.filter(assigned_user__isnull=True)
+    rows = []
+    for c in qs.order_by('valid_until')[:20]:
+        if c.discount_type == 'fixed':
+            desc = f'Flat Rs.{c.discount_amount} off'
+        else:
+            desc = f'{c.discount_percent}% off'
+        rows.append({
+            'code': c.code,
+            'offer': desc,
+            'minimum_order': float(c.minimum_order_amount or 0),
+            'valid_until': c.valid_until.strftime('%Y-%m-%d') if c.valid_until else None,
+        })
+    return {'offers': rows, 'count': len(rows)}
+
+
+def tool_get_delivery_info(user, args):
+    """Delivery fee facts, read live from limits.py — never hardcoded (AP10)."""
+    from spices_backend.limits import (
+        SHIPPING_CHARGE_NET, SHIPPING_TAX_RATE, FREE_SHIPPING_THRESHOLD,
+    )
+    fee = SHIPPING_CHARGE_NET
+    rate = SHIPPING_TAX_RATE
+    total = (fee * (1 + rate / 100)).quantize(Decimal('0.01'))
+    return {
+        'fee_net': float(fee),
+        'tax_rate': float(rate),
+        'fee_total': float(total),
+        'free_above': float(FREE_SHIPPING_THRESHOLD),
+        'currency': 'INR',
+        'note': 'Delivery is taxed on top; product prices already include GST.',
+    }
+
+
+def tool_get_tracking(user, args):
+    """Courier + tracking link for ONE of the user's own orders (AP10).
+    G1: hard-filtered by `user`, same as get_order_status."""
+    if user is None or not user.is_authenticated:
+        return LOGIN_REQUIRED
+    raw = str(args.get('order_number', ''))
+    m = _ORDER_NUM.search(raw)
+    if not m:
+        return {'error': 'bad_args', 'message': 'Provide an order number like ORD-000123.'}
+    from orders.models import Order
+    order = Order.objects.filter(id=int(m.group(1)), user=user).first()
+    if not order:
+        return {'error': 'not_found', 'message': 'No such order on your account.'}
+    url = (order.tracking_url or '').strip()
+    if url and not (url.startswith('http://') or url.startswith('https://')):
+        url = ''
+    return {
+        'order_number': _order_number(order),
+        'status': order.status,
+        'courier': (order.courier_name or '').strip(),
+        'tracking_id': (order.tracking_number or '').strip(),
+        'tracking_url': url,
+        'route': '/my-orders',
+    }
 
 
 _ORDER_NUM = re.compile(r'(\d+)')
@@ -407,38 +504,189 @@ def models_q_category(value):
 # These build a `proposed_action` dict; the actual mutation happens only when
 # the user clicks confirm, through the existing cart/order endpoints.
 # ----------------------------------------------------------------------------
-def build_add_to_cart(user, args):
-    raw_id = args.get('product_id')
-    item_type = args.get('item_type', 'product')
-    try:
-        product_id = int(raw_id)
-    except (TypeError, ValueError):
-        return None, 'I could not identify that product.'
+def _resolve_proposal_variant(product_id=None, variant_id=None, item_type='product'):
+    """Resolve a proposal line to (product_or_combo, variant_or_None, error).
+
+    AP10: sizes are first-class. A variant_id pins the exact pack size; without
+    one the product's default size applies (compat fallback — the PROMPT tells
+    the model to ask for the size, never guess). Combos have no sizes.
+    """
     if item_type not in ('product', 'combo'):
         item_type = 'product'
+    if item_type == 'combo':
+        if variant_id is not None:
+            return None, None, 'Combos have no sizes; omit variant_id.'
+        try:
+            combo_id = int(product_id)
+        except (TypeError, ValueError):
+            return None, None, 'I could not identify that combo.'
+        obj = ProductCombo.objects.filter(id=combo_id, is_active=True).first()
+        if not obj:
+            return None, None, 'That combo is not available.'
+        return obj, None, None
+    variant = None
+    if variant_id is not None:
+        try:
+            vid = int(variant_id)
+        except (TypeError, ValueError):
+            return None, None, 'I could not identify that size.'
+        variant = ProductVariant.objects.filter(
+            id=vid, is_active=True).select_related('product').first()
+        if variant is None:
+            return None, None, 'That size is not available.'
+        if product_id is not None:
+            try:
+                pid = int(product_id)
+            except (TypeError, ValueError):
+                return None, None, 'I could not identify that product.'
+            if pid != variant.product_id:
+                return None, None, 'That size does not belong to that product.'
+        obj = variant.product
+        if not obj.is_active:
+            return None, None, 'That product is not available.'
+    else:
+        try:
+            pid = int(product_id)
+        except (TypeError, ValueError):
+            return None, None, 'I could not identify that product.'
+        obj = Product.objects.filter(id=pid, is_active=True).first()
+        if not obj:
+            return None, None, 'That product is not available.'
+        variant = default_variant_for(obj)  # None on legacy variant-less rows
+    return obj, variant, None
+
+
+def _proposal_stock_ok(obj, variant):
+    """In-stock check against the SIZE when one is pinned (AP10)."""
+    if variant is not None:
+        return variant.stock > 0, variant
+    return obj.stock > 0 if hasattr(obj, 'stock') else True, None
+
+
+def build_add_to_cart(user, args):
+    item_type = args.get('item_type', 'product')
     try:
         qty = int(args.get('quantity', 1))
     except (TypeError, ValueError):
         qty = 1
     qty = max(1, min(qty, MAX_PROPOSE_QTY))  # clamp (G5)
 
-    if item_type == 'combo':
-        obj = ProductCombo.objects.filter(id=product_id, is_active=True).first()
-    else:
-        obj = Product.objects.filter(id=product_id, is_active=True).first()
-    if not obj:
-        return None, 'That product is not available.'
-    if item_type == 'product' and obj.stock <= 0:
-        return None, f'{obj.name} is out of stock.'
+    obj, variant, err = _resolve_proposal_variant(
+        args.get('product_id'), args.get('variant_id'), item_type)
+    if err:
+        return None, err
+    ok, _ = _proposal_stock_ok(obj, variant)
+    if item_type == 'product' and not ok:
+        size = f' ({variant.formatted_weight})' if variant else ''
+        return None, f'{obj.name}{size} is out of stock.'
 
+    if variant is not None:
+        label = f'Add {qty} × {obj.name} ({variant.formatted_weight}) to cart'
+        price = float(variant.final_price)
+    else:
+        label = f'Add {qty} × {obj.name} to cart'
+        price = float(obj.final_price)
     action = {
         'type': 'add_to_cart',
         'product_id': obj.id,
+        'variant_id': variant.id if variant else None,
         'item_type': item_type,
         'quantity': qty,
-        'label': f'Add {qty} × {obj.name} to cart',
+        'price': price,
+        'label': label,
     }
     return action, None
+
+
+# At most this many lines in one cart proposal — one screen, one tap (AP10).
+CART_PROPOSAL_MAX_LINES = 5
+
+
+def build_cart_proposal(user, args):
+    """ONE multi-line proposal for the whole shopping list (AP10): several
+    sizes/quantities as a single editable card with a single confirm. All lines
+    validate or the whole proposal is refused (all-or-nothing)."""
+    raw_lines = args.get('lines')
+    if not isinstance(raw_lines, list) or not raw_lines:
+        return None, 'I could not understand that shopping list.'
+    if len(raw_lines) > CART_PROPOSAL_MAX_LINES:
+        return None, f'At most {CART_PROPOSAL_MAX_LINES} items per proposal.'
+    lines = []
+    for entry in raw_lines:
+        if not isinstance(entry, dict):
+            return None, 'I could not understand that shopping list.'
+        try:
+            qty = int(entry.get('quantity', entry.get('qty', 1)))
+        except (TypeError, ValueError):
+            qty = 1
+        qty = max(1, min(qty, MAX_PROPOSE_QTY))  # clamp each line (G5)
+        obj, variant, err = _resolve_proposal_variant(
+            entry.get('product_id'), entry.get('variant_id'),
+            entry.get('item_type', 'product'))
+        if err:
+            return None, err
+        ok, _ = _proposal_stock_ok(obj, variant)
+        if (entry.get('item_type', 'product') == 'product') and not ok:
+            size = f' ({variant.formatted_weight})' if variant else ''
+            return None, f'{obj.name}{size} is out of stock.'
+        if variant is not None:
+            label = f'{qty} × {obj.name} ({variant.formatted_weight})'
+            price = float(variant.final_price)
+        else:
+            label = f'{qty} × {obj.name}'
+            price = float(obj.final_price)
+        lines.append({
+            'product_id': obj.id,
+            'variant_id': variant.id if variant else None,
+            'item_type': entry.get('item_type', 'product'),
+            'quantity': qty,
+            'price': price,
+            'label': label,
+        })
+    note = args.get('note') or ''
+    if not isinstance(note, str):
+        note = ''
+    return {
+        'type': 'cart_proposal',
+        'lines': lines,
+        'note': note[:200],
+        'label': f'Add {len(lines)} items to cart',
+    }, None
+
+
+def build_edit_cart(user, args):
+    """Propose cart edits (set quantity, 0 removes) by size (AP10). The UI
+    confirms, then applies the lines through the existing cart endpoints —
+    nothing mutates here (G5)."""
+    raw_lines = args.get('lines')
+    if not isinstance(raw_lines, list) or not raw_lines:
+        return None, 'I could not understand that cart change.'
+    if len(raw_lines) > CART_PROPOSAL_MAX_LINES:
+        return None, f'At most {CART_PROPOSAL_MAX_LINES} changed lines at once.'
+    lines = []
+    for entry in raw_lines:
+        if not isinstance(entry, dict):
+            return None, 'I could not understand that cart change.'
+        try:
+            qty = int(entry.get('quantity', entry.get('qty', 1)))
+        except (TypeError, ValueError):
+            return None, 'Quantities must be numbers.'
+        qty = max(0, min(qty, MAX_PROPOSE_QTY))
+        obj, variant, err = _resolve_proposal_variant(
+            entry.get('product_id'), entry.get('variant_id'),
+            entry.get('item_type', 'product'))
+        if err:
+            return None, err
+        size = f' ({variant.formatted_weight})' if variant else ''
+        lines.append({
+            'product_id': obj.id,
+            'variant_id': variant.id if variant else None,
+            'item_type': entry.get('item_type', 'product'),
+            'quantity': qty,
+            'label': f'Remove {obj.name}{size}' if qty == 0
+                     else f'Set {obj.name}{size} to {qty}',
+        })
+    return {'type': 'edit_cart', 'lines': lines, 'label': 'Update cart'}, None
 
 
 def build_checkout(user, args):
@@ -472,6 +720,9 @@ READ_TOOLS = {
     'get_product_reviews': tool_get_product_reviews,
     'list_categories': tool_list_categories,
     'get_policy': tool_get_policy,
+    'get_offers': tool_get_offers,
+    'get_delivery_info': tool_get_delivery_info,
+    'get_tracking': tool_get_tracking,
     'get_order_status': tool_get_order_status,
     'get_order_details': tool_get_order_details,
     'list_my_orders': tool_list_my_orders,
@@ -480,6 +731,8 @@ READ_TOOLS = {
 
 ACTION_BUILDERS = {
     'add_to_cart': build_add_to_cart,
+    'cart_proposal': build_cart_proposal,
+    'edit_cart': build_edit_cart,
     'checkout': build_checkout,
     'navigate': build_navigate,
     'escalate_to_human': build_escalate,
@@ -487,6 +740,96 @@ ACTION_BUILDERS = {
 
 # Names advertised to the model. Anything outside this set is rejected (G3).
 ALL_TOOL_NAMES = set(READ_TOOLS) | set(ACTION_BUILDERS)
+
+
+# ----------------------------------------------------------------------------
+# Native function-calling schemas (AP9). The model is bound to these; several
+# may be called in ONE round (multi-item lookups). Schemas only GUIDE the
+# model — argument validation still happens server-side in each handler (G3).
+# ----------------------------------------------------------------------------
+def _fn(name, description, properties, required=()):
+    return {
+        'type': 'function',
+        'function': {
+            'name': name,
+            'description': description,
+            'parameters': {
+                'type': 'object',
+                'properties': properties,
+                'required': list(required),
+            },
+        },
+    }
+
+
+def _str(desc):
+    return {'type': 'string', 'description': desc}
+
+
+def _int(desc):
+    return {'type': 'integer', 'description': desc}
+
+
+def _bool(desc):
+    return {'type': 'boolean', 'description': desc}
+
+
+TOOL_SCHEMAS = [
+    _fn('search_products', 'Fuzzy-find products/combos by name or Hinglish term.',
+        {'query': _str('What the customer named, e.g. haldi, garam masala.')}, ['query']),
+    _fn('browse_products', 'Structured catalogue browse/filter.',
+        {'category': _str('Category name or slug.'), 'min_price': {'type': 'number'},
+         'max_price': {'type': 'number'},
+         'spice_form': _str('whole, powder, crushed or mixed.'),
+         'on_offer': _bool('Only discounted items.'), 'in_stock': _bool('Only in-stock items.'),
+         'include_combos': _bool('Include combos (default true).'),
+         'sort': _str('price_asc, price_desc, featured or newest.'),
+         'limit': _int('Max rows (default 8, max 20).')}),
+    _fn('get_product_details', 'Price, weight and description for ONE product/combo.',
+        {'slug': _str('Product or combo slug.')}, ['slug']),
+    _fn('get_product_reviews', 'Rating summary + recent reviews for ONE item.',
+        {'slug': _str('Product or combo slug.'), 'limit': _int('Max reviews (default 5).')},
+        ['slug']),
+    _fn('list_categories', "The store's product categories.", {}),
+    _fn('get_policy', 'Shipping or return policy text (from the static pages).',
+        {'kind': _str('shipping or return.')}, ['kind']),
+    _fn('get_offers', 'Currently redeemable coupon offers.',
+        {'limit': _int('Max offers (default 20).')}),
+    _fn('get_delivery_info', 'Delivery fee facts: net fee, GST rate, total, free-shipping threshold.', {}),
+    _fn('get_tracking', "Courier + tracking link for ONE of the user's orders.",
+        {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
+    _fn('get_order_status', "Quick status of ONE of the user's orders.",
+        {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
+    _fn('get_order_details', "Line items of ONE of the user's orders.",
+        {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
+    _fn('list_my_orders', "The user's recent orders.",
+        {'limit': _int('Max orders (default 6).')}),
+    _fn('get_cart', "The user's current cart contents.", {}),
+]
+
+ACTION_SCHEMAS = [
+    _fn('add_to_cart', 'PROPOSE adding one item (customer confirms in the app).',
+        {'product_id': _int('Product or combo id.'),
+         'variant_id': _int('Exact pack-size id from search variants. Ask the '
+                            'customer for the size; never guess the default.'),
+         'item_type': _str('product or combo.'),
+         'quantity': _int('Units (clamped server-side).')}, ['product_id']),
+    _fn('cart_proposal', 'PROPOSE the whole shopping list as ONE editable card '
+         '(customer confirms once). Prefer this over several add_to_cart calls.',
+        {'lines': {'type': 'array', 'description': 'Up to 5 lines.',
+                   'items': {'type': 'object'}},
+         'note': _str('One-line note shown on the card.')}, ['lines']),
+    _fn('edit_cart', 'PROPOSE cart edits (set quantity, 0 removes a line).',
+        {'lines': {'type': 'array', 'description': 'Lines with variant_id/product_id and quantity.',
+                   'items': {'type': 'object'}}}, ['lines']),
+    _fn('checkout', 'PROPOSE going to checkout.', {}),
+    _fn('navigate', 'PROPOSE opening an in-store page.',
+        {'route': _str('e.g. /products, /cart, /my-orders.')}, ['route']),
+    _fn('escalate_to_human', 'Flag the thread for a human. Call ONLY when the '
+         'customer explicitly asks for a human — never for failures you can '
+         'describe yourself.',
+        {'reason': _str('What the customer asked for, in their words.')}),
+]
 
 
 def run_read_tool(name, user, args):

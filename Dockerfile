@@ -63,5 +63,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')" || exit 1
 
-# Default command - collect static files and run gunicorn
+# Default command - collect static files and run gunicorn.
+# AP10b/S5 note: the assistant shares this 3x2 pool with checkout. It is kept
+# safe by BOUNDS, not isolation — 20 s LLM timeout + 1 retry, one in-flight
+# chat turn per account, 10/min + 100/day throttles, ~12k history budget. A
+# dedicated chat worker pool (separate service + upstream) is future work; see
+# DEPLOYMENT.md "Assistant worker isolation".
 CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate --noinput && gunicorn spices_backend.wsgi:application --bind 0.0.0.0:8000 --workers 3 --threads 2"]

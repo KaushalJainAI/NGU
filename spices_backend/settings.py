@@ -338,8 +338,12 @@ REST_FRAMEWORK = {
         'register': '3/minute',  # Registration: 3 per minute
         'contact': '5/hour',     # Contact form: 5 per hour
         'password_reset': '10/day',  # Password reset OTP: 10 per day
-        'assistant': '20/min',   # AI assistant: 20 messages per minute
-        'assistant_day': '500/day',  # AI assistant: hard daily cap (cost guard)
+        'email_verify': '30/hour',   # verify-email confirm + resend, per IP
+        # AP7c/S5+S8: 10/min burst (one slow multi-call turn already occupies
+        # a gunicorn slot for seconds) and 100/day hard cap (500 turns x up to
+        # 4 LLM calls each was an uncapped spend path on free accounts).
+        'assistant': '10/min',   # AI assistant: 10 messages per minute
+        'assistant_day': '100/day',  # AI assistant: hard daily cap (cost guard)
         'assistant_stt': config('THROTTLE_ASSISTANT_STT', default='15/min'),  # voice transcription (CPU-heavy)
         'events': '600/hour',    # Behavioral event ingest (batched on client)
         'anon_events': config('THROTTLE_ANON_EVENTS', default='120/min'),  # Anonymous counter beacons (per-IP)
@@ -354,8 +358,11 @@ REST_FRAMEWORK = {
 }
 
 # JWT Configuration
+# AP6: access is 15 minutes (was 1 hour) — a stolen access cookie is useful for
+# minutes, not an hour. Refresh rotation (7 d) already exists, and the auth
+# cookie max-ages derive from these lifetimes, so no cookie change is needed.
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
@@ -603,6 +610,8 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+# Without a timeout a stalled SMTP server blocks the sending thread for good.
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
 
 
 # Logging

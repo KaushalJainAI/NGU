@@ -34,8 +34,15 @@ def _clear_cache():
     cache.clear()
 
 
+def _turn(content=None, calls=(), finish='stop'):
+    """One scripted native-tool turn (AP9 contract)."""
+    return {'content': content,
+            'tool_calls': [{'name': n, 'args': a} for n, a in calls],
+            'finish': finish}
+
+
 def _script(monkeypatch, *responses):
-    """Make the agent's LLM return the given strings in order."""
+    """Make the agent's LLM return the given turn-dicts in order."""
     it = iter(responses)
     monkeypatch.setattr('assistant.agent._build_llm', lambda: object())
     monkeypatch.setattr('assistant.agent.Agent._complete', lambda self, messages: next(it))
@@ -54,14 +61,16 @@ def _capture(monkeypatch, response):
     return captured
 
 
-def _env(*, tool=None, args=None, final_reply=None, proposed_action=None, title=None):
-    payload = {
-        'thought': 't', 'tool': tool, 'args': args or {},
-        'final_reply': final_reply, 'proposed_action': proposed_action,
-    }
-    if title is not None:
-        payload['title'] = title
-    return json.dumps(payload)
+def _env(*, tool=None, args=None, final_reply=None, proposed_action=None, title=None,
+         finish='stop', multi=None):
+    calls = []
+    if tool:
+        calls.append((tool, args or {}))
+    for name, call_args in (multi or []):
+        calls.append((name, call_args or {}))
+    if proposed_action:
+        calls.append((proposed_action['tool'], proposed_action.get('args') or {}))
+    return _turn(content=final_reply, calls=calls, finish=finish)
 
 
 # --- From test_tools.py ---
@@ -290,36 +299,32 @@ class TestRegistry:
 
 @pytest.mark.django_db
 class TestThreadTitle:
+    # AP9: titles are derived server-side from the opening message (no LLM
+    # round spent on them) — first turn only, HTML-stripped, max 80 chars.
+
     def test_title_set_on_first_turn(self, authenticated_client, monkeypatch):
-        _script(monkeypatch, _env(final_reply='Sure!', title='Haldi powder order'))
-        resp = authenticated_client.post(CHAT_URL, {'message': 'I want haldi'}, format='json')
+        _script(monkeypatch, _env(final_reply='Sure!'))
+        resp = authenticated_client.post(
+            CHAT_URL, {'message': 'I want haldi powder for daily cooking needs please'},
+            format='json')
         assert resp.status_code == 200
         conv = AssistantConversation.objects.get(conversation_id=resp.data['conversation_id'])
-        assert conv.title == 'Haldi powder order'
-
-    def test_title_omitted_leaves_blank(self, authenticated_client, monkeypatch):
-        _script(monkeypatch, _env(final_reply='Hello there'))  # no title key
-        resp = authenticated_client.post(CHAT_URL, {'message': 'hi'}, format='json')
-        conv = AssistantConversation.objects.get(conversation_id=resp.data['conversation_id'])
-        assert conv.title == ''
+        assert conv.title == 'I want haldi powder for daily cooking needs'
 
     def test_title_not_overwritten_on_later_turns(self, authenticated_client, monkeypatch):
-        _script(
-            monkeypatch,
-            _env(final_reply='First', title='Original title'),
-            _env(final_reply='Second', title='A different title'),
-        )
-        r1 = authenticated_client.post(CHAT_URL, {'message': 'one'}, format='json')
+        _script(monkeypatch, _env(final_reply='First'), _env(final_reply='Second'))
+        r1 = authenticated_client.post(CHAT_URL, {'message': 'one original message here'}, format='json')
         cid = r1.data['conversation_id']
         authenticated_client.post(
             CHAT_URL, {'message': 'two', 'conversation_id': cid}, format='json'
         )
         conv = AssistantConversation.objects.get(conversation_id=cid)
-        assert conv.title == 'Original title'
+        assert conv.title == 'one original message here'
 
     def test_title_html_is_stripped(self, authenticated_client, monkeypatch):
-        _script(monkeypatch, _env(final_reply='ok', title='<b>Spice</b> order'))
-        resp = authenticated_client.post(CHAT_URL, {'message': 'hi'}, format='json')
+        _script(monkeypatch, _env(final_reply='ok'))
+        resp = authenticated_client.post(
+            CHAT_URL, {'message': '<b>Spice</b> order for biryani night'}, format='json')
         conv = AssistantConversation.objects.get(conversation_id=resp.data['conversation_id'])
         assert '<' not in conv.title and 'Spice' in conv.title
 
@@ -773,14 +778,12 @@ class TestAdminAssistantAgent:
         assert any(s['tool'] == 'low_stock_products' for s in result['sources'])
 
     def test_admin_persona_has_no_actions(self, test_admin, monkeypatch):
-        """Even if the model emits a proposed_action, the admin persona drops it
+        """Even if the model calls an action tool, the admin persona drops it
         (read-only): no add_to_cart/checkout ever comes back."""
-        raw = json.dumps({
-            'thought': 't', 'tool': None, 'args': {},
-            'final_reply': 'Here you go.',
-            'proposed_action': {'tool': 'add_to_cart', 'args': {'product_id': 1}},
-        })
-        _script(monkeypatch, raw)
+        _script(monkeypatch, _turn(
+            content='Here you go.',
+            calls=[('add_to_cart', {'product_id': 1})],
+        ))
         result = Agent(test_admin, persona='admin').run('add something')
         assert result['proposed_action'] is None
 

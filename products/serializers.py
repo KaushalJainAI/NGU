@@ -36,12 +36,37 @@ def visible_review_count(obj):
     return obj.reviews.filter(is_hidden=False).count()
 
 
-class ProductVariantSerializer(serializers.ModelSerializer):
+class StaffOnlyFieldsMixin:
+    """Hide exact inventory identifiers from non-staff callers (AP8/S12).
+
+    Exact `stock` counts let anyone poll sales velocity; `low_stock_threshold`
+    and `sku` are internal catalog data. Staff (including the admin panel, which
+    reads these same endpoints with the admin session) still see everything, so
+    the panel's stock/threshold forms keep working. Everyone else gets the
+    boolean `in_stock` only. Subclasses list their sensitive keys in
+    `staff_only_fields`.
+    """
+    staff_only_fields = ()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        context = getattr(self, 'context', None) or {}
+        request = context.get('request')
+        user = getattr(request, 'user', None)
+        if not (user and getattr(user, 'is_staff', False)):
+            for key in self.staff_only_fields:
+                data.pop(key, None)
+        return data
+
+
+class ProductVariantSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     """A single packaging/size of a product (read-only nested view)."""
     final_price = serializers.ReadOnlyField()
     discount_percentage = serializers.ReadOnlyField()
     in_stock = serializers.ReadOnlyField()
     formatted_weight = serializers.ReadOnlyField()
+
+    staff_only_fields = ('stock', 'low_stock_threshold', 'sku')
 
     class Meta:
         model = ProductVariant
@@ -313,7 +338,9 @@ class SearchProductSerializer(serializers.Serializer):
         return self.get_image(obj)
 
     def get_in_stock(self, obj):
-        return getattr(obj, 'stock', 0)
+        # AP8/S12: boolean only — the exact count must not be pollable. Staff
+        # who need counts use the product endpoints (staff see `stock` there).
+        return bool(getattr(obj, 'stock', 0) or 0)
 
 
 class SearchComboSerializer(serializers.Serializer):
@@ -419,12 +446,14 @@ class ProductImageSerializer(serializers.ModelSerializer):
         return value
 
 
-class ProductListSerializer(serializers.ModelSerializer):
+class ProductListSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     average_rating = serializers.SerializerMethodField(read_only=True)
     reviews_count = serializers.SerializerMethodField(read_only=True)
     discount_percentage = serializers.ReadOnlyField()
     in_stock = serializers.ReadOnlyField()
+
+    staff_only_fields = ('stock', 'low_stock_threshold')
     sections = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=ProductSection.objects.all(),
@@ -453,11 +482,13 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_variants(self, obj):
         variants = [v for v in obj.variants.all() if v.is_active]
         variants.sort(key=lambda v: (v.display_order, v.weight or 0))
-        return ProductVariantSerializer(variants, many=True).data
+        # Pass context through so the nested serializer sees the request (the
+        # staff-only inventory keys depend on it, AP8/S12).
+        return ProductVariantSerializer(variants, many=True, context=self.context).data
 
     def get_variant_count(self, obj):
         return sum(1 for v in obj.variants.all() if v.is_active)
-    
+
     def get_average_rating(self, obj):
         """Average rating over visible reviews (annotated fast-path inside)."""
         return visible_review_average(obj)
@@ -467,13 +498,15 @@ class ProductListSerializer(serializers.ModelSerializer):
         return visible_review_count(obj)
 
 
-class ProductDetailSerializer(serializers.ModelSerializer):
+class ProductDetailSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     images = ProductImageSerializer(many=True, read_only=True)
     average_rating = serializers.SerializerMethodField(read_only=True)
     reviews_count = serializers.SerializerMethodField(read_only=True)
     discount_percentage = serializers.ReadOnlyField()
     in_stock = serializers.ReadOnlyField()
+
+    staff_only_fields = ('stock', 'low_stock_threshold')
     sections = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=ProductSection.objects.all(),
@@ -505,11 +538,12 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     def get_variants(self, obj):
         variants = [v for v in obj.variants.all() if v.is_active]
         variants.sort(key=lambda v: (v.display_order, v.weight or 0))
-        return ProductVariantSerializer(variants, many=True).data
+        # Same context pass-through as the list serializer (AP8/S12).
+        return ProductVariantSerializer(variants, many=True, context=self.context).data
 
     def get_variant_count(self, obj):
         return sum(1 for v in obj.variants.all() if v.is_active)
-    
+
     def get_average_rating(self, obj):
         """Average rating over visible reviews (annotated fast-path inside)."""
         return visible_review_average(obj)
@@ -517,7 +551,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     def get_reviews_count(self, obj):
         """Visible review count (annotated fast-path inside)."""
         return visible_review_count(obj)
-    
+
     def validate(self, data):
         """Validate discount price"""
         price = data.get('price', getattr(self.instance, 'price', None))
@@ -551,9 +585,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return product
 
 
-class ProductComboItemReadSerializer(serializers.ModelSerializer):
+class ProductComboItemReadSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     """For reading combo items: the product for display, the variant for the
     size actually bundled (and the price/stock that come with it)."""
+    staff_only_fields = ('variant_stock',)
     product = serializers.PrimaryKeyRelatedField(read_only=True)
     product_name = serializers.CharField(source='product.name', read_only=True)
     product_slug = serializers.CharField(source='product.slug', read_only=True)
@@ -586,9 +621,13 @@ class ProductComboItemReadSerializer(serializers.ModelSerializer):
         ]
 
 
-class ProductComboSerializer(serializers.ModelSerializer):
+class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     # Accept items as a JSON string (for FormData) or list
     items = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    # AP8/S12: the alert threshold and the exact buildable count are internal;
+    # the storefront renders combos without them (availability reads is_active).
+    staff_only_fields = ('low_stock_threshold', 'available_stock')
     sections = serializers.PrimaryKeyRelatedField(
         many=True, 
         queryset=ProductSection.objects.all(),
@@ -636,8 +675,8 @@ class ProductComboSerializer(serializers.ModelSerializer):
         """Override to include items in read operations"""
         data = super().to_representation(instance)
         data['items'] = ProductComboItemReadSerializer(
-            instance.productcomboitem_set.all(), 
-            many=True
+            instance.productcomboitem_set.all(),
+            many=True, context=self.context
         ).data
         return data
 

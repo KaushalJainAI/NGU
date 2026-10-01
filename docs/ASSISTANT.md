@@ -25,25 +25,32 @@ AssistantChatView          ← trust boundary: injects authenticated user
       ▼
 Agent.run(message, history, language)
       │
-      ├── _complete(messages)   ← LLM call (OpenRouter or any LangChain provider)
+      ├── _complete(messages)   ← LLM call with bound functions (native tool
+      │         │                   calling; several calls per round allowed)
+      │    turn { content?, tool_calls[], finish }
       │         │
-      │    JSON envelope { thought, tool?, args?, action?, final_reply?, title? }
-      │         │
-      ├── tool in READ_TOOLS?
-      │     yes → toolkit.run_read_tool(tool, user, args)
+      ├── each call in READ_TOOLS?
+      │     yes → run_read_tool(name, user, args) (user injected by view, G1)
       │            └─ result wrapped in <<DATA>> spotlighting
       │            └─ appended to messages, loop continues (max 4 iterations)
       │
-      ├── action in ACTION_BUILDERS?
-      │     yes → build_action(action, user, args) → proposed_action returned to frontend
+      ├── each call in ACTION_BUILDERS?
+      │     yes → build_action(name, user, args) → validated proposal recorded
+      │            (first valid wins); escalate_to_human sets escalate
       │
-      └── final_reply reached → return { reply, proposed_action, sources, escalate, title }
+      └── plain-text content reached → return { reply, proposed_action, sources,
+                                         escalate, title, reason }
                                          │
-                              title: only on first turn, auto-saves to conversation.title
-                              escalate: sets conversation.needs_human = True (flags thread for admin)
+                              title: server-side from the opening message, first
+                              turn only, auto-saves to conversation.title
+                              escalate: ONLY on explicit escalate_to_human
+                              (reason customer_asked) → needs_human = True +
+                              immediate owner email. Failures/exhaustion never
+                              escalate (reasons llm_error / loop_exhausted).
 ```
 
-The loop is bounded to **MAX_ITERATIONS = 4** tool calls per turn.
+The loop is bounded to **MAX_ITERATIONS = 4** tool rounds per turn (AP9: one
+round may carry SEVERAL calls — "haldi, jeera, dhaniya" resolves in one turn).
 
 ---
 
@@ -58,7 +65,7 @@ One thread per customer session. A customer can have many threads and switch bet
 | `conversation_id` | UUID | Public identifier sent to clients |
 | `user` | FK (nullable) | Nullable in schema, but always set — chat is login-only |
 | `anon_session` | CharField | **Vestigial** — leftover from a removed anonymous-chat design; unused |
-| `title` | CharField(80) | Auto-set from LLM on first turn; editable |
+| `title` | CharField(80) | Auto-set server-side from the opening message on first turn (AP9; no LLM round); editable |
 | `status` | CharField | `active` / `resolved` / `archived` |
 | `needs_human` | BooleanField | True when AI escalates or admin flags it |
 | `assigned_to` | FK → User (nullable) | Admin who owns this thread |
@@ -87,9 +94,10 @@ One row per turn. Roles: `user` / `assistant` / `tool` / `system` / `admin`.
 | Method | URL | Auth | Description |
 |--------|-----|------|-------------|
 | `POST` | `/api/assistant/chat/` | **Required** (login-only) | Send a message; AI responds |
+| `POST` | `/api/assistant/chat/stream/` | **Required** (login-only) | Same turn, SSE-delivered (`meta` → `reply` chunks → `done`) — AP10b |
 | `GET` | `/api/assistant/conversations/` | Required | List the authenticated user's threads |
 | `POST` | `/api/assistant/conversations/` | Required | Create a new empty thread |
-| `GET` | `/api/assistant/conversations/{id}/messages/` | Required | Full message history for one thread |
+| `GET` | `/api/assistant/conversations/{id}/messages/` | Required | Full message history for one thread (assistant messages carry their saved `proposed_action` — AP10b) |
 
 ### Admin-facing (`IsAdminUser`)
 
@@ -118,8 +126,16 @@ aggregates across all customers and orders — it has no action/cart tools. Gate
 | `low_stock_products` | Products at/under their `low_stock_threshold` |
 | `top_products` | Best sellers by revenue for a period |
 | `product_stock` | Stock level for a named product |
-| `find_customer` | Look up a customer (orders, total spent) |
+| `find_customer` | Look up a customer (orders, total spent) — contact masked unless `include_contact` (AP8/S11) |
 | `search_report` | Top search terms + zero-result ("not found") searches |
+
+Customer tools added in AP10: size-aware `search_products` (per-variant rows) and
+`add_to_cart` (`variant_id`); multi-line `cart_proposal`; `edit_cart`;
+`get_offers`, `get_delivery_info` (live limits), `get_tracking` (own orders);
+`get_policy` answered from `assistant/policies.py` (static-page source, AP10 —
+no longer the retired Policy table). Behaviour contract is locked by
+`assistant/test_eval.py` (43 scripted cases + summary: completion, median
+ms/turn, false-escalation rate).
 
 #### `POST /api/assistant/chat/` Request / Response
 
@@ -330,10 +346,15 @@ by design; there is no anonymous chat.
 
 ## Human Escalation (`needs_human`)
 
-`needs_human=True` is set on the conversation when:
-1. The LLM returns `"escalate": true` in its JSON envelope (e.g. a complex complaint or
-   sensitive query)
-2. The `escalate_to_human` action is built (treated as a tool call result)
+`needs_human=True` is set on the conversation ONLY when the model calls the
+`escalate_to_human` function — i.e. the customer explicitly asked for a human
+(AP9/A4; `reason == 'customer_asked'`). Provider failures, unparseable output
+and loop exhaustion return friendly fallbacks with `escalate=False` and never
+flag the thread. On escalation the owner is emailed at once
+(`ADMIN_ALERT_EMAIL`, thread id + last message) — the flag no longer waits for
+the morning digest. The customer sees an honest line ("flagged for our team —
+they usually reply within a day"), and a reply cut off by the output limit
+gets a "…(continued — ask me to continue)" suffix instead of an escalation.
 
 It is **cleared automatically** when an admin posts a reply to the thread
 (`POST …/admin-reply/`), signalling that a human is now engaged.
@@ -363,12 +384,11 @@ receives the full history including tool observations.
   until the estimated prompt size reaches the ceiling, then older turns are dropped.
   - Tokens are estimated from characters (`CHARS_PER_TOKEN = 3`, deliberately
     over-counting English so the estimate stays under the real limit).
-  - `MODEL_CONTEXT_TOKENS` (env `ASSISTANT_MODEL_CONTEXT_TOKENS`, default `200000`)
-    is the hard ceiling — a turn's prompt can never exceed it, keeping it inside the
-    model's context window (minimax-m2.5 ~204k).
-  - `MAX_OUTPUT_TOKENS` (600) and `TOOL_OBS_RESERVE_TOKENS` (8000) are reserved out
-    of the ceiling so appended `<<DATA>>` tool observations across the loop can't
-    overflow the window mid-turn.
+   - `MODEL_CONTEXT_TOKENS` (env `ASSISTANT_MODEL_CONTEXT_TOKENS`, default `12000`,
+     AP7c) is the hard ceiling — a turn's prompt can never exceed it.
+   - `MAX_OUTPUT_TOKENS` (1000, AP9) and `TOOL_OBS_RESERVE_TOKENS` (4000) are reserved out
+     of the ceiling so appended `<<DATA>>` tool observations across the loop can't
+     overflow the window mid-turn.
   - The view loads at most `MAX_HISTORY_MESSAGES = 500` rows from the DB before the
     agent token-trims them, bounding the queryset on a runaway thread.
   - Older turns beyond the budget stay in the DB for the full audit trail / UI
@@ -402,10 +422,11 @@ receives the full history including tool observations.
     would look dead until the widget was reopened).
   - `needs_human` is cleared on an admin reply (they just answered) and re-set by
     the customer's next message.
-- `MAX_ITERATIONS = 4` — the agent loop runs at most 4 tool-call cycles per turn before
-  being forced to a final reply
-- Thread title is auto-generated by the LLM on the first turn and stored on
-  `AssistantConversation.title`
+- `MAX_ITERATIONS = 4` — the agent loop runs at most 4 tool rounds per turn;
+  exhaustion returns a friendly "try fewer items" reply (`reason loop_exhausted`),
+  never a human flag
+- Thread title is derived server-side from the opening message on the first turn
+  and stored on `AssistantConversation.title`
 - `status` lifecycle: `active` → `resolved` (admin action) → `archived`
 - `needs_human=True` highlights the thread in the admin dashboard
 
@@ -422,8 +443,8 @@ date range. Unread/needs-attention count shown as a badge in the sidebar.
 ## Multilingual Replies
 
 The `language` field (`en`, `hi`, `hinglish`, `gu`, `mr`, `pa`) controls
-`final_reply` language only. The JSON envelope, tool calls, and all DB content
-always stay in English.
+the final reply language only. Tool names/args and all DB content always stay
+in English.
 
 ---
 
@@ -431,8 +452,28 @@ always stay in English.
 
 | Throttle | Limit |
 |----------|-------|
-| `AssistantBurstThrottle` | 20 requests/minute |
-| `AssistantDailyThrottle` | 500 requests/day |
+| `AssistantBurstThrottle` | 10 requests/minute (AP7c) |
+| `AssistantDailyThrottle` | 100 requests/day (AP7c) |
+
+Plus one in-flight turn per account (concurrent POST → 429, taken BEFORE the
+message is saved so a refused turn leaves nothing in the thread; 180 s dead-man
+TTL) and a ~12k-token prompt ceiling (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
+Of that ceiling, what is left for HISTORY is 12000 − 1000 (reply) − 4000 (tool
+reserve) − ~2,100 (system prompt) ≈ 4,900 estimated tokens, roughly 25–30
+ordinary messages. (The reserve was 8000, which left ~800 — about five
+exchanges.) ⚠ These are env-overridable: a deployed env that still pins
+`ASSISTANT_MODEL_CONTEXT_TOKENS=200000` / `ASSISTANT_TOOL_OBS_RESERVE_TOKENS=8000`
+/ `ASSISTANT_MAX_OUTPUT_TOKENS=600` silently overrides all three defaults.
+
+A turn that carries text AND a lookup ("Let me check…" + `search_products`) is
+not treated as the answer — the loop goes round again so the reply is written
+with the results. Only on the last round is such text returned as-is.
+
+AP10b note on worker isolation (S5): chat currently shares the 3×2 gunicorn
+pool with checkout. The shipped mitigation is bounds, not a separate pool —
+20 s LLM timeout + 1 retry (AP2), one in-flight turn per account (AP7c),
+10/min + 100/day throttles and the history cap. A dedicated chat worker pool
+(separate service/upstream) remains future work; see DEPLOYMENT.md.
 
 ---
 
@@ -453,10 +494,14 @@ ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
 ## Graceful Degradation
 
 ```
-LLM unavailable          → FALLBACK_REPLY (no crash)
-Bad JSON from LLM        → one repair prompt → if still bad → FALLBACK_REPLY
+LLM unavailable          → FALLBACK_REPLY, reason llm_unavailable (no crash)
+Provider error/timeout   → FALLBACK_REPLY, reason llm_error, escalate=False
+Unparseable turn         → FALLBACK_REPLY, reason llm_error, escalate=False
+No readable reply        → nudge, then LOOP_EXHAUSTED_REPLY, reason loop_exhausted
+Truncated (finish=length)→ reply + CONTINUED_SUFFIX, escalate=False
 Unknown tool/action name → error fed back to LLM (not executed)
 Tool raises exception    → {'error': 'tool_error'} returned as observation
+Customer asked for human → escalate_to_human → needs_human + owner email now
 ```
 
 ---
