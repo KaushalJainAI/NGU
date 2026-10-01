@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db.models import F, Sum, Count
+from django.db.models import F, Sum
 from django.utils import timezone
 
 from spices_backend.timeranges import range_filter

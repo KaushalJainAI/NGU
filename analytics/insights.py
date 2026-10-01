@@ -10,9 +10,8 @@ Date handling: ``date_from``/``date_to`` are inclusive calendar dates.
 """
 from collections import defaultdict
 from datetime import timedelta
-from decimal import Decimal
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from orders.models import Order, OrderItem

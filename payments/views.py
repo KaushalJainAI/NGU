@@ -3,8 +3,6 @@ import logging
 
 from django.conf import settings
 from django.db import transaction
-from django.shortcuts import render
-from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes, throttle_classes

@@ -141,10 +141,6 @@ class RecommendationEngine:
 
     # ----- ranking -----
 
-    def has_signal(self):
-        """True if we know anything about this user to personalize on."""
-        return bool(self._category_affinity()) or bool(self._purchased_product_ids())
-
     def recommend(self, limit=12):
         affinity = self._category_affinity()
         purchased_ids = self._purchased_product_ids()

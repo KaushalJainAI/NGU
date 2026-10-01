@@ -4,7 +4,7 @@ from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models import (
-    Sum, F, Case, When, DecimalField, Value, IntegerField, OuterRef, Subquery,
+    Sum, F, Case, When, DecimalField, Value, OuterRef, Subquery,
 )
 from django.db.models.functions import Coalesce
 from products.models import Product, ProductCombo, ProductComboItem, ProductVariant
@@ -82,25 +82,6 @@ class Cart(models.Model):
         """Calculate total number of items in cart - OPTIMIZED with DB aggregation"""
         result = self.items.aggregate(total=Sum('quantity'))
         return result['total'] or 0
-
-    def get_items_with_details(self):
-        """Get cart items with related product/combo data in a single query - OPTIMIZED"""
-        return self.items.select_related(
-            'product',
-            'product__category',
-            'combo',
-            'variant',
-        ).only(
-            'id', 'item_type', 'quantity', 'created_at',
-            'product__id', 'product__name', 'product__slug', 'product__image',
-            'product__price', 'product__discount_price', 'product__weight',
-            'product__stock', 'product__category__name',
-            'variant__id', 'variant__slug', 'variant__weight', 'variant__unit',
-            'variant__price', 'variant__discount_price', 'variant__stock',
-            'combo__id', 'combo__name', 'combo__slug', 'combo__image',
-            # No 'combo__price' — MRP is derived from the components, not a column.
-            'combo__discount_price'
-        )
 
 
 class CartItem(models.Model):

@@ -40,7 +40,6 @@ from .cache import (
     CACHE_PREFIX_SECTIONS,
     CACHE_PREFIX_SEARCH,
     TTL_MEDIUM,
-    TTL_LONG,
 )
 
 # Cache TTLs from settings

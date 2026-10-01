@@ -20,7 +20,6 @@ class OrderCreateSerializer(serializers.Serializer):
         max_length=100, required=False, allow_blank=True, default='')
     shipping_pincode = serializers.CharField(
         max_length=10, required=False, allow_blank=True, default='')
-    # coupon_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
 
 
 # ----- Shared item serializer for list/detail (aligned with frontend) -----

@@ -202,7 +202,6 @@ import random
 from datetime import timedelta
 from django.utils import timezone
 from django.core.mail import send_mail
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from .serializers import PasswordResetRequestSerializer, OTPVerifySerializer, PasswordResetConfirmSerializer
 from .models import PasswordResetOTP

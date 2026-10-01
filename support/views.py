@@ -1,4 +1,4 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.throttling import AnonRateThrottle
@@ -16,14 +16,6 @@ from .serializers import (
 class ContactRateThrottle(AnonRateThrottle):
     """Throttle for contact form - prevents spam submissions"""
     scope = 'contact'
-
-
-class IsAdminOrCreateOnly:
-    """Allow anyone to create, but only admins can list/update/delete"""
-    def has_permission(self, request, view):
-        if view.action == 'create':
-            return True
-        return request.user and request.user.is_staff
 
 
 class ContactSubmissionViewSet(viewsets.ModelViewSet):

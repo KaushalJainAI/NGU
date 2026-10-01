@@ -4,7 +4,7 @@ from django.db import models, transaction
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
-from django.db.models import Sum, Avg, Count, Value
+from django.db.models import Sum, Value
 from django.db.models.functions import Coalesce
 from django.core.files.base import ContentFile
 from spices_backend.validators import validate_file_size, validate_image_extension, validate_image_content

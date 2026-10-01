@@ -11,7 +11,6 @@ from rest_framework.views import exception_handler as drf_exception_handler
 from rest_framework.response import Response
 from rest_framework import status
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.http import Http404
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@ import json
 from decimal import Decimal
 
 from rest_framework import serializers
-from django.db.models import Avg, Count
+from django.db.models import Avg
 from .models import (
     Category, Product, ProductImage, ProductCombo, ProductComboItem,
     ProductSection, ProductVariant,

@@ -28,6 +28,28 @@ def _reset_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolated_media(settings, tmp_path, monkeypatch):
+    """Send every file a test uploads to a per-test temp directory.
+
+    Without this, product images and delivery bills created by fixtures land in
+    the real Backend/media and Backend/private_media and pile up run after run
+    (thousands of stub files). FileSystemStorage re-reads MEDIA_ROOT when the
+    setting changes, so the override alone covers default media. The delivery
+    bill storage is different: Django calls `delivery_bill_storage` once, when
+    the field is defined, so its location is frozen at import and has to be
+    repointed on the storage instance itself."""
+    from orders.models import Order
+
+    private_root = str(tmp_path / 'private_media')
+    settings.MEDIA_ROOT = str(tmp_path / 'media')
+    settings.PRIVATE_MEDIA_ROOT = private_root
+    bill_storage = Order._meta.get_field('delivery_bill').storage
+    monkeypatch.setattr(bill_storage, '_location', private_root)
+    for cached in ('base_location', 'location'):
+        monkeypatch.setitem(bill_storage.__dict__, cached, private_root)
+
+
 # ==================== CLIENT FIXTURES ====================
 
 @pytest.fixture

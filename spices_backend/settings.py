@@ -1,6 +1,5 @@
 from pathlib import Path
 from datetime import timedelta
-import os
 from decouple import config
 from django.core.exceptions import ImproperlyConfigured
 

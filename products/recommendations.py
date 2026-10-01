@@ -632,17 +632,3 @@ class SpiceSearchEngine:
                 scored[item_id] = {**item, 'score': final_score}
 
         return sorted(scored.values(), key=lambda x: x['score'], reverse=True)[:top_k]
-
-    # Compatibility methods (unchanged from original)
-    def _category_recommendations(self, query: str, top_k: int) -> List[Dict]:
-        return self._other_recommendations(query, top_k)
-
-    def _semantic_recommendations(self, query: str, top_k: int) -> List[Dict]:
-        return []
-
-    def _trending_recommendations(self, top_k: int) -> List[Dict]:
-        return []
-
-    def _product_base_dict(self, product):
-        """Delegate to serializer for safe attribute access."""
-        return SearchProductSerializer(product).data

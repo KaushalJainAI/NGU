@@ -13,7 +13,7 @@ neither              →  local filesystem (development only)
 
 Static files (CSS/JS) use S3 when `USE_S3=True`, or the local filesystem otherwise.
 When deploying to Render (no S3), add **WhiteNoise** to serve static files from the
-backend process itself (see `RENDER_DEPLOYMENT_PLAN.md` Section 2.1–2.2).
+backend process itself.
 
 ---
 
@@ -114,4 +114,3 @@ When deploying to Render (or any host without S3), replace S3 for static files w
    `MIDDLEWARE`.
 3. Set `USE_S3=False` and add a WhiteNoise `staticfiles` backend when `USE_S3` is off.
 
-See `RENDER_DEPLOYMENT_PLAN.md` Section 2 for the exact code changes.
