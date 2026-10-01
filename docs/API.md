@@ -197,6 +197,10 @@ from the first row naming each product, erroring if a later row disagrees.
 | `/api/admin/gst/documents/` | GET | Documents issued per series with gap detection. `?download=csv` | Admin | O(n) | ✅ good | — | Invoice, CreditNote | N/A | 🟠 High | `gap = (max-min+1)-count` per series; red badge in panel when > 0 |
 | `/api/admin/gst/invoices/` | GET | Invoice register (one row per invoice). `?download=csv` | Admin | O(n) | ✅ good | — | Invoice + Order | N/A | 🟠 High | Counts even cancelled/deleted orders — the credit note reverses them |
 | `/api/admin/gst/credit-notes/` | GET | Credit note register (`CN/<FY>/<seq>`). `?download=csv` | Admin | O(n) | ✅ good | — | CreditNote | N/A | 🟠 High | Numbers from `InvoiceCounter` (any-series); `reason` = refund \| cancellation |
+| `/api/expenses/` | GET/POST | List (filters `?from=&to=&category=`) / create an expense | Admin | O(n) | ✅ good / ✅ bad | `ExpenseSerializer` | Expense | No | 🟡 Medium | `gst_amount <= amount`; `itc_eligible` only when GST > 0. No courier/gateway categories — those come from orders/payments. Tests: [admin_panel/test_books.py](../admin_panel/test_books.py) |
+| `/api/expenses/{id}/` | GET/PUT/PATCH/DELETE | Read / edit / delete one expense | Admin | O(1) | ✅ good | `ExpenseSerializer` | Expense | No | 🟡 Medium | Same validation as create |
+| `/api/expenses/export/` | GET | Download expenses as CSV | Admin | O(n) | ✅ good | — | Expense | N/A | 🟢 Low | Same filters as list |
+| `/api/admin/books/summary/` | GET | Monthly books estimate (`?from=&to=`, default month-to-today). Sales/cash/costs/profit/GST | Admin | O(n) | ✅ good | — | Invoice, CreditNote, Payment, Order, OrderRefund, Expense | N/A | 🟠 High | `is_estimate: true` always. Profit = net ex-GST sales − gateway ex-GST − courier − expenses(net of claimable GST). GST = output − credit − expense ITC − gateway ITC. Coverage objects flag missing gateway/courier costs |
 
 ---
 

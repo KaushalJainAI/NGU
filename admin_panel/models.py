@@ -3,6 +3,41 @@ from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 
+
+class Expense(models.Model):
+    """One business expense, entered by an admin. Feeds the monthly summary."""
+    CATEGORIES = [
+        ('raw_material', 'Raw material / purchases'),
+        ('packaging', 'Packaging'),
+        ('marketing', 'Marketing'),
+        ('rent_utilities', 'Rent & utilities'),
+        ('salary', 'Salary & wages'),
+        ('other', 'Other'),
+    ]
+    PAYMENT_MODES = [('cash', 'Cash'), ('bank', 'Bank transfer'), ('upi', 'UPI'), ('card', 'Card')]
+
+    date = models.DateField(db_index=True)
+    category = models.CharField(max_length=20, choices=CATEGORIES)
+    vendor = models.CharField(max_length=120, blank=True, default='')
+    description = models.CharField(max_length=255, blank=True, default='')
+    # Total paid, GST INCLUDED.
+    amount = models.DecimalField(max_digits=12, decimal_places=2,
+                                 validators=[MinValueValidator(Decimal('0.01'))])
+    # GST contained inside `amount` (0 when the bill has none).
+    gst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                     validators=[MinValueValidator(0)])
+    # True when this GST can be claimed back as input tax credit.
+    itc_eligible = models.BooleanField(default=False)
+    bill_number = models.CharField(max_length=60, blank=True, default='')
+    payment_mode = models.CharField(max_length=10, choices=PAYMENT_MODES, default='bank')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                                   null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-date', '-id']
+
 # Create your models here.
 
 class ReceivableAccount(models.Model):

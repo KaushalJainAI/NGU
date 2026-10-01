@@ -36,7 +36,7 @@ from reviews.views import ReviewViewSet
 from payments.views import PaymentMethodViewSet
 from admin_panel.views import (
     ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PaymentAccountView,
-    GlobalAdminSearchView, AdminCustomerViewSet,
+    GlobalAdminSearchView, AdminCustomerViewSet, ExpenseViewSet, BooksSummaryView,
 )
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
@@ -74,6 +74,7 @@ router.register(r'product-images', ProductImageViewSet, basename='product-image'
 router.register(r'product-variants', ProductVariantViewSet, basename='product-variant')
 router.register(r'product-sections', ProductSectionViewSet, basename='product-section')
 router.register(r'coupons', CouponViewSet, basename='coupon')
+router.register(r'expenses', ExpenseViewSet, basename='expenses')
 
 # Policy management is retired for now — the storefront serves static policy
 # pages directly. The Policy model/viewset remain in the codebase but are not
@@ -128,6 +129,9 @@ urlpatterns = [
 
     # Admin panel global search (orders/products/customers/coupons in one box)
     path('api/admin-search/', GlobalAdminSearchView.as_view(), name='admin-search'),
+
+    # Basic accounts: monthly books estimate (no ledgers).
+    path('api/admin/books/summary/', BooksSummaryView.as_view(), name='books-summary'),
 
     # Admin panel bulk product tools (edit grid + CSV import/export)
     path('api/admin/bulk-products/', bulk_products, name='bulk-products'),

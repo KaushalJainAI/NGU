@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ReceivableAccount, Coupon
+from .models import Expense, ReceivableAccount, Coupon
 from orders.models import Order
 
 
@@ -57,6 +57,27 @@ class CouponSerializer(serializers.ModelSerializer):
     def is_valid(self, *, raise_exception=False):
         return super().is_valid(raise_exception=raise_exception)
     
+class ExpenseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Expense
+        fields = ['id', 'date', 'category', 'vendor', 'description', 'amount',
+                  'gst_amount', 'itc_eligible', 'bill_number', 'payment_mode',
+                  'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
+
+    def validate(self, attrs):
+        amount = attrs.get('amount', getattr(self.instance, 'amount', None))
+        gst = attrs.get('gst_amount', getattr(self.instance, 'gst_amount', 0))
+        itc = attrs.get('itc_eligible', getattr(self.instance, 'itc_eligible', False))
+        if amount is not None and gst is not None and gst > amount:
+            raise serializers.ValidationError(
+                {'gst_amount': 'GST cannot be more than the total amount.'})
+        if itc and not (gst and gst > 0):
+            raise serializers.ValidationError(
+                {'itc_eligible': 'Only bills with GST can be claimed.'})
+        return attrs
+
+
 class RecentOrderSerializer(serializers.ModelSerializer):
     customerName = serializers.SerializerMethodField()
     totalAmount = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2)

@@ -8,10 +8,11 @@ from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle
 from decimal import Decimal
 
-from .models import ReceivableAccount, Coupon, Policy
+from .models import Expense, ReceivableAccount, Coupon, Policy
 from .serializers import (
-    ReceivableAccountSerializer, 
-    CouponSerializer, 
+    ExpenseSerializer,
+    ReceivableAccountSerializer,
+    CouponSerializer,
     RecentOrderSerializer,
     PolicySerializer
 )
@@ -129,6 +130,86 @@ class CouponViewSet(viewsets.ModelViewSet):
             'reason': None if valid else ', '.join(reasons),
             'coupon': CouponSerializer(coupon).data,
         })
+
+
+class ExpenseViewSet(viewsets.ModelViewSet):
+    """Admin-entered business expenses (no courier/gateway here — those come
+    from orders/payments automatically, and entering them too would count them
+    twice)."""
+
+    queryset = Expense.objects.all()
+    serializer_class = ExpenseSerializer
+    permission_classes = [IsAdminUser]
+    throttle_classes = [UserRateThrottle]
+    # Small, admin-only list: return everything like coupons, not page 1 of N.
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        params = self.request.query_params
+        if params.get('category'):
+            qs = qs.filter(category=params['category'])
+        date_from = params.get('from')
+        date_to = params.get('to')
+        if date_from or date_to:
+            from datetime import date as date_cls
+            try:
+                start = date_cls.fromisoformat(date_from) if date_from else None
+            except ValueError:
+                start = None
+            try:
+                end = date_cls.fromisoformat(date_to) if date_to else None
+            except ValueError:
+                end = None
+            qs = qs.filter(**range_filter('date', start, end))
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['get'], url_path='export')
+    def export(self, request):
+        from .utils import csv_response
+        from django.utils import timezone
+
+        header = ['Date', 'Category', 'Vendor', 'Description', 'Amount',
+                  'GST', 'ITC Eligible', 'Bill No', 'Payment Mode']
+
+        def rows():
+            for e in self.get_queryset():
+                yield [e.date.isoformat(), e.get_category_display(), e.vendor,
+                       e.description, f"{e.amount:.2f}", f"{e.gst_amount:.2f}",
+                       'Yes' if e.itc_eligible else 'No', e.bill_number,
+                       e.get_payment_mode_display()]
+
+        return csv_response(
+            f"expenses-{timezone.now().strftime('%Y%m%d')}.csv", header, rows())
+
+
+class BooksSummaryView(APIView):
+    """Monthly books estimate: net sales, cash, costs, profit, GST to pay."""
+
+    permission_classes = [IsAdminUser]
+    throttle_classes = [UserRateThrottle]
+
+    def get(self, request):
+        from datetime import date as date_cls
+        from django.utils import timezone
+        from .books import monthly_summary
+
+        today = timezone.localdate()
+        try:
+            date_from = date_cls.fromisoformat(request.query_params['from'])
+        except (KeyError, ValueError):
+            date_from = today.replace(day=1)
+        try:
+            date_to = date_cls.fromisoformat(request.query_params['to'])
+        except (KeyError, ValueError):
+            date_to = today
+        if date_from > date_to:
+            date_from, date_to = date_to, date_from
+        return Response({'from': date_from.isoformat(), 'to': date_to.isoformat(),
+                         **monthly_summary(date_from, date_to)})
 
 
 class DashboardViewSet(viewsets.ViewSet):
