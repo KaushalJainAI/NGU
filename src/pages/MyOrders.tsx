@@ -412,7 +412,6 @@ const MyOrders = () => {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: "var(--backdrop-spice)" }} aria-hidden />
-        <span aria-hidden className="pointer-events-none absolute right-[8%] top-1/2 -translate-y-1/2 text-5xl sm:text-7xl animate-float opacity-80" style={{ ["--rot" as string]: "8deg" }}>📦</span>
         <div className="relative container mx-auto px-4 py-8 sm:py-14 max-w-5xl animate-fade-in-up">
           <div className="flex items-center gap-3 sm:gap-4">
             <div className="grid h-12 w-12 sm:h-16 sm:w-16 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white shadow-[var(--shadow-elegant)]">
@@ -454,7 +453,7 @@ const MyOrders = () => {
                   <Card
                     key={order.id}
                     ref={(el) => { orderRefs.current[order.id] = el; }}
-                    className="overflow-hidden rounded-2xl border-border shadow-card hover-lift"
+                    className="overflow-hidden rounded-2xl border-border shadow-card"
                   >
                     <CardContent className="p-3 sm:p-6">
                       {/* Header */}

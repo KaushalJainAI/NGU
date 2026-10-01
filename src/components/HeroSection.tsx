@@ -47,18 +47,21 @@ const HeroSection = () => {
               </Button>
             </div>
 
+            {/* AP12: every figure here is verifiable (licence, place, payment
+                mode) — the old 50+/100%/1.1M+ counters asserted things no data
+                backs up. */}
             <div className="grid grid-cols-3 gap-2 sm:gap-4 pt-2 sm:pt-5">
-              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
-                <div className="text-xl sm:text-3xl font-bold text-primary">50+</div>
-                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsProducts')}</div>
+              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm">
+                <div className="text-xl sm:text-3xl font-bold text-primary">FSSAI</div>
+                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsLicensed')}</div>
               </div>
-              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
-                <div className="text-xl sm:text-3xl font-bold text-primary">100%</div>
-                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsPure')}</div>
+              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm">
+                <div className="text-xl sm:text-3xl font-bold text-primary">Barnagar</div>
+                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsMadeIn')}</div>
               </div>
-              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md">
-                <div className="text-xl sm:text-3xl font-bold text-primary">1.1M+</div>
-                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsCustomers')}</div>
+              <div className="rounded-lg border border-border/80 bg-card/80 p-3 shadow-sm">
+                <div className="text-xl sm:text-3xl font-bold text-primary">COD</div>
+                <div className="text-xs sm:text-sm text-muted-foreground">{t('hero.statsCod')}</div>
               </div>
             </div>
           </div>
@@ -68,9 +71,6 @@ const HeroSection = () => {
             <div className="absolute -bottom-4 left-4 z-10 hidden sm:flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2 text-sm font-semibold text-foreground shadow-lg">
               <CheckCircle2 className="h-4 w-4 text-secondary" />
               {t('hero.handPackedFresh')}
-            </div>
-            <div className="absolute right-3 top-3 z-10 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-primary-foreground shadow-lg sm:right-6 sm:top-6">
-              {t('hero.since')}
             </div>
             <img 
               src={heroImage} 

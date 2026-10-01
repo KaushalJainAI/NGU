@@ -24,27 +24,26 @@
   },
   "hero": {
     "badge": "Asli Indian Masale",
-    "headlineStart": "Har Masale Mein ",
-    "headlineHighlight": "Parampara",
-    "headlineEnd": " Ka Swaad",
-    "description": "Hamare premium masalon ke saath India ke asli swaad ka anubhav karein. Pyaar se bane, care ke saath pahunchaye.",
+    "headlineStart": "Spices ground fresh in ",
+    "headlineHighlight": "Barnagar",
+    "headlineEnd": ", Madhya Pradesh",
+    "description": "Barnagar ki FSSAI-licensed facility se fresh masale — poore India mein delivery. COD available.",
     "learnMore": "Aur Jaanein",
-    "statsProducts": "Products",
-    "statsPure": "Shudh aur Natural",
-    "statsCustomers": "Khush Customers",
     "handPackedFresh": "Hand-packed fresh",
-    "since": "Since 1995"
+    "statsLicensed": "Lic. No. 11414730000288",
+    "statsMadeIn": "Made in Barnagar, MP",
+    "statsCod": "Cash on Delivery"
   },
   "home": {
     "features": {
-      "freeShippingTitle": "Free Shipping",
-      "freeShippingDesc": "₹499 se upar ke order par",
-      "authenticTitle": "100% Asli",
-      "authenticDesc": "Shudh aur natural ingredients",
-      "deliveryTitle": "Tez Delivery",
-      "deliveryDesc": "Ghar tak tez delivery",
-      "qualityTitle": "Quality Assured",
-      "qualityDesc": "Premium quality products"
+      "freeShippingTitle": "₹499+ par free shipping",
+      "freeShippingDesc": "₹499 aur usse upar ke sabhi orders par",
+      "authenticTitle": "FSSAI licensed",
+      "authenticDesc": "Lic. No. 11414730000288",
+      "deliveryTitle": "COD available",
+      "deliveryDesc": "Poore India mein Cash on Delivery",
+      "qualityTitle": "Tracked delivery",
+      "qualityDesc": "3–10 business days, ghar baithe"
     },
     "recommended": {
       "title": "Aapke Liye Suggestions",
@@ -77,39 +76,13 @@
     "testimonials": {
       "title": "Customers Ki Raay",
       "subtitle": "Hamare khush customers kya kehte hain",
-      "verified": "Verified Buyer",
-      "items": [
-        {
-          "name": "Priya Sharma",
-          "review": "Masalon ki quality bemisal hai! Ab mere dishes kahin zyada swadisht lagte hain.",
-          "rating": 5
-        },
-        {
-          "name": "Rajesh Kumar",
-          "review": "Asli flavours aur badhiya packaging. Highly recommended!",
-          "rating": 5
-        },
-        {
-          "name": "Anita Patel",
-          "review": "Ab tak ke sabse achhe masale. Dobara zaroor order karungi!",
-          "rating": 5
-        }
-      ]
+      "verified": "Verified Buyer"
     },
     "cta": {
-      "title": "Apni Rasoi Mein Swaad Bharne Ke Liye Taiyaar Hain?",
-      "subtitle": "Hamare haath se bane masalon ke saath Bhartiya parampara ka asli saar anubhav karein. Shudh, asli, aur aapke darwaze tak pahunchaya gaya.",
-      "handPacked": "🌿 Hand-packed in small batches",
+      "title": "Barnagar ke apne masalon ke saath pakayein",
+      "subtitle": "FSSAI-licensed facility. Fresh packed, poore India mein delivery — online ya COD se payment karein.",
+      "handPacked": "Hand-packed in Barnagar",
       "viewOffers": "View Offers"
-    },
-    "eyebrow": {
-      "forYou": "Aapke Liye",
-      "justIn": "Just In",
-      "bestsellers": "Bestsellers",
-      "trending": "Trending Now",
-      "explore": "Explore",
-      "valueBundles": "Value Bundles",
-      "lovedByKitchens": "Loved by Kitchens"
     }
   },
   "product": {
@@ -240,104 +213,59 @@
     "registerHere": "Yahan register karein"
   },
   "about": {
-    "badge": "Est. 1995 · Barnagar, India",
+    "badge": "Barnagar, Madhya Pradesh",
     "heroPre": "Har chutki kehti hai ek ",
     "heroHighlight": "kahani",
     "heroPost": "",
-    "heroSubtitle": "Barnagar ki ek choti family kitchen se lekar laakhon dining tables tak — yeh Nidhi Masala ki journey hai, ek-ek parampara ko peeste hue.",
+    "heroSubtitle": "Barnagar ki family kitchen se — fresh ground, fresh packed, poore India mein delivery.",
     "heroCta": "Hamari kahani chakhein",
     "beginEyebrow": "Jahan se shuruaat hui",
     "beginTitle": "Peedhi-dar-peedhi chali recipe, kabhi likhi nahi gayi",
-    "beginP1": "Shuruaat ek simple vishwas se hui — ki Indian cooking ki aatma uske masalon mein basti hai. Jo family aur padosiyon ke liye haath se pise masalon se shuru hua, woh dheere-dheere poore region mein bharose ka naam ban gaya.",
-    "beginP2": "Har season mein humne ek vada nibhaya: khet se kitchen tak asliyat, beech mein kuch bhi artificial nahi.",
-    "heritageLabel": "saalon ki virasat",
-    "journeyEyebrow": "Hamari journey",
-    "journeyTitle": "Swaad ke teen decade",
-    "timeline": [
-      {
-        "year": "1995",
-        "title": "Ek vinamra shuruaat",
-        "text": "Nidhi Grah Udyog ki shuruaat Barnagar ki ek choti family kitchen mein hui, jahan dadi-nani ki tarah haath se masale pise jaate the."
-      },
-      {
-        "year": "2005",
-        "title": "Jadein mazboot hui",
-        "text": "Hamari khushbu ki charcha poore Ujjain mein fail gayi. Humne behtareen fasal ke liye seedhe local farmers se partnership ki."
-      },
-      {
-        "year": "2015",
-        "title": "Kitchen se industry tak",
-        "text": "Humne apni processing ko modern banaya, saath hi un traditional recipes ki poori hifazat ki jo hamari pehchaan hain."
-      },
-      {
-        "year": "Aaj",
-        "title": "Laakhon kitchens mein",
-        "text": "Das laakh se zyada families apne roz ke khane mein asli swaad ke liye Nidhi Masala par bharosa karte hain."
-      }
-    ],
-    "processEyebrow": "Khet se kitchen tak",
-    "processTitle": "Har jar kaise banta hai",
-    "process": [
-      {
-        "title": "Khaton se chuna gaya",
-        "text": "Bharosemand local farmers se seedhe haath se chuni fasal."
-      },
-      {
-        "title": "Dheemi aanch par bhuna",
-        "text": "Tel aur khushbu ko banaye rakhne ke liye chote batches mein bhuna."
-      },
-      {
-        "title": "Patthar ki chakki par pisa",
-        "text": "Natural swaad ke har sur ko bachane ke liye baareek pisa."
-      },
-      {
-        "title": "Taaza seal kiya",
-        "text": "Airtight pack, taaki pehli chutki aakhri jaisi hi lage."
-      }
-    ],
+    "beginP1": "Shuruaat Barnagar, Madhya Pradesh ki ek family kitchen se hui — parivaar aur padosiyon ke liye fresh pise masalon ke saath.",
+    "beginP2": "Aaj har pack hamari FSSAI-licensed facility (Lic. No. 11414730000288) se aata hai aur poore India mein ship hota hai — online ya COD se payment karein.",
     "valuesEyebrow": "Hum kiske liye khade hain",
     "valuesTitle": "Hamare values",
     "values": [
       {
-        "title": "Quality sarvopari",
-        "description": "Hum apne products ki quality se kabhi compromise nahi karte."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "Customer kendrit",
-        "description": "Aapki satisfaction hamesha hamari top priority hai."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "Pyaar se bana",
-        "description": "Har product ko care aur passion ke saath taiyar kiya jaata hai."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "100% Natural",
-        "description": "Shudh ingredients, koi artificial milawat nahi."
+        "title": "title",
+        "description": "description"
       }
     ],
-    "stats": [
+    "ctaTitle": "Barnagar ke apne masalon ke saath pakayein",
+    "ctaSubtitle": "FSSAI-licensed facility. Fresh packed, poore India mein delivery — online ya COD se payment karein.",
+    "ctaButton": "Masale Khareedein",
+    "facts": [
       {
-        "label": "Premium Products"
+        "value": "FSSAI",
+        "label": "Lic. No. 11414730000288"
       },
       {
-        "label": "Khush Customers"
+        "value": "Barnagar",
+        "label": "Madhya Pradesh, India"
       },
       {
-        "label": "Shudh & Natural"
-      },
-      {
-        "label": "Saalon ki Virasat"
+        "value": "COD",
+        "label": "Poore India mein Cash on Delivery"
       }
-    ],
-    "ctaTitle": "Apni kitchen ko hamari kahani mein jodein",
-    "ctaSubtitle": "Un handcrafted masalon ko khojein jo usi tarah bane hain jaise hamesha banne chahiye the.",
-    "ctaButton": "Masale Khareedein"
+    ]
   },
   "ribbon": {
     "freeShipping": "FREE shipping on orders above ₹499",
     "pure": "100% pure & natural — no fillers",
     "handPacked": "Hand-packed in Barnagar",
-    "trusted": "Trusted by 1.1M+ kitchens"
+    "trusted": "FSSAI Lic. No. 11414730000288"
   },
   "ourStory": {
     "eyebrow": "Nidhi kitchen story",
@@ -357,7 +285,7 @@
   },
   "trust": {
     "freeShipping": "🚚 Free shipping ₹499+",
-    "happyKitchens": "⭐ 1.1M+ happy kitchens"
+    "happyKitchens": "FSSAI Lic. No. 11414730000288"
   },
   "trustBand": {
     "pureBlends": "Pure blends",
@@ -410,16 +338,6 @@
     "allInOne": "All items in one package",
     "genuine": "100% genuine products",
     "productsInCombo": "Products In This Combo"
-  },
-  "promo": {
-    "flat20Title": "Flat 20% off",
-    "flat20Subtitle": "On orders above ₹299",
-    "freeDeliveryTitle": "Free delivery",
-    "freeDeliverySubtitle": "Unlock shipping savings",
-    "comboSaverTitle": "Combo saver",
-    "comboSaverSubtitle": "Extra value on bundles",
-    "copied": "Copied {{code}}",
-    "copyFailed": "Could not copy code"
   },
   "category": {
     "allSpices": "All Spices",

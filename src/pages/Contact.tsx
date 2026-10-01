@@ -69,8 +69,6 @@ const Contact = () => {
       {/* Hero */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0" style={{ background: "var(--backdrop-spice)" }} aria-hidden />
-        <span aria-hidden className="pointer-events-none absolute left-[8%] top-[28%] text-4xl sm:text-5xl animate-float" style={{ ["--rot" as string]: "-10deg" }}>📨</span>
-        <span aria-hidden className="pointer-events-none absolute right-[10%] top-[24%] text-3xl sm:text-5xl animate-float" style={{ ["--rot" as string]: "12deg", animationDelay: "0.9s" }}>🌶️</span>
         <div className="relative container mx-auto px-4 py-12 sm:py-20 text-center">
           <Reveal>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-card/70 px-4 py-1.5 text-xs sm:text-sm font-bold uppercase tracking-wider text-primary backdrop-blur-sm">
@@ -199,7 +197,7 @@ const Contact = () => {
             <div className="lg:col-span-2 space-y-3 sm:space-y-4">
               {channels.map((c, i) => (
                 <Reveal key={i} variant="right" delay={i * 100}>
-                  <div className="flex items-start gap-3 sm:gap-4 bg-card rounded-2xl border border-border shadow-card p-4 sm:p-5 hover-lift">
+                  <div className="flex items-start gap-3 sm:gap-4 bg-card rounded-2xl border border-border shadow-card p-4 sm:p-5">
                     <div className="grid h-10 w-10 sm:h-12 sm:w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-primary to-accent text-white">
                       {c.icon}
                     </div>

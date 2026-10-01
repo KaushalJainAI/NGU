@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Trash2, AlertCircle } from "lucide-react";
+import { Trash2, AlertCircle, ShoppingCart, MapPin, CreditCard, Check, PartyPopper, Sparkles } from "lucide-react";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 import ProductCard from "@/components/ProductCard";
 import product1 from "@/assets/product-1.jpg";
@@ -254,9 +254,9 @@ const Cart = () => {
                     <CardContent className="p-3 sm:p-4">
                       <p className="text-sm font-medium mb-2">
                         {remaining > 0 ? (
-                          <>🚚 You're <span className="text-primary font-bold">₹{remaining.toFixed(0)} away</span> from FREE shipping!</>
+                          <>You're <span className="text-primary font-bold">₹{remaining.toFixed(0)} away</span> from FREE shipping!</>
                         ) : (
-                          <><span className="animate-bounce-in">🎉</span> You've unlocked <span className="text-secondary font-bold">FREE shipping!</span></>
+                          <><PartyPopper className="mr-1 inline h-4 w-4" /> You've unlocked <span className="text-secondary font-bold">FREE shipping!</span></>
                         )}
                       </p>
                       <div className="h-2.5 bg-muted rounded-full overflow-hidden">
@@ -399,23 +399,23 @@ const Cart = () => {
               <div className="mt-4 rounded-lg border border-border bg-card p-4">
                 <div className="flex items-center justify-between">
                   {[
-                    { icon: "🛒", label: t('cart.steps.cart', { defaultValue: "Cart" }), active: true },
-                    { icon: "📍", label: t('cart.steps.address', { defaultValue: "Address" }) },
-                    { icon: "💳", label: t('cart.steps.payment', { defaultValue: "Payment" }) },
-                    { icon: "✅", label: t('cart.steps.done', { defaultValue: "Done" }) },
+                    { Icon: ShoppingCart, label: t('cart.steps.cart', { defaultValue: "Cart" }), active: true },
+                    { Icon: MapPin, label: t('cart.steps.address', { defaultValue: "Address" }) },
+                    { Icon: CreditCard, label: t('cart.steps.payment', { defaultValue: "Payment" }) },
+                    { Icon: Check, label: t('cart.steps.done', { defaultValue: "Done" }) },
                   ].map((step, i, arr) => (
                     <div key={i} className="flex flex-1 flex-col items-center text-center relative">
                       {i < arr.length - 1 && (
                         <span className="absolute top-4 left-1/2 right-[-50%] h-0.5 bg-border" />
                       )}
                       <span
-                        className={`relative z-10 grid h-8 w-8 place-items-center rounded-full text-sm transition-colors ${
+                        className={`relative z-10 grid h-8 w-8 place-items-center rounded-full transition-colors ${
                           step.active
-                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 animate-bounce-in"
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                             : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        {step.icon}
+                        <step.Icon className="h-4 w-4" />
                       </span>
                       <span className={`mt-1.5 text-[10px] sm:text-xs font-medium ${step.active ? "text-primary" : "text-muted-foreground"}`}>
                         {step.label}
@@ -429,9 +429,9 @@ const Cart = () => {
         )}
         {cart.length > 0 && recommendations.length > 0 && (
           <section className="mt-8 sm:mt-12 rounded-xl border-2 border-dashed border-primary/40 bg-primary/[0.03] p-4 sm:p-6">
-            <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center gap-2">
-              <span className="animate-pulse-subtle">✨</span>{t('cart.peopleAlsoBuy')}
-            </h2>
+              <h2 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />{t('cart.peopleAlsoBuy')}
+              </h2>
             <Carousel opts={{ align: "start" }} className="w-full">
               <CarouselContent className="-ml-2 sm:-ml-4">
                 {recommendations.map((product) => (

@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
+import { Home, ShoppingBag, MessageCircle, Gift, Package } from "lucide-react";
 
 const MobileFooterNav = () => {
   const { t } = useTranslation();
@@ -12,13 +13,13 @@ const MobileFooterNav = () => {
     window.dispatchEvent(new CustomEvent("assistant:open"));
   };
 
-  // Emoji icons matching the redesign concept's playful bottom nav.
+  // AP12: one icon set (lucide) — no emoji icons.
   const footerItems = [
-    { label: t('mobileNav.home'), emoji: "🏠", path: "/" },
-    { label: t('mobileNav.shop'), emoji: "🛍️", path: "/products" },
-    { label: t('mobileNav.chat'), emoji: "💬", isSpecial: true },
-    { label: t('mobileNav.offers'), emoji: "🎁", path: "/offer-zone" },
-    { label: t('mobileNav.orders'), emoji: "📦", path: "/my-orders" },
+    { label: t('mobileNav.home'), Icon: Home, path: "/" },
+    { label: t('mobileNav.shop'), Icon: ShoppingBag, path: "/products" },
+    { label: t('mobileNav.chat'), Icon: MessageCircle, isSpecial: true },
+    { label: t('mobileNav.offers'), Icon: Gift, path: "/offer-zone" },
+    { label: t('mobileNav.orders'), Icon: Package, path: "/my-orders" },
   ];
 
   return (
@@ -36,12 +37,11 @@ const MobileFooterNav = () => {
               <Button
                 onClick={openChat}
                 className="h-14 w-14 rounded-full shadow-lg hover:shadow-xl
-                           transition-all duration-300 hover:scale-105 active:scale-95
-                           animate-pulse-subtle text-2xl leading-none"
+                           transition-all duration-300 hover:scale-105 active:scale-95"
                 size="icon"
                 aria-label="Open Chat"
               >
-                <span aria-hidden>{item.emoji}</span>
+                <item.Icon className="h-6 w-6" aria-hidden />
               </Button>
               <span className="text-xs text-primary font-medium mt-0.5 transition-colors duration-200">{item.label}</span>
             </div>
@@ -60,11 +60,11 @@ const MobileFooterNav = () => {
                         }`}
           >
             <span
-              className={`relative grid place-items-center h-9 w-9 rounded-full text-xl leading-none transition-all duration-200 ${
+              className={`relative grid place-items-center h-9 w-9 rounded-full transition-all duration-200 ${
                 isActive ? "bg-primary/10 scale-105" : ""
               }`}
             >
-              <span aria-hidden>{item.emoji}</span>
+              <item.Icon className="h-5 w-5" aria-hidden />
               {item.label === t('mobileNav.shop') && cart.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] w-4 h-4 rounded-full flex items-center justify-center animate-bounce-in">
                   {cart.reduce((sum, it) => sum + it.quantity, 0)}

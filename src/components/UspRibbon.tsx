@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
 
 /**
- * Slim auto-scrolling ribbon of brand USPs shown above the navbar.
- * Pure presentation — no state, no data. Pauses on hover (see .marquee-track).
+ * Slim static strip of brand USPs shown above the navbar (AP12: the
+ * auto-scrolling marquee is gone — motion without meaning). Pure
+ * presentation — no state, no data.
  */
 const UspRibbon = () => {
   const { t } = useTranslation();
@@ -15,14 +16,11 @@ const UspRibbon = () => {
     `⭐ ${t("ribbon.trusted")}`,
   ];
 
-  // Rendered twice back-to-back so the -50% translate loops seamlessly.
-  const loop = [...items, ...items];
-
   return (
     <div className="bg-primary text-primary-foreground text-[11px] sm:text-xs overflow-hidden">
-      <div className="marquee-track py-1.5">
-        {loop.map((text, i) => (
-          <span key={i} className="px-6 sm:px-8 notranslate">
+      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-0.5 px-4 py-1.5">
+        {items.map((text, i) => (
+          <span key={i} className="notranslate">
             {text}
           </span>
         ))}

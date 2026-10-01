@@ -35,9 +35,9 @@ const ComboCard = ({ combo }: ComboCardProps) => {
 
   const price = Number(combo.final_price ?? combo.price);
   const mrp = combo.discount_price ? Number(combo.price) : Number(combo.total_original_price);
+  // AP12: the discount shows ONCE per card (the ribbon badge above).
   const discountPercent =
     mrp && mrp > price ? Math.round((1 - price / mrp) * 100) : 0;
-  const saveAmount = mrp && mrp > price ? Math.round(mrp - price) : 0;
 
   // Prefer the combo's own image; otherwise fall back to the first item's image.
   const heroImage = combo.image || items[0]?.product_image || "";
@@ -86,7 +86,7 @@ const ComboCard = ({ combo }: ComboCardProps) => {
   const extra = items.length - collage.length;
 
   return (
-    <Card className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/30 hover:shadow-[0_22px_46px_-24px_hsl(var(--primary)/0.6)]">
+    <Card className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm transition-colors duration-300 hover:border-primary/30">
       <Link
         to={`/combos/${id}`}
         onClick={handleCardClick}
@@ -191,7 +191,7 @@ const ComboCard = ({ combo }: ComboCardProps) => {
             </ul>
             )}
 
-            {/* Price */}
+            {/* Price (discount already badged in the ribbon above) */}
             <div className="mt-auto">
               <div className="mb-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
                 <span className="text-lg font-bold text-primary sm:text-xl">₹{price}</span>
@@ -200,17 +200,7 @@ const ComboCard = ({ combo }: ComboCardProps) => {
                     ₹{mrp}
                   </span>
                 )}
-                {discountPercent > 0 && (
-                  <span className="text-[10px] font-bold text-secondary sm:text-xs">
-                    {discountPercent}{t('product.off')}
-                  </span>
-                )}
               </div>
-              {saveAmount > 0 && (
-                <p className="text-[11px] font-semibold text-secondary sm:text-xs">
-                  {t('product.youSave', { amount: saveAmount })}
-                </p>
-              )}
             </div>
           </div>
         </CardContent>

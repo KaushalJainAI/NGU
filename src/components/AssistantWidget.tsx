@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, User, Send, Mic, MicOff, X, Loader2,
   ArrowRight, ShoppingCart, ShoppingBasket, Plus, Minus, ChevronLeft, Shield, AlertTriangle,
-  Volume2, VolumeX,
+  Volume2, VolumeX, MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -504,11 +504,11 @@ const AssistantWidget = () => {
       <Button
         onClick={() => (user ? setOpen(true) : navigate("/login"))}
         className="hidden md:flex fixed right-6 bottom-6 h-16 w-16 rounded-full shadow-lg hover:shadow-xl
-                   transition-all duration-300 z-50 text-3xl leading-none
-                   animate-pulse-subtle hover:scale-110 active:scale-95 hover-glow"
+                   transition-all duration-300 z-50
+                   hover:scale-110 active:scale-95 hover-glow"
         aria-label={t('assistant.openAria')}
       >
-        <span aria-hidden>💬</span>
+        <MessageCircle className="h-7 w-7" aria-hidden />
       </Button>
     );
   }

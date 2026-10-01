@@ -4,7 +4,6 @@ import HeroSection from "@/components/HeroSection";
 import ProductCarousel from "@/components/ProductCarousel";
 import DealsStrip from "@/components/DealsStrip";
 import VideoStorySection from "@/components/VideoStorySection";
-import PromoCouponStrip from "@/components/PromoCouponStrip";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Truck, Shield, Clock, Award, Loader2, Check } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -51,7 +50,6 @@ const Index = () => {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [categories, setCategories] = useState<CategoryData[]>([]);
   const [combos, setCombos] = useState<any[]>([]);
-  const [allProducts, setAllProducts] = useState<ProductData[]>([]);
   const [recommended, setRecommended] = useState<ProductData[]>([]);
   // Real customer reviews for the testimonials strip: the ones an admin pinned,
   // topped up to three by the backend. This section used to render three
@@ -71,12 +69,13 @@ const Index = () => {
       setLoading(true);
       try {
         // Products/combos/sections endpoints return plain arrays (pagination_class = None);
-        // categories is DRF-paginated ({ results }).
-        const [sectionsRes, categoriesRes, combosRes, productsRes, reviewsRes] = await Promise.all([
+        // categories is DRF-paginated ({ results }). AP12: the home page no
+        // longer downloads the whole catalog as a fallback — rows without a
+        // section simply hide instead of showing arbitrary products.
+        const [sectionsRes, categoriesRes, combosRes, reviewsRes] = await Promise.all([
           productsAPI.getSections().catch(() => []),
           categoriesAPI.getAll().catch(() => ({ results: [] })),
           combosAPI.getAll().catch(() => []),
-          productsAPI.getAll().catch(() => []),
           reviewsAPI.getFeatured().catch(() => ({ count: 0, results: [] })),
         ]);
 
@@ -87,7 +86,6 @@ const Index = () => {
         setSections(Array.isArray(sectionsRes) ? sectionsRes : ((sectionsRes as any)?.results || []));
         setCategories(categoriesRes.results || []);
         setCombos(combosRes || []);
-        setAllProducts(productsRes || []);
       } catch (error) {
         console.error("Failed to fetch homepage data:", error);
       } finally {
@@ -142,17 +140,15 @@ const Index = () => {
     navigate(`/products?category=${category.id}`);
   };
 
-  // Get section products or fallback. Rows now scroll horizontally, so we keep
+  // Section rows show only what the API returns for that section — no
+  // all-products fallback (AP12). Rows now scroll horizontally, so we keep
   // every product the API returns instead of capping at 4.
-  const getSectionProducts = (sectionType: string, allowFallback = true) => {
+  const getSectionProducts = (sectionType: string) => {
     const section = sections.find(s => s.section_type === sectionType);
     if (section?.products?.length) {
       return section.products.map((p, i) => formatProduct(p, i));
     }
-    // Fallback to all products, except for curated rows (e.g. "Newly Launched")
-    // where showing arbitrary products would be misleading — those hide instead.
-    if (!allowFallback) return [];
-    return allProducts.slice(0, 12).map((p, i) => formatProduct(p, i));
+    return [];
   };
 
   // Backend recommendation rows arrive in the search-product shape (price is
@@ -170,7 +166,7 @@ const Index = () => {
     itemType: "product" as const,
   });
 
-  const newlyLaunched = getSectionProducts("new", false);
+  const newlyLaunched = getSectionProducts("new");
   const specials = getSectionProducts("special");
   const bestSellers = getSectionProducts("bestseller");
   const trending = getSectionProducts("trending");
@@ -178,11 +174,25 @@ const Index = () => {
 
   const formattedCombos = combos.slice(0, 12).map((c, i) => formatCombo(c, i));
 
+  // AP12: skeleton placeholders instead of a full-screen spinner — the page
+  // shape appears instantly and fills in as each request lands.
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col pb-20 md:pb-0">
-        <main className="flex-grow flex items-center justify-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <main className="flex-grow">
+          <div className="container mx-auto px-2 sm:px-4 py-6 sm:py-8 space-y-8" aria-label="Loading">
+            <div className="h-64 sm:h-80 rounded-2xl animate-shimmer" />
+            {[0, 1].map((i) => (
+              <div key={i} className="space-y-3">
+                <div className="h-6 w-48 rounded animate-shimmer" />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[0, 1, 2, 3].map((j) => (
+                    <div key={j} className="h-56 rounded-xl animate-shimmer" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </main>
         <Footer />
       </div>
@@ -240,8 +250,7 @@ const Index = () => {
           <section className="py-8 sm:py-10 bg-gradient-to-r from-primary/10 via-accent/10 to-secondary/10">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="mb-4">
-                <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.forYou')}</div>
-                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.recommended.title')}</h2>
+                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.recommended.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground">{t('home.recommended.subtitle')}</p>
               </div>
               <ProductCarousel items={recommendedForYou} />
@@ -254,8 +263,7 @@ const Index = () => {
           <section className="py-8 sm:py-10 bg-muted/30">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="mb-4">
-                <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.justIn')}</div>
-                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.new.title')}</h2>
+                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.new.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground">{t('home.new.subtitle')}</p>
               </div>
               <ProductCarousel items={newlyLaunched} />
@@ -278,8 +286,7 @@ const Index = () => {
             <div className="container mx-auto px-2 sm:px-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3 sm:gap-0">
                 <div>
-                  <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.bestsellers')}</div>
-                  <h2 className="text-xl sm:text-3xl md:text-4xl font-bold mb-2 text-foreground">
+                                    <h2 className="text-xl sm:text-3xl md:text-4xl font-bold mb-2 text-foreground">
                     {t('home.bestsellers.title')}
                   </h2>
                   <p className="text-xs sm:text-base text-muted-foreground">{t('home.bestsellers.subtitle')}</p>
@@ -301,7 +308,7 @@ const Index = () => {
           <div className="container mx-auto px-2 sm:px-4">
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-5">
               {features.map((feature, index) => (
-                <div key={index} className="group flex flex-col items-center text-center p-3 sm:p-5 bg-card rounded-lg border border-border/80 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg">
+                <div key={index} className="group flex flex-col items-center text-center p-3 sm:p-5 bg-card rounded-lg border border-border/80 shadow-sm transition-colors duration-300 hover:border-primary/25">
                   <div className="h-12 w-12 sm:h-16 sm:w-16 rounded-full spice-backdrop grid place-items-center text-primary mb-2 sm:mb-4 transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3">{feature.icon}</div>
                   <h3 className="font-semibold text-xs sm:text-base text-foreground mb-1 sm:mb-2">{feature.title}</h3>
                   <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">{feature.description}</p>
@@ -316,8 +323,7 @@ const Index = () => {
           <section className="py-8 sm:py-10">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="mb-4">
-                <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.trending')}</div>
-                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.trending.title')}</h2>
+                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.trending.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground">{t('home.trending.subtitle')}</p>
               </div>
               <ProductCarousel items={trending} />
@@ -338,8 +344,7 @@ const Index = () => {
             </svg>
             <div className="container relative mx-auto px-2 sm:px-4">
               <div className="text-center mb-6">
-                <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.explore')}</div>
-                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.categories.title')}</h2>
+                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.categories.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground max-w-2xl mx-auto">
                   {t('home.categories.subtitle')}
                 </p>
@@ -349,7 +354,7 @@ const Index = () => {
                   <button
                     key={category.id}
                     onClick={() => handleCategoryClick(category)}
-                    className="group relative flex w-28 shrink-0 flex-col items-center gap-2 overflow-hidden rounded-lg bg-card border border-border/80 p-3 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg sm:w-auto sm:p-5 sm:gap-3"
+                    className="group relative flex w-28 shrink-0 flex-col items-center gap-2 overflow-hidden rounded-lg bg-card border border-border/80 p-3 shadow-sm transition-colors duration-300 hover:border-primary/25 sm:w-auto sm:p-5 sm:gap-3"
                   >
                     <span className="h-14 w-14 sm:h-20 sm:w-20 rounded-full spice-backdrop grid place-items-center overflow-hidden transition-transform duration-300 group-hover:scale-105 group-hover:-rotate-3">
                       {category.image ? (
@@ -373,8 +378,7 @@ const Index = () => {
           <section className="py-8 sm:py-10">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="text-center mb-5">
-                <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.valueBundles')}</div>
-                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
+                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
                   {t('home.combos.title')}
                 </h2>
                 <p className="text-xs sm:text-base text-muted-foreground max-w-2xl mx-auto">
@@ -393,8 +397,7 @@ const Index = () => {
         <section className="py-7 sm:py-10">
           <div className="container mx-auto px-2 sm:px-4">
             <div className="text-center mb-4 sm:mb-6">
-              <div className="text-[10px] sm:text-xs tracking-[0.25em] uppercase text-primary font-semibold mb-1">{t('home.eyebrow.lovedByKitchens')}</div>
-              <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.testimonials.title')}</h2>
+                            <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.testimonials.title')}</h2>
               <p className="text-xs sm:text-base text-muted-foreground">{t('home.testimonials.subtitle')}</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-5">

@@ -1,5 +1,8 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { Languages, ChevronDown, Check } from "lucide-react";
+import {
+  Languages, ChevronDown, Check, Home, ShoppingBag, Package, Gift,
+  Heart, User, ShoppingCart,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import SearchAutocomplete from "@/components/SearchAutocomplete";
 import { useTranslation } from "react-i18next";
@@ -125,16 +128,16 @@ const Navbar = () => {
           {/* Desktop nav links + actions */}
           <div className="hidden md:flex items-center gap-4 lg:gap-6 flex-shrink-0">
             <Link to="/" className={navLinkClass("/")}>
-              <span aria-hidden>🏠</span>{t('nav.home')}
+              <Home className="h-4 w-4" aria-hidden />{t('nav.home')}
             </Link>
             <Link to="/products" className={navLinkClass("/products")}>
-              <span aria-hidden>🛍️</span>{t('nav.products')}
+              <ShoppingBag className="h-4 w-4" aria-hidden />{t('nav.products')}
             </Link>
             <Link to="/combos" className={navLinkClass("/combos")}>
-              <span aria-hidden>🧺</span>{t('nav.combos')}
+              <Package className="h-4 w-4" aria-hidden />{t('nav.combos')}
             </Link>
             <Link to="/offer-zone" className={navLinkClass("/offer-zone", "text-primary")}>
-              <span aria-hidden>🎁</span>{t('nav.offers')}
+              <Gift className="h-4 w-4" aria-hidden />{t('nav.offers')}
             </Link>
 
             {/* "More" Dropdown to free up space */}
@@ -167,31 +170,31 @@ const Navbar = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-xl leading-none"
+                className="h-9 w-9 rounded-full"
                 onClick={() => navigate('/favorites')}
                 title={t('nav.wishlist')}
               >
-                <span aria-hidden>❤️</span>
+                <Heart className="h-5 w-5" aria-hidden />
               </Button>
 
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full text-xl leading-none"
+                className="h-9 w-9 rounded-full"
                 onClick={handleProfileClick}
                 title={t('nav.account')}
               >
-                <span aria-hidden>👤</span>
+                <User className="h-5 w-5" aria-hidden />
               </Button>
 
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 rounded-full relative text-xl leading-none"
+                className="h-9 w-9 rounded-full relative"
                 onClick={() => navigate('/cart')}
                 title={t('nav.cart')}
               >
-                <span aria-hidden>🛒</span>
+                <ShoppingCart className="h-5 w-5" aria-hidden />
                 <CartBadge />
               </Button>
             </div>
@@ -203,27 +206,27 @@ const Navbar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-xl leading-none"
+              className="rounded-full"
               onClick={() => navigate('/favorites')}
             >
-              <span aria-hidden>❤️</span>
+              <Heart className="h-5 w-5" aria-hidden />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full text-xl leading-none"
+              className="rounded-full"
               onClick={handleProfileClick}
               title={t('nav.account')}
             >
-              <span aria-hidden>👤</span>
+              <User className="h-5 w-5" aria-hidden />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="relative rounded-full text-xl leading-none"
+              className="relative rounded-full"
               onClick={() => navigate('/cart')}
             >
-              <span aria-hidden>🛒</span>
+              <ShoppingCart className="h-5 w-5" aria-hidden />
               <CartBadge />
             </Button>
           </div>

@@ -1,7 +1,18 @@
+import { useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useCart } from "@/context/CartContext";
 
 const FloatingWhatsApp = () => {
   const { t } = useTranslation();
+  const { cart } = useCart();
+  const location = useLocation();
+  // AP12: at most one floating action at a time on phones — the cart bar owns
+  // the slot whenever it shows (same visibility rule, mirrored here), so the
+  // two never stack above the bottom nav.
+  const cartBarVisible =
+    cart.reduce((sum, item) => sum + item.quantity, 0) > 0 &&
+    !["/cart", "/billing", "/checkout"].includes(location.pathname);
+  if (cartBarVisible) return null;
   return (
     <a
       href="https://wa.me/919300005040"

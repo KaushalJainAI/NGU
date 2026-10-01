@@ -32,7 +32,8 @@ const ProductCard = ({
   price,
   originalPrice,
   badge,
-  weight = "100g",
+  // AP12: no made-up default — a product with no weight shows none, not "100g".
+  weight,
   itemType,
   variantCount = 1,
 }: ProductCardProps) => {
@@ -83,34 +84,26 @@ const ProductCard = ({
 
   // Some callers pass a bare numeric weight (e.g. 100 from a favorite saved off
   // the catalog list) with no unit. Append "g" so it never renders as just "100".
+  // Missing weight renders nothing (AP12 — never a made-up "100g").
   const displayWeight =
-    typeof weight === "number" || /^\s*\d+(\.\d+)?\s*$/.test(String(weight))
-      ? `${String(weight).trim()}g`
-      : weight;
+    weight === undefined || weight === null || String(weight).trim() === ""
+      ? ""
+      : typeof weight === "number" || /^\s*\d+(\.\d+)?\s*$/.test(String(weight))
+        ? `${String(weight).trim()}g`
+        : weight;
 
-  // Auto-computed discount for the % OFF badge / savings label.
+  // The discount is shown ONCE per card (AP12): the badge below. No separate
+  // "% off" text or "you save" line.
   const discountPercent =
     originalPrice && originalPrice > price
       ? Math.round((1 - price / originalPrice) * 100)
       : 0;
-  // Absolute rupee value saved — shown explicitly on the card.
-  const saveAmount =
-    originalPrice && originalPrice > price ? Math.round(originalPrice - price) : 0;
 
   return (
-    <Card className="group flex h-full flex-col overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-primary/25 hover:shadow-[0_18px_38px_-22px_hsl(var(--primary)/0.55)]">
+    <Card className="group flex h-full flex-col overflow-hidden rounded-lg border border-border/80 bg-card shadow-sm transition-colors duration-300 hover:border-primary/25">
       <Link to={itemType === 'combo' ? `/combos/${id}` : `/products/${id}`} onClick={handleCardClick} className="flex-grow flex flex-col">
         <CardContent className="p-0 flex flex-col h-full">
           <div className="relative overflow-hidden spice-backdrop px-2 pt-3 sm:px-3 sm:pt-4">
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full text-primary/10"
-              viewBox="0 0 320 220"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path d="M-34 152 C 54 81 120 201 202 113 S 305 72 359 105" fill="none" stroke="currentColor" strokeWidth="12" strokeLinecap="round" />
-              <path d="M236 24 C 252 48 275 51 302 40 C 292 66 300 88 322 104 C 293 103 272 116 262 142 C 255 114 238 99 211 96 C 235 82 245 59 236 24Z" fill="currentColor" opacity=".55" />
-            </svg>
             <CachedImage
               src={image}
               alt={name}
@@ -119,7 +112,7 @@ const ProductCard = ({
             />
             {/* Discount badge takes priority; otherwise show the text badge */}
             {discountPercent > 0 ? (
-              <Badge className="absolute z-10 top-1 sm:top-2 left-1 sm:left-2 bg-secondary text-secondary-foreground text-[10px] sm:text-xs px-1.5 sm:px-2 rounded-full animate-pulse-subtle">
+              <Badge className="absolute z-10 top-1 sm:top-2 left-1 sm:left-2 bg-secondary text-secondary-foreground text-[10px] sm:text-xs px-1.5 sm:px-2 rounded-full">
                 {discountPercent}{t('product.off')}
               </Badge>
             ) : badge ? (
@@ -161,16 +154,10 @@ const ProductCard = ({
                     ₹{originalPrice}
                   </span>
                 )}
-                {discountPercent > 0 && (
-                  <span className="text-[10px] sm:text-xs font-bold text-secondary">{discountPercent}{t('product.off')}</span>
-                )}
               </div>
-              {saveAmount > 0 && (
-                <p className="mb-1 text-[11px] sm:text-xs font-semibold text-secondary">
-                  {t('product.youSave', { amount: saveAmount })}
-                </p>
-              )}
-              <p className="text-[11px] sm:text-xs text-muted-foreground">{displayWeight}</p>
+              {displayWeight ? (
+                <p className="text-[11px] sm:text-xs text-muted-foreground">{displayWeight}</p>
+              ) : null}
             </div>
           </div>
         </CardContent>

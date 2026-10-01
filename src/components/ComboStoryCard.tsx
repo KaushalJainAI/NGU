@@ -87,7 +87,7 @@ const ComboStoryCard = ({ combo, reverse = false }: ComboStoryCardProps) => {
             </Badge>
           )}
           {discountPercent > 0 && (
-            <Badge className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold text-secondary-foreground shadow-sm sm:text-xs animate-pulse-subtle">
+            <Badge className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold text-secondary-foreground shadow-sm sm:text-xs">
               {discountPercent}{t('product.off')}
             </Badge>
           )}
@@ -176,9 +176,6 @@ const ComboStoryCard = ({ combo, reverse = false }: ComboStoryCardProps) => {
                 <span className="text-sm text-muted-foreground line-through">₹{mrp}</span>
               )}
             </div>
-            {saveAmount > 0 && (
-              <p className="text-xs font-semibold text-secondary">{t('product.youSave', { amount: saveAmount })}</p>
-            )}
           </div>
 
           <div className="flex items-center gap-2">

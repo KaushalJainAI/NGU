@@ -26,31 +26,30 @@
     "freeShipping": "FREE shipping on orders above ₹499",
     "pure": "100% pure & natural — no fillers",
     "handPacked": "Hand-packed in Barnagar",
-    "trusted": "Trusted by 1.1M+ kitchens"
+    "trusted": "FSSAI Lic. No. 11414730000288"
   },
   "hero": {
     "badge": "Authentic Indian Spices",
-    "headlineStart": "Taste of ",
-    "headlineHighlight": "Tradition",
-    "headlineEnd": " in Every Spice",
-    "description": "Experience the authentic flavours of India with our premium quality spices and masalas. Made with love, delivered with care.",
+    "headlineStart": "Spices ground fresh in ",
+    "headlineHighlight": "Barnagar",
+    "headlineEnd": ", Madhya Pradesh",
+    "description": "Spice blends from our FSSAI-licensed facility in Barnagar — packed fresh, shipped across India. Cash on Delivery available.",
     "learnMore": "Learn More",
-    "statsProducts": "Products",
-    "statsPure": "Pure & Natural",
-    "statsCustomers": "Happy Customers",
     "handPackedFresh": "Hand-packed fresh",
-    "since": "Since 1995"
+    "statsLicensed": "Lic. No. 11414730000288",
+    "statsMadeIn": "Made in Madhya Pradesh",
+    "statsCod": "Cash on Delivery"
   },
   "home": {
     "features": {
-      "freeShippingTitle": "Free Shipping",
-      "freeShippingDesc": "On orders above ₹499",
-      "authenticTitle": "100% Authentic",
-      "authenticDesc": "Pure & natural ingredients",
-      "deliveryTitle": "Quick Delivery",
-      "deliveryDesc": "Fast doorstep delivery",
-      "qualityTitle": "Quality Assured",
-      "qualityDesc": "Premium quality products"
+      "freeShippingTitle": "Free shipping ₹499+",
+      "freeShippingDesc": "On all orders of ₹499 and above",
+      "authenticTitle": "FSSAI licensed",
+      "authenticDesc": "Lic. No. 11414730000288",
+      "deliveryTitle": "COD available",
+      "deliveryDesc": "Cash on Delivery across India",
+      "qualityTitle": "Tracked delivery",
+      "qualityDesc": "3–10 business days, door to door"
     },
     "recommended": {
       "title": "Recommended For You",
@@ -83,39 +82,13 @@
     "testimonials": {
       "title": "Customer Testimonials",
       "subtitle": "What our happy customers say",
-      "verified": "Verified Buyer",
-      "items": [
-        {
-          "name": "Priya Sharma",
-          "review": "The quality of spices is exceptional! My dishes taste so much better now.",
-          "rating": 5
-        },
-        {
-          "name": "Rajesh Kumar",
-          "review": "Authentic flavours and great packaging. Highly recommended!",
-          "rating": 5
-        },
-        {
-          "name": "Anita Patel",
-          "review": "Best masalas I've ever used. Will definitely order again!",
-          "rating": 5
-        }
-      ]
+      "verified": "Verified Buyer"
     },
     "cta": {
-      "title": "Ready to Spice Up Your Kitchen?",
-      "subtitle": "Experience the true essence of Indian tradition with our handcrafted spices. Pure, authentic, and delivered to your doorstep.",
-      "handPacked": "🌿 Hand-packed in small batches",
+      "title": "Cook with Barnagar's own masalas",
+      "subtitle": "FSSAI-licensed facility. Packed fresh, shipped across India — pay online or Cash on Delivery.",
+      "handPacked": "Hand-packed in Barnagar",
       "viewOffers": "View Offers"
-    },
-    "eyebrow": {
-      "forYou": "For You",
-      "justIn": "Just In",
-      "bestsellers": "Bestsellers",
-      "trending": "Trending Now",
-      "explore": "Explore",
-      "valueBundles": "Value Bundles",
-      "lovedByKitchens": "Loved by Kitchens"
     }
   },
   "product": {
@@ -213,7 +186,7 @@
   },
   "trust": {
     "freeShipping": "🚚 Free shipping ₹499+",
-    "happyKitchens": "⭐ 1.1M+ happy kitchens"
+    "happyKitchens": "FSSAI Lic. No. 11414730000288"
   },
   "trustBand": {
     "pureBlends": "Pure blends",
@@ -316,16 +289,6 @@
     "shippingGst": "GST on delivery (18%)",
     "free": "FREE"
   },
-  "promo": {
-    "flat20Title": "Flat 20% off",
-    "flat20Subtitle": "On orders above ₹299",
-    "freeDeliveryTitle": "Free delivery",
-    "freeDeliverySubtitle": "Unlock shipping savings",
-    "comboSaverTitle": "Combo saver",
-    "comboSaverSubtitle": "Extra value on bundles",
-    "copied": "Copied {{code}}",
-    "copyFailed": "Could not copy code"
-  },
   "category": {
     "allSpices": "All Spices",
     "categories": "Categories"
@@ -391,98 +354,53 @@
     "registerHere": "Register here"
   },
   "about": {
-    "badge": "Est. 1995 · Barnagar, India",
+    "badge": "Barnagar, Madhya Pradesh",
     "heroPre": "Every pinch tells a ",
     "heroHighlight": "story",
     "heroPost": "",
-    "heroSubtitle": "From a small family kitchen in Barnagar to a million dining tables — this is the journey of Nidhi Masala, ground one tradition at a time.",
+    "heroSubtitle": "From a family kitchen in Barnagar — ground fresh, packed fresh, shipped across India.",
     "heroCta": "Taste our story",
     "beginEyebrow": "Where it began",
     "beginTitle": "A recipe passed down, never written down",
-    "beginP1": "It started with a simple belief — that the soul of Indian cooking lives in its spices. What began as masalas hand-ground for family and neighbours slowly became a name people across the region trusted.",
-    "beginP2": "Through every season we held on to one promise: authenticity from farm to kitchen, with nothing artificial in between.",
-    "heritageLabel": "years of heritage",
-    "journeyEyebrow": "Our journey",
-    "journeyTitle": "Three decades of flavour",
-    "timeline": [
-      {
-        "year": "1995",
-        "title": "A humble beginning",
-        "text": "Nidhi Grah Udyog began in a small family kitchen in Barnagar, hand-grinding spices the way grandmothers always had."
-      },
-      {
-        "year": "2005",
-        "title": "Growing roots",
-        "text": "Word of our aroma spread across Ujjain. We partnered directly with local farmers to source the finest harvest."
-      },
-      {
-        "year": "2015",
-        "title": "From kitchen to industry",
-        "text": "We modernised our processing while fiercely protecting the traditional recipes that made us who we are."
-      },
-      {
-        "year": "Today",
-        "title": "In a million kitchens",
-        "text": "Over a million families trust Nidhi Masala to bring authentic flavour to their everyday meals."
-      }
-    ],
-    "processEyebrow": "From farm to kitchen",
-    "processTitle": "How every jar is made",
-    "process": [
-      {
-        "title": "Sourced from farms",
-        "text": "Hand-picked harvest, straight from trusted local growers."
-      },
-      {
-        "title": "Slow-roasted",
-        "text": "Roasted in small batches to lock in oils and aroma."
-      },
-      {
-        "title": "Stone-ground",
-        "text": "Ground fine to preserve every note of natural flavour."
-      },
-      {
-        "title": "Sealed fresh",
-        "text": "Packed airtight so the first pinch tastes like the last."
-      }
-    ],
+    "beginP1": "It started in a family kitchen in Barnagar, Madhya Pradesh, grinding fresh masalas for family and neighbours.",
+    "beginP2": "Today every pack comes from our FSSAI-licensed facility (Lic. No. 11414730000288) and ships across India — pay online or Cash on Delivery.",
     "valuesEyebrow": "What we stand for",
     "valuesTitle": "Our Values",
     "values": [
       {
-        "title": "Quality First",
-        "description": "We never compromise on the quality of our products."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "Customer Focused",
-        "description": "Your satisfaction is our top priority, always."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "Made with Love",
-        "description": "Each product is crafted with care and passion."
+        "title": "title",
+        "description": "description"
       },
       {
-        "title": "100% Natural",
-        "description": "Pure ingredients with no artificial additives."
+        "title": "title",
+        "description": "description"
       }
     ],
-    "stats": [
+    "ctaTitle": "Cook with Barnagar's own masalas",
+    "ctaSubtitle": "FSSAI-licensed facility. Packed fresh, shipped across India — pay online or Cash on Delivery.",
+    "ctaButton": "Shop Spices",
+    "facts": [
       {
-        "label": "Premium Products"
+        "value": "FSSAI",
+        "label": "Lic. No. 11414730000288"
       },
       {
-        "label": "Happy Customers"
+        "value": "Barnagar",
+        "label": "Madhya Pradesh, India"
       },
       {
-        "label": "Pure & Natural"
-      },
-      {
-        "label": "Years of Heritage"
+        "value": "COD",
+        "label": "Cash on Delivery across India"
       }
-    ],
-    "ctaTitle": "Add your kitchen to our story",
-    "ctaSubtitle": "Discover handcrafted masalas made the way they were always meant to be.",
-    "ctaButton": "Shop Spices"
+    ]
   },
   "pages": {
     "shipping": {

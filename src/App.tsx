@@ -48,18 +48,16 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
-// Animated routes wrapper
+// Routes wrapper (AP12: the per-route entrance animation is gone — every
+// navigation replayed it, which reads as jank, not polish).
 const AnimatedRoutes = () => {
   const location = useLocation();
   usePageTracking();
 
   return (
-    <div
-      key={location.pathname}
-      className="animate-page-enter"
-    >
+    <div>
       {/* Keyed on the path so navigating away from a crashed page clears the
-          error and renders the next route normally. */}
+           error and renders the next route normally. */}
       <ErrorBoundary key={location.pathname}>
       <Routes location={location}>
         <Route path="/" element={<Index />} />
