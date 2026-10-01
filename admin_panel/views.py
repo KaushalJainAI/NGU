@@ -1,16 +1,13 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import get_object_or_404
 
-from rest_framework import viewsets, permissions, status, mixins
+from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny, SAFE_METHODS
+from rest_framework.permissions import IsAuthenticated, SAFE_METHODS
 from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
 from decimal import Decimal
 
-from .utils import generate_upi_qr_code
 from .models import ReceivableAccount, Coupon, Policy
 from .serializers import (
     ReceivableAccountSerializer, 
@@ -18,9 +15,8 @@ from .serializers import (
     RecentOrderSerializer,
     PolicySerializer
 )
-from cart.models import Cart
 from orders.models import Order
-from products.models import Product, ProductCombo, ProductComboItem
+from products.models import Product, ProductCombo
 from spices_backend.timeranges import range_filter
 
 
@@ -169,7 +165,7 @@ class DashboardViewSet(viewsets.ViewSet):
             DQ(max_usage__isnull=True) | DQ(usage_count__lt=F('max_usage'))
         ).count()
 
-        recent_orders_qs = Order.objects.order_by('-created_at')[:5]
+        recent_orders_qs = Order.objects.order_by('-created_at')[:8]
         recent_orders = RecentOrderSerializer(recent_orders_qs, many=True).data
 
         data = {
@@ -198,7 +194,7 @@ class DashboardViewSet(viewsets.ViewSet):
         from assistant.models import AssistantConversation, AssistantMessage
         from support.models import ContactSubmission
 
-        cache_key = 'ngu:dashboard:actions'
+        cache_key = 'ngu:dashboard:actions:v2'
         cached = cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -319,6 +315,82 @@ class DashboardViewSet(viewsets.ViewSet):
         shipping_cost = today_stats['shipping_cost'] or 0
         delivered_count = today_orders.filter(shipping_cost__gt=0).count()
 
+        # WP5 — "real" sales: an ONLINE order counts only once it is paid; a
+        # COD order counts from placement.
+        from decimal import ROUND_HALF_UP
+        PAISA = Decimal('0.01')
+        TENTH = Decimal('0.1')
+        ONLINE = ['ONLINE', 'razorpay']
+
+        def real_orders(start, end):
+            return (Order.objects
+                    .filter(is_deleted=False, **range_filter('created_at', start, end))
+                    .exclude(status='cancelled')
+                    .exclude(payment_method__in=ONLINE,
+                             payment_status__in=['pending', 'processing', 'failed', 'rejected']))
+
+        def _money(value):
+            return Decimal(str(value or 0)).quantize(PAISA, rounding=ROUND_HALF_UP)
+
+        def _pct(current, earlier):
+            if Decimal(str(earlier or 0)) == 0:
+                return None
+            cur = Decimal(str(current or 0))
+            prev = Decimal(str(earlier or 0))
+            return float(((cur - prev) / prev * 100).quantize(TENTH, rounding=ROUND_HALF_UP))
+
+        real_today_qs = real_orders(today, today)
+        today_sales = _money(real_today_qs.aggregate(s=Sum('total_amount'))['s'])
+        today_real_orders = real_today_qs.count()
+        if today_real_orders:
+            today_aov = (today_sales / today_real_orders).quantize(PAISA, rounding=ROUND_HALF_UP)
+        else:
+            today_aov = Decimal('0.00')
+        today_online_received = _money(
+            real_today_qs.filter(payment_method__in=ONLINE).aggregate(s=Sum('total_amount'))['s'])
+        today_cod_booked = _money(
+            real_today_qs.filter(payment_method='COD').aggregate(s=Sum('total_amount'))['s'])
+        last_week_day = today - timedelta(days=7)
+        last_week_same_day_sales = _money(
+            real_orders(last_week_day, last_week_day).aggregate(s=Sum('total_amount'))['s'])
+        today_sales_delta_pct = _pct(today_sales, last_week_same_day_sales)
+        mtd_sales = _money(real_orders(month_start, today).aggregate(s=Sum('total_amount'))['s'])
+        prev_month_last = month_start - timedelta(days=1)
+        prev_month_start = prev_month_last.replace(day=1)
+        prev_mtd_end = prev_month_start + timedelta(days=(today - month_start).days)
+        if prev_mtd_end > prev_month_last:
+            prev_mtd_end = prev_month_last
+        prev_mtd_sales = _money(
+            real_orders(prev_month_start, prev_mtd_end).aggregate(s=Sum('total_amount'))['s'])
+        mtd_sales_delta_pct = _pct(mtd_sales, prev_mtd_sales)
+        orders_unshipped_aged = Order.objects.filter(
+            is_deleted=False, status__in=['confirmed', 'processing'],
+            created_at__lt=now - timedelta(hours=48),
+        ).filter(Q(payment_method='COD') | Q(payment_status='paid')).count()
+        out_of_stock_count = Product.objects.filter(is_active=True, stock__lte=0).count()
+        invoices_missing = Order.objects.filter(
+            is_deleted=False, invoice__isnull=True,
+        ).exclude(status='cancelled').filter(
+            Q(payment_status__in=['paid', 'refunded'])
+            | Q(status__in=['shipped', 'delivering', 'delivered'])).count()
+        failed_payments_today = Order.objects.filter(
+            is_deleted=False, **range_filter('created_at', today, today),
+            payment_method__in=ONLINE, payment_status__in=['failed', 'rejected']).count()
+        from orders.gst_reports import unclassified_products
+        unclassified_hsn_count = unclassified_products().count()
+        week_start = today - timedelta(days=6)
+        from orders.models import OrderItem
+        top_rows = (OrderItem.objects
+                    .filter(order__in=real_orders(week_start, today))
+                    .values('product_name')
+                    .annotate(units=Sum('quantity'), revenue=Sum('final_price'))
+                    .order_by('-revenue')[:5])
+        top_products_7d = [
+            {'name': r['product_name'], 'units': r['units'],
+             'revenue': str(_money(r['revenue']))}
+            for r in top_rows
+        ]
+
         data = {
             'orders_to_confirm': confirmable.count(),
             'orders_to_ship': to_ship.count(),
@@ -388,6 +460,23 @@ class DashboardViewSet(viewsets.ViewSet):
             # isn't. Carry it into the books that do the return.
             'mtd_gateway_fee': str(mtd_gateway_fee),
             'mtd_gateway_tax': str(mtd_gateway_tax),
+            # WP5 — rebuilt dashboard: real (paid/booked) sales with comparisons.
+            'today_sales': str(today_sales),
+            'today_real_orders': today_real_orders,
+            'today_aov': str(today_aov),
+            'today_online_received': str(today_online_received),
+            'today_cod_booked': str(today_cod_booked),
+            'last_week_same_day_sales': str(last_week_same_day_sales),
+            'today_sales_delta_pct': today_sales_delta_pct,
+            'mtd_sales': str(mtd_sales),
+            'prev_mtd_sales': str(prev_mtd_sales),
+            'mtd_sales_delta_pct': mtd_sales_delta_pct,
+            'orders_unshipped_aged': orders_unshipped_aged,
+            'out_of_stock_count': out_of_stock_count,
+            'invoices_missing': invoices_missing,
+            'failed_payments_today': failed_payments_today,
+            'unclassified_hsn_count': unclassified_hsn_count,
+            'top_products_7d': top_products_7d,
         }
         # Deprecated aliases, kept only so a panel build from before the
         # "collected, not payable" rename keeps rendering during a rolling
@@ -592,7 +681,7 @@ class AdminCustomerViewSet(viewsets.ReadOnlyModelViewSet):
     throttle_classes = [UserRateThrottle]
 
     def get_queryset(self):
-        from django.db.models import Count, Sum, Q as DQ
+        from django.db.models import Count, F, Sum, Q as DQ
         from django.contrib.auth import get_user_model
 
         User = get_user_model()
@@ -603,7 +692,9 @@ class AdminCustomerViewSet(viewsets.ReadOnlyModelViewSet):
             total_spent=Sum('orders__total_amount', filter=not_cancelled),
             # How much of that was GST passed through to the government, so the
             # "best customer" figure can be read net of tax when that matters.
-            total_gst=Sum('orders__tax', filter=not_cancelled),
+            # Goods GST + delivery GST: `tax` alone misses every delivery fee.
+            total_gst=Sum(F('orders__tax') + F('orders__shipping_tax'),
+                          filter=not_cancelled),
         ).order_by('-created_at')
 
         search = (self.request.query_params.get('search') or '').strip()

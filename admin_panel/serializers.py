@@ -61,10 +61,13 @@ class RecentOrderSerializer(serializers.ModelSerializer):
     customerName = serializers.SerializerMethodField()
     totalAmount = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2)
     createdAt = serializers.DateTimeField(source='created_at')
-    
+    paymentMethod = serializers.CharField(source='payment_method')
+    paymentStatus = serializers.CharField(source='payment_status')
+
     class Meta:
         model = Order
-        fields = ['id', 'customerName', 'totalAmount', 'status', 'createdAt']
+        fields = ['id', 'customerName', 'totalAmount', 'status', 'createdAt',
+                  'paymentMethod', 'paymentStatus']
     
     def get_customerName(self, obj):
         if obj.user:

@@ -632,3 +632,77 @@ class TestSendReportEndpoint:
     def test_requires_staff(self, authenticated_client):
         resp = authenticated_client.post('/api/dashboard/send-report/', {'type': 'weekly'}, format='json')
         assert resp.status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Dashboard rebuild (WP5)
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.django_db
+class TestDashboardRebuild:
+    def test_unpaid_online_excluded_cod_included(self, admin_client, test_user):
+        # An unpaid ONLINE checkout is not a sale yet; a COD placement is.
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='ONLINE', payment_status='pending',
+            subtotal=Decimal('999'), total_amount=Decimal('999'), status='pending',
+        )
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='COD', payment_status='pending',
+            subtotal=Decimal('100'), total_amount=Decimal('100'), status='pending',
+        )
+        resp = admin_client.get('/api/dashboard/actions/')
+        assert resp.status_code == 200
+        assert Decimal(resp.data['today_sales']) == Decimal('100.00')
+        assert resp.data['today_real_orders'] == 1
+        assert Decimal(resp.data['today_cod_booked']) == Decimal('100.00')
+        assert Decimal(resp.data['today_online_received']) == Decimal('0.00')
+
+    def test_today_sales_delta_none_when_last_week_zero(self, admin_client, test_user):
+        # No orders 7 days ago, so there is nothing to compare against.
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='COD', payment_status='pending',
+            subtotal=Decimal('50'), total_amount=Decimal('50'), status='pending',
+        )
+        resp = admin_client.get('/api/dashboard/actions/')
+        assert resp.status_code == 200
+        assert Decimal(resp.data['last_week_same_day_sales']) == Decimal('0.00')
+        assert resp.data['today_sales_delta_pct'] is None
+
+    def test_invoices_missing_counts_paid_order(self, admin_client, test_user):
+        # Paid but never invoiced: the bill still has to be raised.
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='ONLINE', payment_status='paid',
+            subtotal=Decimal('100'), total_amount=Decimal('100'), status='confirmed',
+        )
+        resp = admin_client.get('/api/dashboard/actions/')
+        assert resp.status_code == 200
+        assert resp.data['invoices_missing'] == 1
+
+    def test_customer_total_gst_includes_shipping_tax(self, admin_client, test_user):
+        # Goods GST + delivery GST both count as tax collected on the customer.
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='COD', subtotal=Decimal('100'),
+            tax=Decimal('10'), shipping_tax=Decimal('5'),
+            total_amount=Decimal('115'), status='pending',
+        )
+        resp = admin_client.get('/api/admin-customers/', {'search': test_user.email})
+        assert resp.status_code == 200
+        row = next(r for r in resp.data['results'] if r['email'] == test_user.email)
+        assert Decimal(row['total_gst']) == Decimal('15.00')
+
+    def test_recent_orders_have_payment_fields(self, admin_client, test_user):
+        Order.objects.create(
+            user=test_user, shipping_address='x', phone_number='1',
+            payment_method='COD', payment_status='pending',
+            subtotal=Decimal('10'), total_amount=Decimal('10'), status='pending',
+        )
+        resp = admin_client.get('/api/dashboard/')
+        assert resp.status_code == 200
+        assert len(resp.data['recentOrders']) >= 1
+        row = resp.data['recentOrders'][0]
+        assert 'paymentMethod' in row and 'paymentStatus' in row
