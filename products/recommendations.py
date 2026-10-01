@@ -212,9 +212,12 @@ def build_suggestions(query: str, limit: int) -> Dict[str, Any]:
         ).only('id', 'name', 'slug', 'price', 'discount_price', 'image', 'thumbnail')
     } if product_ids else {}
     combos = {
+        # NOTE: no 'price' here — ProductCombo has no price COLUMN (its MRP is a
+        # @property derived from components); .only('price') raises
+        # FieldDoesNotExist the moment a combo matches (AP1/A1).
         c.id: c for c in ProductCombo.objects.filter(
             id__in=combo_ids, is_active=True
-        ).only('id', 'name', 'slug', 'price', 'discount_price', 'image', 'thumbnail')
+        ).only('id', 'name', 'slug', 'discount_price', 'image', 'thumbnail')
     } if combo_ids else {}
 
     suggestions = []
