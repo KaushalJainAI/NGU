@@ -69,6 +69,31 @@ def _blacklist_quietly(raw_refresh):
         pass
 
 
+def _blacklist_all_for(user):
+    """Invalidate every outstanding refresh token for a user (AP3/S4).
+
+    Covers BOTH customer and admin cookies because OutstandingToken covers all
+    scopes. Never raises — callers (password change/reset) must not fail after
+    the password was already written. Access tokens are stateless and live out
+    their remaining minutes; the refresh path (and both session cookies after
+    rotation) is what dies here.
+    """
+    try:
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken,
+            OutstandingToken,
+        )
+    except ImportError:  # pragma: no cover - blacklist app always installed
+        return
+    from django.utils import timezone
+    for token in OutstandingToken.objects.filter(user=user, blacklistedtoken__isnull=True):
+        try:
+            if token.expires_at > timezone.now():
+                BlacklistedToken.objects.get_or_create(token=token)
+        except Exception:  # noqa: BLE001
+            continue
+
+
 def admin_tokens_for(user):
     refresh = CustomTokenObtainPairSerializer.get_token(user)
     refresh['scope'] = ADMIN_SCOPE          # set BEFORE reading .access_token
@@ -147,6 +172,10 @@ class ChangePasswordView(APIView):
         
         user.set_password(new_password)
         user.save()
+        # AP3/S4: a password change evicts every other session (customer AND
+        # admin). The caller's own cookies are left alone — they just proved
+        # they know the password, and the next refresh re-authenticates.
+        _blacklist_all_for(user)
         return Response({'detail': 'Password updated successfully'}, status=status.HTTP_200_OK)
 
 
@@ -365,7 +394,11 @@ class PasswordResetConfirmView(APIView):
             # Valid OTP, update password
             user.set_password(new_password)
             user.save()
-            
+
+            # AP3/S4: a reset evicts every session before the reset token is
+            # cleared, so whoever was in before no longer is.
+            _blacklist_all_for(user)
+
             # Clear reset token
             otp_record.reset_token = None
             otp_record.save()
