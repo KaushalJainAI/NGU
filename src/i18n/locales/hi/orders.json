@@ -109,6 +109,8 @@
     "phoneNumber": "फ़ोन नंबर",
     "trackingNumber": "ट्रैकिंग नंबर",
     "trackingPlaceholder": "कूरियर का ट्रैकिंग नंबर भरें",
+    "courierPlaceholder": "कूरियर (जैसे Delhivery)",
+    "trackingUrlPlaceholder": "ट्रैकिंग लिंक (https://…)",
     "trackingHint": "ट्रैकिंग नंबर सेव करने पर ग्राहक को ईमेल जाता है कि उसका ऑर्डर भेज दिया गया है।",
     "deliveryBill": "डिलीवरी बिल (सिर्फ़ एडमिन के लिए)",
     "viewBill": "बिल देखें",

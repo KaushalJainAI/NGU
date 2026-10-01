@@ -102,6 +102,8 @@ const Orders = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewingOrder, setViewingOrder] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState('');
+  const [courierInput, setCourierInput] = useState('');
+  const [trackingUrlInput, setTrackingUrlInput] = useState('');
   const [savingTracking, setSavingTracking] = useState(false);
   const [shippingCostInput, setShippingCostInput] = useState('');
   const [savingShippingCost, setSavingShippingCost] = useState(false);
@@ -311,10 +313,12 @@ const Orders = () => {
     if (!digits) return null;
     const withCc = digits.length === 10 ? `91${digits}` : digits;
     const tracking = (order.tracking_number || '').trim();
+    const trackingUrl = (order.tracking_url || '').trim();
     let text: string;
     if (order.status === 'shipped' || order.status === 'delivering') {
       text = `Hello! Your Nidhi Masala order ${order.order_number} is on its way.` +
-        (tracking ? ` Tracking ID: ${tracking}.` : '') + ' Thank you for shopping with us!';
+        (tracking ? ` Tracking ID: ${tracking}.` : '') +
+        (trackingUrl ? ` Track here: ${trackingUrl}` : '') + ' Thank you for shopping with us!';
     } else if (order.status === 'delivered') {
       text = `Hello! Your Nidhi Masala order ${order.order_number} has been delivered. We hope you enjoy it!`;
     } else {
@@ -439,6 +443,8 @@ const Orders = () => {
   const openViewDialog = (order: Order) => {
     setViewingOrder(order);
     setTrackingInput(order.tracking_number || '');
+    setCourierInput(order.courier_name || '');
+    setTrackingUrlInput(order.tracking_url || '');
     // 0 means "not recorded yet" — show it blank so the placeholder can prompt.
     setShippingCostInput(
       Number(order.shipping_cost ?? 0) > 0 ? String(order.shipping_cost) : '',
@@ -517,14 +523,25 @@ const Orders = () => {
 
   const handleSaveTracking = async () => {
     if (!viewingOrder) return;
-    const value = trackingInput.trim();
-    if (value === (viewingOrder.tracking_number || '')) return;
+    const tracking = trackingInput.trim();
+    const courier = courierInput.trim();
+    const url = trackingUrlInput.trim();
+    if (
+      tracking === (viewingOrder.tracking_number || '') &&
+      courier === (viewingOrder.courier_name || '') &&
+      url === (viewingOrder.tracking_url || '')
+    ) return;
     try {
       setSavingTracking(true);
-      const { data } = await updateOrder(viewingOrder.id, { tracking_number: value });
+      // ONE call for all three: two calls would send the customer two emails.
+      const { data } = await updateOrder(viewingOrder.id, {
+        tracking_number: tracking,
+        courier_name: courier,
+        tracking_url: url,
+      });
       toast({
         title: t('products.successTitle'),
-        description: value ? t('orders.trackingSaved') : t('orders.trackingCleared'),
+        description: tracking || url ? t('orders.trackingSaved') : t('orders.trackingCleared'),
       });
       setViewingOrder(data);
       invalidate(['orders'], ['dashboard'], ['products']);
@@ -1225,18 +1242,35 @@ const Orders = () => {
 
               <div>
                 <Label className="text-muted-foreground">{t('orders.trackingNumber')}</Label>
-                <div className="flex gap-2 mt-1">
+                <div className="flex flex-col gap-2 mt-1">
                   <Input
                     placeholder={t('orders.trackingPlaceholder')}
                     value={trackingInput}
                     onChange={(e) => setTrackingInput(e.target.value)}
                   />
-                  <Button
-                    onClick={handleSaveTracking}
-                    disabled={savingTracking || trackingInput.trim() === (viewingOrder.tracking_number || '')}
-                  >
-                    {savingTracking ? t('common.saving') : t('common.save')}
-                  </Button>
+                  <Input
+                    placeholder={t('orders.courierPlaceholder')}
+                    value={courierInput}
+                    onChange={(e) => setCourierInput(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="url"
+                      placeholder={t('orders.trackingUrlPlaceholder')}
+                      value={trackingUrlInput}
+                      onChange={(e) => setTrackingUrlInput(e.target.value)}
+                    />
+                    <Button
+                      onClick={handleSaveTracking}
+                      disabled={savingTracking || (
+                        trackingInput.trim() === (viewingOrder.tracking_number || '') &&
+                        courierInput.trim() === (viewingOrder.courier_name || '') &&
+                        trackingUrlInput.trim() === (viewingOrder.tracking_url || '')
+                      )}
+                    >
+                      {savingTracking ? t('common.saving') : t('common.save')}
+                    </Button>
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{t('orders.trackingHint')}</p>
               </div>

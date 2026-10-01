@@ -109,6 +109,8 @@
     "phoneNumber": "Phone Number",
     "trackingNumber": "Tracking Number",
     "trackingPlaceholder": "Enter courier tracking number",
+    "courierPlaceholder": "Courier (e.g. Delhivery)",
+    "trackingUrlPlaceholder": "Tracking link (https://…)",
     "trackingHint": "Saving a tracking number emails the customer that their order has shipped.",
     "deliveryBill": "Delivery Bill (admin only)",
     "viewBill": "View Bill",

@@ -142,6 +142,8 @@ export interface Order {
   payment_status?: string;
   payment?: OrderPayment | null;
   tracking_number?: string;
+  courier_name?: string;
+  tracking_url?: string;
   coupon_code?: string;
   created_at: string;
   updated_at: string;
@@ -243,7 +245,8 @@ export const getOrder = (id: number | string) =>
  *   money that never came in.
  */
 export type OrderUpdatePayload = Partial<
-  Pick<Order, 'status' | 'tracking_number' | 'shipping_address' | 'phone_number'
+  Pick<Order, 'status' | 'tracking_number' | 'courier_name' | 'tracking_url'
+    | 'shipping_address' | 'phone_number'
     | 'payment_status' | 'shipping_cost'>
 > & {
   refund_note?: string;
