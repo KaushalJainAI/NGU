@@ -47,6 +47,11 @@ MAX_OUTPUT_TOKENS = int(os.getenv('ASSISTANT_MAX_OUTPUT_TOKENS', '1000'))
 # checkout). One retry only — more retries multiply tail latency for everyone.
 LLM_REQUEST_TIMEOUT = int(os.getenv('ASSISTANT_LLM_TIMEOUT', '20'))
 LLM_MAX_RETRIES = 1
+# How hard a reasoning model thinks before it answers (low/medium/high, etc. —
+# whatever the model accepts). Unset = the provider's default. Thinking tokens
+# are billed as output and count against MAX_OUTPUT_TOKENS and the timeout
+# above, so raising this means raising those two as well.
+REASONING_EFFORT = os.getenv('ASSISTANT_REASONING_EFFORT', '').strip().lower()
 
 # --- Conversation memory -----------------------------------------------------
 # The assistant remembers as much of the thread as fits under a token budget,
@@ -85,6 +90,16 @@ def _estimate_tokens(text):
     return (len(text) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN
 
 
+def _openrouter_body():
+    """Extra request-body params for the assistant's OpenRouter calls: the
+    shared provider pin, plus the reasoning effort when one is configured."""
+    from spices_backend.llm import openrouter_extra_body
+    body = dict(openrouter_extra_body())
+    if REASONING_EFFORT:
+        body['reasoning'] = {'effort': REASONING_EFFORT}
+    return body
+
+
 def _build_llm():
     """Init the chat model from env. Returns None on failure (assistant degrades).
 
@@ -102,14 +117,13 @@ def _build_llm():
     try:
         if provider == 'openrouter':
             from langchain_openai import ChatOpenAI
-            from spices_backend.llm import openrouter_extra_body
             return ChatOpenAI(
                 model=model_name,
                 openai_api_key=api_key,
                 openai_api_base=os.getenv('OPENROUTER_API_BASE', 'https://openrouter.ai/api/v1'),
                 temperature=0.2,
                 max_tokens=MAX_OUTPUT_TOKENS,
-                extra_body=openrouter_extra_body(),
+                extra_body=_openrouter_body(),
                 request_timeout=LLM_REQUEST_TIMEOUT,
                 max_retries=LLM_MAX_RETRIES,
             )

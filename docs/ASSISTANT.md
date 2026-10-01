@@ -487,6 +487,12 @@ LLM_MODEL=minimax/minimax-m2.5
 # Optional: stronger model for the assistant
 ASSISTANT_MODEL_PROVIDER=openrouter
 ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
+
+# Optional: how hard a reasoning model thinks (sent to OpenRouter as
+# reasoning.effort). Unset = provider default. Thinking tokens are billed as
+# output and count against ASSISTANT_MAX_OUTPUT_TOKENS and ASSISTANT_LLM_TIMEOUT,
+# so raise those two with it or replies truncate / time out.
+ASSISTANT_REASONING_EFFORT=high
 ```
 
 ---
