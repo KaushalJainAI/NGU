@@ -179,3 +179,8 @@ order containing the item; `is_hidden` is toggled by admins via `POST
 8. **Multilingual columns** — `django-modeltranslation` adds per-language columns for `Product` and `Category` translatable fields. Empty translations fall back to English automatically.
 9. **Validated `ImageField`s** — every image column (category, product, product-gallery, combo, user profile picture) shares one validator chain from `spices_backend/validators.py`: size cap, extension allow-list (no `.svg`), and a Pillow content-verify on fresh uploads. See `docs/ARCHITECTURE.md` §Security. Wired in by validator-only migrations `products/0034` and `users/0009`.
 10. **Product on multiple shelves** — `Product.category` is the canonical shelf; `Product.extra_categories` (M2M to `Category`) lists the same product under additional shelves without duplicating the row.
+
+## Improvement plan notes (2026-10-01)
+
+- orders.CreditNote (reason refund/cancellation, CN/<FY>/<seq> via InvoiceCounter), Order.place_of_supply_is_fallback, Order.courier_name/	racking_url, dmin_panel.Expense.
+

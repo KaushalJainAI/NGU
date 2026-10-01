@@ -528,3 +528,10 @@ best-effort on the `Product.stock` side — it is clamped at 0 if it would go ne
 **Combos never have stock decremented** — availability is `is_active` only. Attempting to
 call `.stock` on a combo inside a batch update raises `FieldDoesNotExist`, which is why
 combo lines are explicitly excluded from the decrement loop.
+
+## Improvement plan notes (2026-10-01)
+
+- Order.courier_name + Order.tracking_url are set on the admin PATCH (single call with the tracking number, so one shipped email). The shipped email names the courier and links the tracking URL; My Orders shows both.
+- Recording a refund (status=refunded + ecord_refund) emails the customer via send_refund_recorded_email with the recorded amount, and issues a CN/<FY>/<seq> credit note (orders.CreditNote, reason refund/cancellation). Cancelling an invoiced unpaid order issues a cancellation note instead.
+- place_of_supply_state_code cannot change once an invoice exists (400).
+
