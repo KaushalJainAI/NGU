@@ -1,0 +1,251 @@
+
+
+services:
+  # Redis Cache - Required for caching
+  redis:
+    image: redis:7-alpine
+    container_name: ngu-redis
+    restart: unless-stopped
+    # 256mb (up from 50mb) gives headroom so the anonymous analytics counters
+    # aren't evicted under memory pressure before rollup_analytics drains them to
+    # the DB (now every 5 min via the scheduler). volatile-lru only evicts keys
+    # that carry a TTL, so any non-expiring operational key is never dropped.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - ngu-network
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Self-hosted speech-to-text (whisper.cpp, small-q5) for assistant voice input
+  whisper:
+    image: kaushaljainai/ngu-whisper:${IMAGE_TAG:-latest}
+    container_name: ngu-whisper
+    restart: unless-stopped
+    networks:
+      - ngu-network
+    deploy:
+      resources:
+        limits:
+          # Small model is ~190MB, but per-request compute buffers + decode push
+          # peak RSS well past 500MB during inference — the 500MB cap OOM-killed
+          # it mid-transcription. 1G (backed by the instance's 2G swap) is safe.
+          memory: 1G
+
+  # Django Backend API
+  backend:
+    image: kaushaljainai/ngu-backend:${IMAGE_TAG:-latest}
+    container_name: ngu-backend
+    restart: unless-stopped
+    env_file:
+      - .env.backend
+    environment:
+      # Redis is always internal
+      - REDIS_URL=redis://redis:6379/0
+      # Self-hosted voice transcription (internal whisper container)
+      - USE_SELF_HOSTED_STT=${USE_SELF_HOSTED_STT:-True}
+      - WHISPER_URL=http://whisper:8080/inference
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+      # Admin-only delivery bills (PRIVATE_MEDIA_ROOT) — must persist across
+      # container recreation; never served publicly, only streamed via the
+      # staff-gated delivery_bill endpoint.
+      - private_media_data:/app/private_media
+    ports:
+      - "127.0.0.1:8000:8000" # Exposing for Host Nginx proxying
+    networks:
+      - ngu-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background job scheduler — runs payment reconciliation (L3 self-healing:
+  # recover missed webhooks, auto-cancel + restock abandoned checkouts) and the
+  # analytics rollups that keep the admin Insights dashboard live. Single
+  # dedicated process so jobs never double-fire. Shares the backend image + env.
+  scheduler:
+    image: kaushaljainai/ngu-backend:${IMAGE_TAG:-latest}
+    container_name: ngu-scheduler
+    restart: unless-stopped
+    command: python manage.py run_scheduler
+    env_file:
+      - .env.backend
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Customer-facing Frontend
+  frontend:
+    image: kaushaljainai/ngu-frontend:${IMAGE_TAG:-latest}
+    container_name: ngu-frontend
+    restart: unless-stopped
+    environment:
+      # Runtime config injected at container start (window.APP_CONFIG) — change a
+      # value here and `up -d frontend`, NO image rebuild needed. Any left unset
+      # falls back to the value baked into the image at build time.
+      # KEEP API_URL relative (/api) so requests stay same-origin on BOTH domains;
+      # an absolute URL makes the other domain cross-site and drops the auth cookie.
+      - API_URL=${FRONTEND_API_URL:-/api}
+      - SHIPPING_CHARGE=${SHIPPING_CHARGE:-}
+      - FREE_SHIPPING_THRESHOLD=${FREE_SHIPPING_THRESHOLD:-}
+      - DEFAULT_TAX_RATE=${DEFAULT_TAX_RATE:-}
+      - MAX_ONLINE_ORDER_TOTAL=${MAX_ONLINE_ORDER_TOTAL:-}
+    ports:
+      - "127.0.0.1:3000:80" # Host Nginx will handle 80/443 and proxy here
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Admin Panel
+  admin-panel:
+    image: kaushaljainai/ngu-admin:${IMAGE_TAG:-latest}
+    container_name: ngu-admin-panel
+    restart: unless-stopped
+    environment:
+      # API URL injected at container start (runtime config) — change here, no rebuild needed
+      - API_URL=${ADMIN_API_URL:-/api}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+    ports:
+      - "127.0.0.1:3001:80" # Exposing for Host Nginx proxying at /panel/
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL 17 — migrated ON-BOX from the former dedicated DB instance
+  # (13.201.33.243) on 2026-09-02. Tuned for a 1.9GB / 2 vCPU host: the whole
+  # database is ~16MB, so it lives in page cache; shared_buffers is deliberately
+  # modest to leave room for gunicorn, which runs close to its own cap.
+  postgres:
+    image: postgres:17
+    container_name: ngu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: KaushalJainAI
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing - see ~/NGU/.env}
+      POSTGRES_DB: ngu_db
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=100
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      # Loopback only. Never expose 5432 publicly.
+      - "127.0.0.1:5432:5432"
+    networks:
+      - ngu-network
+    deploy:
+      resources:
+        limits:
+          memory: 420M
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U KaushalJainAI -d ngu_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # PgBouncer — transaction pooling, same settings as the old DB box.
+  # NOT published on a host port any more: only the backend/scheduler containers
+  # reach it, over the internal ngu-network. This is a security improvement over
+  # the two-box setup, where 6432 was exposed on the VPC interface.
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: ngu-pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: KaushalJainAI
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing - see ~/NGU/.env}
+      DB_NAME: ngu_db
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "25"
+      LISTEN_PORT: "6432"
+    networks:
+      - ngu-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  ngu-network:
+    driver: bridge
+
+volumes:
+  media_data:
+  static_data:
+  redis_data:
+  private_media_data:
+  pg_data:

@@ -4,17 +4,17 @@ A production-ready Django REST Framework backend for the NGU Spices e-commerce p
 
 ## ✨ Features
 
-- **JWT Authentication** - Secure token-based authentication
-- **User Management** - Registration, profiles, addresses
-- **Product Catalog** - Products, combos, categories with S3 image storage
-- **Shopping Cart** - Persistent cart with product/combo support
-- **Orders** - Full order lifecycle with status tracking
-- **Payments** - Razorpay integration with COD support
-- **Reviews** - Product ratings and reviews
-- **Support Chat** - Real-time customer support per order
-- **Admin Dashboard** - Sales stats, order management, coupons
-- **Redis Caching** - Fast product/category caching
-- **AWS S3** - Cloud storage for media files
+- **Authentication** - JWT in HttpOnly cookies, Google sign-in, email verification, separate admin session
+- **Product Catalog** - Products sold by size (variants), combo packs, categories, homepage sections, six languages
+- **Search** - Fuzzy search with offline-generated Hindi/Hinglish synonyms
+- **Shopping Cart** - Persistent cart for products and combos, favorites
+- **Orders** - Stock-safe checkout, coupons, cancellation, refunds, courier tracking
+- **Payments** - Razorpay (browser verify, webhook and timed reconciliation) and cash on delivery
+- **GST** - Numbered tax invoices, credit notes, HSN codes, GST reports
+- **Reviews** - Verified-purchase ratings with admin moderation
+- **Assistant** - Tool-calling AI shopping assistant with voice input and human hand-off
+- **Analytics** - Sales and behaviour roll-ups, owner email digests
+- **Admin APIs** - Dashboard, coupons, bulk product edits, CSV import/export, expenses
 
 ## 🛠️ Tech Stack
 
@@ -22,45 +22,60 @@ A production-ready Django REST Framework backend for the NGU Spices e-commerce p
 |------------|---------|
 | Django 5.2 | Web framework |
 | Django REST Framework | API |
-| PostgreSQL (RDS) | Database |
-| Redis | Caching |
-| AWS S3 | File storage |
+| PostgreSQL 17 + PgBouncer | Database and connection pool |
+| Redis | Caching, rate limits, counters |
+| Cloudinary | Media storage (product and profile images) |
 | Razorpay | Payments |
+| OpenRouter | Chat model and voice transcription |
+| APScheduler | Timed jobs (`manage.py run_scheduler`) |
 | Docker | Containerization |
 
 ## 📦 Project Structure
 
 ```
 Backend/
-├── spices_backend/     # Django settings
+├── spices_backend/     # Settings, URLs, middleware, limits, throttles
 ├── users/              # Authentication & profiles
-├── products/           # Products, combos, categories
-├── cart/               # Shopping cart
-├── orders/             # Order management
-├── payments/           # Payment processing
+├── products/           # Products, variants, combos, categories, search
+├── cart/               # Shopping cart, favorites
+├── orders/             # Orders, pricing, invoices, refunds, credit notes, GST
+├── payments/           # Razorpay, payment audit trail, scheduler command
 ├── reviews/            # Product reviews
-├── support/            # Chat support
-├── admin_panel/        # Dashboard & policies
+├── assistant/          # AI shopping assistant, voice transcription
+├── analytics/          # Events, roll-ups, insights
+├── admin_panel/        # Dashboard, coupons, expenses, owner emails
+├── support/            # Contact form
+├── docs/               # Reference documentation
 ├── Dockerfile          # Container config
 └── requirements.txt    # Dependencies
 ```
+
+This folder is part of the NGU repository. The design is explained, with
+diagrams, in [`../learning/`](../learning/README.md).
 
 ## 📚 Official Documentation
 
 Detailed system documentation is located in the [`docs/`](./docs/) directory:
 
 **General Setup:**
+- [Local development](./LOCAL_DEV.md)
 - [Setup Guide](./docs/SETUP-GUIDE.md)
+- [API map: every route](./docs/API.md)
 - [API Permissions](./docs/API_PERMISSIONS.md)
 - [Architecture Details](./docs/ARCHITECTURE.md)
 
 **System Components:**
 - [Database Schema](./docs/DATABASE_SCHEMA.md)
-- [AI Search Engine](./docs/AI_SEARCH_ENGINE.md)
+- [Order Lifecycle](./docs/ORDER_LIFECYCLE.md)
 - [Payments Integration](./docs/PAYMENTS_INTEGRATION.md)
+- [Authentication](./docs/AUTH.md)
+- [Cart](./docs/CART.md)
+- [AI Search Engine](./docs/AI_SEARCH_ENGINE.md)
+- [Assistant](./docs/ASSISTANT.md)
+- [Analytics](./docs/ANALYTICS.md)
 - [Caching Strategy](./docs/CACHING_STRATEGY.md)
-- [S3 Storage Config](./docs/S3_STORAGE.md)
-- [Support Chat System](./docs/SUPPORT_CHAT.md)
+- [Multilingual Content](./docs/MULTILINGUAL.md)
+- [Storage Config](./docs/S3_STORAGE.md)
 
 ## 🚀 Quick Start
 

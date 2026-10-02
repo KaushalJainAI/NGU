@@ -1,0 +1,96 @@
+# NGU monorepo — root ignore rules.
+# Backend/, Frontend/nidhi-brand-forge/ and Admin Panel/e-commerce-command-center/
+# keep their own .gitignore for what is specific to them; git applies both.
+
+# ── Secrets & credentials ────────────────────────────────────────────
+# Covers .env, .env.local/.production/.staging/.dev, .env.backend,
+# backend_remote.env, *.env.bak… Example/template files are re-included below.
+.env
+.env.*
+*.env
+*.env.bak*
+!.env.example
+!.env.backend.example
+!*.env.example
+*.pem
+*.key
+*.pub
+*.cert
+*.crt
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*accessKey*
+*secret*.json
+/*.csv
+
+# ── Personal / business documents at the root ────────────────────────
+# GST certificate, catalogue and the generated Hindi guides: binary, and some
+# are private. The Markdown sources of the guides ARE tracked.
+/*.pdf
+
+# ── Local-only folders ───────────────────────────────────────────────
+# The three pre-monorepo git folders (branches, stashes, worktree links).
+.git-backup/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+backups/
+scratch/
+design-concepts/
+
+# ── Marketing assets (binary; screenshots show real store data) ──────
+/introduction reel/admin_panel_screenshots/
+/introduction reel/*.jpg
+/introduction reel/*.png
+/introduction reel/*.pdf
+
+# ── Test artefacts ───────────────────────────────────────────────────
+# (testing/.gitignore covers videos, transcripts and node_modules.)
+testing/reports/live/test-account.json
+playwright-report/
+test-results/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Databases & dumps ────────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.dump
+*.dump.gz
+
+# ── Dependencies ─────────────────────────────────────────────────────
+node_modules/
+venv/
+.venv/
+
+# ── Build output & caches ────────────────────────────────────────────
+dist/
+dist-ssr/
+build/
+staticfiles/
+.vite/
+*.tsbuildinfo
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+
+# ── Logs, media & archives ───────────────────────────────────────────
+*.log
+*.tmp
+*.mp4
+*.zip
+*.tar
+*.tar.gz
+
+# ── Editors & OS ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

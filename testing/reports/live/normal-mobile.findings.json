@@ -1,0 +1,49 @@
+{
+  "persona": "normal",
+  "device": "mobile",
+  "base": "https://nidhimasala.com",
+  "when": "2026-07-07T11:45:35.395Z",
+  "findings": [
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: Provided button width is invalid: 100%",
+      "t": "2026-07-07T11:45:06.951Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Provider's accounts list is empty.",
+      "t": "2026-07-07T11:45:07.670Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token.",
+      "t": "2026-07-07T11:45:09.344Z"
+    },
+    {
+      "level": "info",
+      "area": "auth",
+      "msg": "profile 200 after login (session OK)",
+      "t": "2026-07-07T11:45:12.435Z"
+    },
+    {
+      "level": "info",
+      "area": "checkout",
+      "msg": "reached https://nidhimasala.com/billing — halted before any real payment",
+      "t": "2026-07-07T11:45:32.706Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 403 ()",
+      "t": "2026-07-07T11:45:32.820Z"
+    }
+  ],
+  "counts": {
+    "issues": 1,
+    "warns": 0
+  },
+  "requests": 426
+}

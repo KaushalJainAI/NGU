@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<title>निधि मसाला — लागत और कैशफ़्लो विश्लेषण</title>
+<style>
+  @page { size: A4; margin: 14mm 11mm 12mm 11mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Nirmala UI', 'Noto Sans Devanagari', 'Mangal', sans-serif;
+    font-size: 9.2pt; line-height: 1.55; color: #1E293B; margin: 0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  h1 { font-size: 22pt; color: #1E293B; margin: 0 0 4px; line-height: 1.25; }
+  h2 { font-size: 13pt; color: #B45309; margin: 18px 0 6px; padding-bottom: 4px;
+       border-bottom: 2px solid #FCD34D; page-break-after: avoid; }
+  h3 { font-size: 10.5pt; color: #1E293B; margin: 12px 0 4px; page-break-after: avoid; }
+  p { margin: 0 0 6px; text-align: justify; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 10px;
+          page-break-inside: avoid; font-size: 8.4pt; }
+  th { background: #1E293B; color: #fff; text-align: left; padding: 5px 7px;
+       font-weight: 600; font-size: 8.2pt; }
+  td { padding: 4.5px 7px; border-bottom: 1px solid #E2E8F0; vertical-align: top; }
+  tr:nth-child(even) td { background: #F8FAFC; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tot td { background: #FEF3C7 !important; font-weight: 700; border-top: 2px solid #B45309;
+            border-bottom: 2px solid #B45309; }
+  .sub td { background: #EFF6FF !important; font-weight: 600; }
+  .neg { color: #B91C1C; }
+  .pos { color: #15803D; font-weight: 600; }
+  .cover { text-align: center; padding: 62mm 0 0; page-break-after: always; }
+  .cover .brand { font-size: 13pt; color: #B45309; font-weight: 700; }
+  .cover .sub { font-size: 11.5pt; color: #475569; margin-top: 10px; }
+  .cover .meta { margin-top: 40mm; font-size: 8.5pt; color: #64748B; line-height: 1.9; }
+  .rule { width: 60px; height: 3px; background: #B45309; margin: 14px auto; }
+  .box { background: #F8FAFC; border-right: 4px solid #B45309; padding: 8px 11px;
+         margin: 8px 0; page-break-inside: avoid; }
+  .warn { background: #FEF2F2; border-right: 4px solid #DC2626; padding: 8px 11px;
+          margin: 8px 0; page-break-inside: avoid; }
+  .ok { background: #F0FDF4; border-right: 4px solid #15803D; padding: 8px 11px;
+        margin: 8px 0; page-break-inside: avoid; }
+  .box > b:first-child, .warn > b:first-child, .ok > b:first-child {
+    display: block; margin-bottom: 3px; font-size: 9.8pt; }
+  ul { margin: 4px 0 8px; padding-right: 18px; padding-left: 0; }
+  li { margin-bottom: 3px; }
+  .two { display: flex; gap: 10px; }
+  .two > div { flex: 1; }
+  .kpi { display: flex; gap: 8px; margin: 10px 0; }
+  .kpi div { flex: 1; background: #1E293B; color: #fff; padding: 9px 8px; text-align: center; }
+  .kpi .v { font-size: 15pt; font-weight: 700; display: block; }
+  .kpi .l { font-size: 7.4pt; color: #CBD5E1; }
+  .pb { page-break-before: always; }
+  .small { font-size: 7.8pt; color: #64748B; }
+  code { background: #F1F5F9; padding: 1px 4px; font-size: 8pt; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">निधि गृह उद्योग</div>
+  <div class="rule"></div>
+  <h1>लागत और कैशफ़्लो का पूरा विश्लेषण</h1>
+  <div class="sub">उत्पादों की कीमत तय करने के लिए मार्गदर्शिका</div>
+  <div class="sub" style="font-size:10pt; margin-top:16px;">
+    दो परिस्थितियाँ: ₹500 से कम का ऑर्डर &nbsp;•&nbsp; ₹500 से ज़्यादा का ऑर्डर
+  </div>
+  <div class="meta">
+    दिनांक: 5 अगस्त 2026<br>
+    वेबसाइट: nidhigrahudyog.com<br>
+    डिलीवरी लागत का आधार: Delhivery सरफ़ेस दर सूची 2026<br>
+    मुद्रा: भारतीय रुपया (₹)
+  </div>
+</div>
+
+<h2>1. सारांश — सबसे ज़रूरी बातें</h2>
+
+<div class="kpi">
+  <div><span class="v">₹102</span><span class="l">औसत कूरियर लागत / ऑर्डर</span></div>
+  <div><span class="v">₹59</span><span class="l">आप ग्राहक से लेते हैं</span></div>
+  <div><span class="v">₹43</span><span class="l">हर ऑर्डर पर घाटा (डिलीवरी में)</span></div>
+  <div><span class="v">311</span><span class="l">ब्रेक-ईवन ऑर्डर / महीना</span></div>
+</div>
+
+<p>यह रिपोर्ट आपकी वेबसाइट चलाने के <b>हर खर्च</b> को तीन हिस्सों में बाँटती है — महीने का पक्का खर्च,
+हर ऑर्डर पर लगने वाला खर्च, और हर पैकेट पर लगने वाला खर्च। फिर दो असली उदाहरणों से दिखाती है कि
+₹500 से कम और ₹500 से ज़्यादा के ऑर्डर पर आपको <b>असल में कितना बचता है</b>।</p>
+
+<div class="warn">
+  <b>तीन सबसे बड़ी समस्याएँ जो अभी दिख रही हैं</b>
+  <ul style="margin-bottom:0">
+    <li><b>डिलीवरी शुल्क बहुत कम है।</b> Delhivery से 1 किलो का पार्सल भेजने में औसतन ₹86 लगता है
+        (GST छोड़कर), पर आप ग्राहक से सिर्फ़ ₹59 लेते हैं। हर पेड-शिपिंग ऑर्डर पर ₹27 का सीधा घाटा।</li>
+    <li><b>₹500 की फ़्री-शिपिंग सीमा बहुत नीचे है।</b> ₹700 का ऑर्डर, जो ₹400 के ऑर्डर से 75% बड़ा है,
+        <b>उससे कम मुनाफ़ा</b> देता है (₹75.81 बनाम ₹83.25)। सही सीमा ₹999 है।</li>
+    <li><b>COD हर ऑर्डर पर ₹44–46 ज़्यादा महँगा है</b> (COD फ़ीस + RTO का जोखिम), पर आप उसके लिए
+        कुछ अतिरिक्त नहीं लेते। ₹400 के COD ऑर्डर पर सिर्फ़ ₹38.85 बचता है।</li>
+  </ul>
+</div>
+
+<div class="warn">
+  <b>सबसे बड़ी चेतावनी — माल की लागत 65% पर मुनाफ़ा बहुत पतला है</b>
+  अगर मसाला + पाउच + लेबल + मेहनत मिलाकर सचमुच बिक्री-मूल्य का <b>65%</b> बैठता है, तो सारे खर्च
+  निकालने के बाद बचता है सिर्फ़ <b>11–21%</b> — और COD पर तो <b>4–9%</b>।
+  <br><br>
+  इस स्तर पर सिर्फ़ पैकिंग या कूरियर बचाने से बात नहीं बनेगी। <b>या तो माल की लागत घटानी होगी
+  (थोक में कच्चा माल ख़रीदें), या MRP बढ़ानी होगी।</b> 30% का सेहतमंद मुनाफ़ा पाने के लिए
+  आपकी MRP लगभग <b>19% बढ़ानी</b> पड़ेगी — ₹100 का पैकेट ₹119 का। विस्तार भाग 10 में।
+</div>
+
+<h2 class="pb">2. भाग 1 — हर महीने का पक्का खर्च</h2>
+<p>यह खर्च तब भी लगेगा जब एक भी ऑर्डर न आए। इसे "फ़िक्स्ड कॉस्ट" कहते हैं।</p>
+
+<table>
+  <tr><th style="width:38%">मद</th><th style="width:37%">विवरण</th><th class="num">₹ / महीना</th></tr>
+  <tr><td>EC2 ऐप सर्वर</td><td>वेबसाइट + बैकएंड, 24 घंटे चालू</td><td class="num">1,400 – 2,900</td></tr>
+  <tr><td>EC2 डेटाबेस सर्वर</td><td>PostgreSQL 17 + PgBouncer, 24 घंटे चालू</td><td class="num">1,400 – 2,900</td></tr>
+  <tr><td>EBS स्टोरेज (16 GB × 2)</td><td>सर्वर की डिस्क</td><td class="num">180</td></tr>
+  <tr><td>Cloudinary</td><td>प्रोडक्ट की सारी फ़ोटो — फ़्री प्लान</td><td class="num">0</td></tr>
+  <tr><td>AWS S3</td><td>स्टैटिक फ़ाइलें</td><td class="num">30</td></tr>
+  <tr><td>डोमेन × 2</td><td>nidhimasala.com + nidhigrahudyog.com</td><td class="num">200</td></tr>
+  <tr><td>SSL, Docker Hub, ईमेल</td><td>Let's Encrypt / Gmail — मुफ़्त</td><td class="num">0</td></tr>
+  <tr><td>AI असिस्टेंट (LLM API)</td><td>चैटबॉट + सर्च — इस्तेमाल के हिसाब से</td><td class="num">200 – 2,000</td></tr>
+  <tr><td>वॉइस (Whisper)</td><td>अपने ही सर्वर पर — अलग खर्च नहीं</td><td class="num">0</td></tr>
+  <tr><td>डेटा ट्रांसफ़र</td><td>—</td><td class="num">0 – 200</td></tr>
+  <tr class="tot"><td colspan="2">तकनीकी खर्च — कुल (अभी)</td><td class="num">₹3,400 – 8,400</td></tr>
+  <tr><td colspan="3" style="background:#FEF3C7; font-weight:600; padding-top:8px">आगे जुड़ने वाले खर्च (भाग 9 देखें)</td></tr>
+  <tr><td>WhatsApp/SMS BSP प्लेटफ़ॉर्म फ़ीस</td><td>Gupshup / Interakt / Wati का मासिक शुल्क</td><td class="num">0 – 2,500</td></tr>
+  <tr><td>OTP + ऑर्डर अपडेट संदेश</td><td>~₹0.70 × ऑर्डर संख्या (300 ऑर्डर पर ₹210)</td><td class="num">~210</td></tr>
+  <tr class="tot"><td colspan="2">कुल — भविष्य में</td><td class="num">₹3,600 – 11,100</td></tr>
+</table>
+<p class="small">Magic Checkout फ़िक्स्ड खर्च नहीं है — वह हर ऑर्डर पर प्रतिशत के हिसाब से लगता है,
+इसलिए वह भाग 9 की वैरिएबल तालिका में है। DLT रजिस्ट्रेशन ₹5,000–6,000 <b>एक बार</b> का है।</p>
+
+<div class="box">
+  <b>बचत का मौका</b>
+  दोनों सर्वर कभी बंद नहीं होते, इसलिए AWS का <b>1-साल का Savings Plan</b> लेने पर कंप्यूट का खर्च
+  लगभग 40% घट जाता है — हर महीने करीब ₹1,200 की बचत, बिना कुछ बदले।
+</div>
+
+<h3>इसके अलावा — जो आपको खुद जोड़ना होगा</h3>
+<p>ये खर्च वेबसाइट के सिस्टम में दर्ज नहीं होते, पर कीमत तय करते समय ज़रूरी हैं:</p>
+<table>
+  <tr><th style="width:50%">मद</th><th>टिप्पणी</th></tr>
+  <tr><td>CA / GST रिटर्न फ़ाइलिंग</td><td>हर महीने GSTR-1 और GSTR-3B</td></tr>
+  <tr><td>FSSAI लाइसेंस</td><td>सालाना — महीने के हिसाब से बाँटें</td></tr>
+  <tr><td>दुकान / गोदाम का किराया, बिजली</td><td>—</td></tr>
+  <tr><td>आपकी और स्टाफ़ की मेहनत</td><td>पैकिंग, ऑर्डर भेजना, ग्राहक सेवा</td></tr>
+  <tr><td>मार्केटिंग / विज्ञापन</td><td>—</td></tr>
+</table>
+<p class="small">ज़्यादातर मसाला व्यापार में ये खर्च ₹3,400–8,400 के तकनीकी खर्च से कहीं बड़े होते हैं।
+इस रिपोर्ट में आगे ₹15,000/महीना मान कर चला गया है — अपना असली आँकड़ा भरें।</p>
+
+<h2 class="pb">3. भाग 2 — Delhivery की डिलीवरी लागत (शोध सहित)</h2>
+
+<p>Delhivery की सरफ़ेस (सड़क) सेवा की 2026 की दर सूची के अनुसार, शुरुआती 500 ग्राम और उसके बाद
+हर अतिरिक्त 500 ग्राम की दरें ज़ोन के हिसाब से इस प्रकार हैं (ये मूल दरें हैं — इन पर फ़्यूल सरचार्ज
+और GST अलग लगता है):</p>
+
+<table>
+  <tr>
+    <th>ज़ोन</th><th>मतलब</th>
+    <th class="num">पहले 500 ग्राम</th><th class="num">हर अगले 500 ग्राम</th>
+    <th class="num">हमारा मिश्रण</th>
+  </tr>
+  <tr><td>ज़ोन A — लोकल</td><td>उसी शहर में</td><td class="num">₹33</td><td class="num">₹30</td><td class="num">10%</td></tr>
+  <tr><td>ज़ोन B — क्षेत्रीय</td><td>उसी राज्य / 500 किमी तक</td><td class="num">₹38</td><td class="num">₹35</td><td class="num">20%</td></tr>
+  <tr><td>मेट्रो–मेट्रो</td><td>बड़े शहरों के बीच</td><td class="num">₹41</td><td class="num">₹35</td><td class="num">25%</td></tr>
+  <tr><td>बाक़ी भारत</td><td>देश के अन्य हिस्से</td><td class="num">₹43</td><td class="num">₹37</td><td class="num">25%</td></tr>
+  <tr><td>नेशनल</td><td>दूर के राज्य</td><td class="num">₹45</td><td class="num">₹39</td><td class="num">15%</td></tr>
+  <tr><td>नॉर्थ-ईस्ट / J&amp;K</td><td>विशेष ज़ोन</td><td class="num">₹50</td><td class="num">₹43</td><td class="num">5%</td></tr>
+</table>
+
+<h3>अतिरिक्त शुल्क</h3>
+<table>
+  <tr><th style="width:32%">शुल्क</th><th style="width:30%">दर</th><th>टिप्पणी</th></tr>
+  <tr><td>फ़्यूल सरचार्ज</td><td>भाड़े का 10–12%</td><td>हर बिल पर लगता है; यहाँ 11% लिया गया</td></tr>
+  <tr><td>GST</td><td>18%</td><td>यह ITC (इनपुट टैक्स क्रेडिट) में वापस मिल जाता है, इसलिए
+      <b>असली लागत में नहीं जोड़ा</b> — पर कैश तो जाता ही है</td></tr>
+  <tr><td>COD शुल्क</td><td>₹40 या ऑर्डर का 2% — जो ज़्यादा हो</td><td>आपके ज़्यादातर ऑर्डर पर ₹40 ही बनेगा</td></tr>
+  <tr><td>RTO (वापसी)</td><td>आगे के भाड़े का 80–100%</td><td>COD में 15–25% ऑर्डर वापस आते हैं</td></tr>
+</table>
+
+<h3>अनुमानित औसत डिलीवरी लागत — गणना</h3>
+<p>ऊपर के ज़ोन-मिश्रण से भारित औसत निकालने पर:</p>
+
+<table>
+  <tr>
+    <th>बिल किया गया वज़न</th><th class="num">मूल भाड़ा</th>
+    <th class="num">+ फ़्यूल 11%</th><th class="num">असली लागत (GST छोड़कर)</th>
+    <th class="num">GST सहित (कैश)</th>
+  </tr>
+  <tr><td>0.5 किलो</td><td class="num">₹41</td><td class="num">₹46</td><td class="num">₹46</td><td class="num">₹54</td></tr>
+  <tr class="sub"><td>1.0 किलो &nbsp;— छोटा ऑर्डर</td><td class="num">₹77</td><td class="num">₹86</td><td class="num">₹86</td><td class="num">₹101</td></tr>
+  <tr class="sub"><td>1.5 किलो &nbsp;— बड़ा ऑर्डर</td><td class="num">₹113</td><td class="num">₹126</td><td class="num">₹126</td><td class="num">₹149</td></tr>
+  <tr class="tot"><td colspan="3">भारित औसत (60% छोटे + 40% बड़े ऑर्डर)</td>
+      <td class="num">₹102</td><td class="num">₹120</td></tr>
+</table>
+
+<div class="warn">
+  <b>वज़न का जाल — यहाँ सबसे ज़्यादा पैसा बचता है</b>
+  Delhivery 500 ग्राम के स्लैब में बिल करता है। <b>520 ग्राम का पार्सल पूरे 1 किलो के भाव लगता है।</b>
+  आपके 100 ग्राम के पैकेट हल्के हैं — असली वज़न डिब्बा, बबल रैप और टेप से बढ़ता है।
+  <br><br>
+  <b>2 × 100 ग्राम</b> = 200 ग्राम माल। हल्के मेलर बैग में = 320 ग्राम → <b>₹46</b> लागत।
+  वही सामान डिब्बे में = 550 ग्राम → <b>₹86</b> लागत। <b>यानी सिर्फ़ पैकिंग बदलने से ₹40 की बचत,
+  हर ऑर्डर पर।</b> यह इस पूरी रिपोर्ट की सबसे तेज़ बचत है।
+  <br><br>
+  ध्यान दें — मेलर बैग ख़ुद डिब्बे से <b>सस्ता भी</b> है (₹8 बनाम ₹10–12) और <b>हल्का भी</b>।
+  पर असली बचत सामग्री की ₹2–4 नहीं, <b>वज़न के स्लैब की ₹40</b> है। इसलिए पैकिंग चुनते समय
+  क़ीमत नहीं, <b>ग्राम</b> देखें।
+</div>
+
+<h2 class="pb">4. भाग 3 — GST का असर (सबसे ज़रूरी नियम)</h2>
+
+<div class="box">
+  <b>आपकी कीमतें GST सहित हैं (MRP)</b>
+  यानी टैक्स ग्राहक से अलग से नहीं लिया जाता — वह <b>आपकी ही कीमत में से निकलता है</b>।
+  ₹100 के पैकेट पर 5% GST का मतलब है कि आपके पास ₹95.24 बचता है, ₹4.76 सरकार का है।
+  <br><br>
+  <b>अपवाद:</b> डिलीवरी शुल्क। वह ₹59 <b>नेट</b> है और उस पर 18% GST <b>ऊपर से</b> जुड़ता है —
+  ग्राहक ₹69.62 देता है।
+</div>
+
+<table>
+  <tr><th>MRP</th><th>GST दर</th><th class="num">आपको मिलता है</th><th class="num">सरकार का हिस्सा</th></tr>
+  <tr><td>₹100</td><td>5% (साबुत/पिसे मसाले)</td><td class="num">₹95.24</td><td class="num">₹4.76</td></tr>
+  <tr><td>₹200</td><td>5%</td><td class="num">₹190.48</td><td class="num">₹9.52</td></tr>
+  <tr><td>₹200</td><td>18% (यदि मिश्रित मसाला 21039040 माना जाए)</td><td class="num">₹169.49</td><td class="num">₹30.51</td></tr>
+  <tr><td>₹250</td><td>0% (पापड़)</td><td class="num">₹250.00</td><td class="num">₹0</td></tr>
+</table>
+
+<div class="warn">
+  <b>एक बड़ा खुला सवाल — CA से ज़रूर पूछें</b>
+  आपके मिश्रित मसाले (मसाला ब्लेंड) अभी HSN 09109100 पर <b>5%</b> लगाते हैं। लेकिन जिस ब्लेंड में
+  नमक, चीनी, स्टार्च या तेल मिला हो, वह HSN 21039040 के तहत <b>18%</b> में भी आ सकता है।
+  <br><br>
+  यह <b>13 प्रतिशत अंक</b> का फ़र्क़ है और लगभग आधे कैटलॉग पर लागू होता है। अगर CA 18% कहते हैं तो
+  ₹200 की MRP पर आपकी कमाई ₹190 से घटकर ₹169 रह जाएगी — यानी हर पैकेट पर ₹21 कम।
+  <b>कीमतें फ़ाइनल करने से पहले यह जवाब ले लें</b>, वरना पूरे कैटलॉग की कीमत दोबारा बदलनी पड़ेगी।
+</div>
+
+<h2 class="pb">5. परिदृश्य A — ₹500 से कम का ऑर्डर</h2>
+
+<p><b>उदाहरण:</b> ₹400 का सामान (4 × 100 ग्राम पैकेट @ ₹100) + डिलीवरी शुल्क।
+बिल किया गया वज़न 1 किलो। GST दर 5%।</p>
+
+<h3>A-1 : ऑनलाइन भुगतान (कार्ड / नेटबैंकिंग)</h3>
+<table>
+  <tr><th style="width:52%">विवरण</th><th class="num">₹</th><th style="width:26%">टिप्पणी</th></tr>
+  <tr><td>सामान की MRP</td><td class="num">400.00</td><td>GST सहित</td></tr>
+  <tr><td>डिलीवरी शुल्क (59 + 18% GST)</td><td class="num">69.62</td><td>ग्राहक से लिया</td></tr>
+  <tr class="sub"><td>ग्राहक ने कुल दिया</td><td class="num">469.62</td><td>—</td></tr>
+  <tr><td class="neg">– सामान पर GST (400 × 5/105)</td><td class="num neg">19.05</td><td>सरकार का</td></tr>
+  <tr><td class="neg">– डिलीवरी पर GST</td><td class="num neg">10.62</td><td>सरकार का</td></tr>
+  <tr class="sub"><td>आपकी असली आमदनी (नेट रियलाइज़ेशन)</td><td class="num">439.95</td><td>—</td></tr>
+  <tr><td class="neg">– माल की लागत (मसाला + पाउच + मेहनत)</td><td class="num neg">247.62</td><td>नेट का 65% माना</td></tr>
+  <tr><td class="neg">– पैकिंग (मेलर बैग, टेप, लेबल)</td><td class="num neg">12.00</td><td>प्रति शिपमेंट</td></tr>
+  <tr><td class="neg">– Delhivery कूरियर (1 किलो)</td><td class="num neg">86.00</td><td>GST छोड़कर</td></tr>
+  <tr><td class="neg">– Razorpay फ़ीस (2% + 18% GST)</td><td class="num neg">11.08</td><td>2.36% कुल पर</td></tr>
+  <tr class="tot"><td>बचत / योगदान (Contribution)</td><td class="num">₹83.25</td><td>18.9%</td></tr>
+</table>
+
+<div class="ok">
+  <b>UPI से भुगतान हो तो</b>
+  UPI पर Razorpay की कोई फ़ीस नहीं लगती (शून्य MDR)। तब यही बचत <b>₹94.33 (21.4%)</b> हो जाती है —
+  यानी <b>₹11 सीधे मुनाफ़े में</b>। इसलिए चेकआउट पेज पर UPI को सबसे ऊपर और सबसे बड़ा दिखाएँ।
+</div>
+
+<h3>A-2 : कैश ऑन डिलीवरी (COD)</h3>
+<table>
+  <tr><th style="width:52%">विवरण</th><th class="num">₹</th><th style="width:26%">टिप्पणी</th></tr>
+  <tr class="sub"><td>आपकी असली आमदनी (ऊपर जैसी)</td><td class="num">439.95</td><td>—</td></tr>
+  <tr><td class="neg">– माल की लागत</td><td class="num neg">247.62</td><td>—</td></tr>
+  <tr><td class="neg">– पैकिंग</td><td class="num neg">12.00</td><td>—</td></tr>
+  <tr><td class="neg">– Delhivery कूरियर (1 किलो)</td><td class="num neg">86.00</td><td>—</td></tr>
+  <tr><td class="neg">– COD शुल्क</td><td class="num neg">40.00</td><td>₹40 या 2%, जो ज़्यादा</td></tr>
+  <tr><td class="neg">– RTO का अनुमानित नुक़सान</td><td class="num neg">15.48</td><td>20% ऑर्डर × 90% भाड़ा</td></tr>
+  <tr class="tot"><td>बचत / योगदान (Contribution)</td><td class="num">₹38.85</td><td>8.8%</td></tr>
+</table>
+
+<div class="warn">
+  <b>COD आपको ₹44 महँगा पड़ता है — और यहाँ यह जानलेवा है</b>
+  उसी ₹400 के ऑर्डर पर ऑनलाइन में ₹83 बचता है, COD में सिर्फ़ ₹39। फ़र्क़ ₹44.40 का है —
+  और इसके बदले आप ग्राहक से कुछ भी अतिरिक्त नहीं लेते। साथ ही COD का पैसा 10–20 दिन बाद मिलता है।
+</div>
+
+<h2 class="pb">6. परिदृश्य B — ₹500 से ज़्यादा का ऑर्डर (फ़्री डिलीवरी)</h2>
+
+<p><b>उदाहरण:</b> ₹700 का सामान (1 × 500 ग्राम + 2 × 100 ग्राम)। ₹500 से ऊपर होने के कारण
+<b>डिलीवरी मुफ़्त</b> — यानी पूरा कूरियर खर्च आप उठाते हैं। बिल किया गया वज़न 1.5 किलो।</p>
+
+<h3>B-1 : ऑनलाइन भुगतान (कार्ड / नेटबैंकिंग)</h3>
+<table>
+  <tr><th style="width:52%">विवरण</th><th class="num">₹</th><th style="width:26%">टिप्पणी</th></tr>
+  <tr><td>सामान की MRP</td><td class="num">700.00</td><td>GST सहित</td></tr>
+  <tr><td>डिलीवरी शुल्क</td><td class="num">0.00</td><td class="neg">मुफ़्त — आप उठाते हैं</td></tr>
+  <tr class="sub"><td>ग्राहक ने कुल दिया</td><td class="num">700.00</td><td>—</td></tr>
+  <tr><td class="neg">– सामान पर GST (700 × 5/105)</td><td class="num neg">33.33</td><td>सरकार का</td></tr>
+  <tr class="sub"><td>आपकी असली आमदनी</td><td class="num">666.67</td><td>—</td></tr>
+  <tr><td class="neg">– माल की लागत</td><td class="num neg">433.33</td><td>नेट का 65%</td></tr>
+  <tr><td class="neg">– पैकिंग (बड़ा डिब्बा)</td><td class="num neg">15.00</td><td>—</td></tr>
+  <tr><td class="neg">– Delhivery कूरियर (1.5 किलो)</td><td class="num neg">126.00</td><td>पूरा आपका खर्च</td></tr>
+  <tr><td class="neg">– Razorpay फ़ीस (2.36%)</td><td class="num neg">16.52</td><td>—</td></tr>
+  <tr class="tot"><td>बचत / योगदान (Contribution)</td><td class="num">₹75.81</td><td>11.4%</td></tr>
+</table>
+<p class="small">UPI से भुगतान होने पर: <b>₹92.33 (13.8%)</b></p>
+
+<h3>B-2 : कैश ऑन डिलीवरी (COD)</h3>
+<table>
+  <tr><th style="width:52%">विवरण</th><th class="num">₹</th><th style="width:26%">टिप्पणी</th></tr>
+  <tr class="sub"><td>आपकी असली आमदनी</td><td class="num">666.67</td><td>—</td></tr>
+  <tr><td class="neg">– माल की लागत</td><td class="num neg">433.33</td><td>—</td></tr>
+  <tr><td class="neg">– पैकिंग</td><td class="num neg">15.00</td><td>—</td></tr>
+  <tr><td class="neg">– Delhivery कूरियर (1.5 किलो)</td><td class="num neg">126.00</td><td>—</td></tr>
+  <tr><td class="neg">– COD शुल्क</td><td class="num neg">40.00</td><td>—</td></tr>
+  <tr><td class="neg">– RTO का अनुमानित नुक़सान</td><td class="num neg">22.68</td><td>बड़ा पार्सल = बड़ा RTO</td></tr>
+  <tr class="tot"><td>बचत / योगदान (Contribution)</td><td class="num">₹29.65</td><td>4.4%</td></tr>
+</table>
+
+<h2>7. दोनों परिदृश्यों की तुलना</h2>
+
+<table>
+  <tr>
+    <th>ऑर्डर का प्रकार</th><th class="num">ग्राहक ने दिया</th>
+    <th class="num">कूरियर लागत</th><th class="num">बचत ₹</th><th class="num">बचत %</th>
+  </tr>
+  <tr><td>A-1 &nbsp; ₹400 ऑर्डर — ऑनलाइन कार्ड</td><td class="num">469.62</td><td class="num">86</td><td class="num pos">83.25</td><td class="num">18.9%</td></tr>
+  <tr><td>A-1u &nbsp; ₹400 ऑर्डर — UPI</td><td class="num">469.62</td><td class="num">86</td><td class="num pos">94.33</td><td class="num">21.4%</td></tr>
+  <tr><td>A-2 &nbsp; ₹400 ऑर्डर — COD</td><td class="num">469.62</td><td class="num">86</td><td class="num neg">38.85</td><td class="num neg">8.8%</td></tr>
+  <tr><td>B-1 &nbsp; ₹700 ऑर्डर — ऑनलाइन कार्ड</td><td class="num">700.00</td><td class="num">126</td><td class="num">75.81</td><td class="num">11.4%</td></tr>
+  <tr><td>B-1u &nbsp; ₹700 ऑर्डर — UPI</td><td class="num">700.00</td><td class="num">126</td><td class="num">92.33</td><td class="num">13.8%</td></tr>
+  <tr><td>B-2 &nbsp; ₹700 ऑर्डर — COD</td><td class="num">700.00</td><td class="num">126</td><td class="num neg">29.65</td><td class="num neg">4.4%</td></tr>
+</table>
+
+<div class="warn">
+  <b>सबसे चौंकाने वाली बात</b>
+  ₹700 का ऑर्डर ₹400 के ऑर्डर से <b>75% बड़ा</b> है, फिर भी <b>कम मुनाफ़ा देता है</b> —
+  ₹75.81 बनाम ₹83.25। प्रतिशत में तो और भी बुरा: <b>18.9% से गिरकर 11.4%</b>।
+  <br><br>
+  वजह साफ़ है: बड़े ऑर्डर पर आप ₹59 का डिलीवरी शुल्क छोड़ देते हैं <i>और</i> कूरियर लागत ₹86 से बढ़कर
+  ₹126 हो जाती है। यानी ₹99 का दोहरा झटका, जबकि माल की लागत 65% होने के कारण बड़े ऑर्डर से
+  अतिरिक्त कमाई सिर्फ़ ₹92 बढ़ी।
+  <br><br>
+  <b>यानी अभी आपका हर बड़ा ऑर्डर, छोटे ऑर्डर से कम कमाता है।</b> ग्राहक को ज़्यादा ख़रीदने के लिए
+  प्रोत्साहित करने वाली स्कीम उल्टा आपका नुक़सान कर रही है। <b>₹500 की सीमा तुरंत बदलनी चाहिए।</b>
+</div>
+
+<h3>सही फ़्री-शिपिंग सीमा क्या हो?</h3>
+<p>जिस ऑर्डर पर फ़्री डिलीवरी देने के बाद भी वही 18.9% मुनाफ़ा बचे, वह सीमा गणित से निकलती है:</p>
+<table>
+  <tr><th>फ़्री-शिपिंग सीमा</th><th class="num">बचत ₹</th><th class="num">बचत %</th><th>नतीजा</th></tr>
+  <tr><td>₹500 (अभी)</td><td class="num neg">13.87</td><td class="num neg">2.9%</td><td class="neg">लगभग शून्य — मुफ़्त में मेहनत</td></tr>
+  <tr><td>₹699</td><td class="num">75.50</td><td class="num">11.3%</td><td class="neg">छोटे ऑर्डर से कम</td></tr>
+  <tr><td>₹799</td><td class="num">106.47</td><td class="num">14.0%</td><td class="neg">अब भी कम</td></tr>
+  <tr><td>₹899</td><td class="num">137.45</td><td class="num">16.1%</td><td>क़रीब पहुँचे</td></tr>
+  <tr class="sub"><td>₹999</td><td class="num">168.42</td><td class="num">17.7%</td><td class="pos">व्यावहारिक सिफ़ारिश</td></tr>
+  <tr><td>₹1,089 — सटीक बराबरी</td><td class="num">198.35</td><td class="num">18.9%</td><td class="pos">यहाँ दोनों बराबर</td></tr>
+</table>
+
+<div class="warn">
+  <b>₹500 पर फ़्री डिलीवरी देना अभी लगभग मुफ़्त काम करना है</b>
+  ठीक ₹500 का ऑर्डर, फ़्री शिपिंग के साथ, आपको सिर्फ़ <b>₹13.87</b> देता है — यानी 2.9%।
+  उस ऑर्डर को पैक करने और भेजने में जितना समय लगता है, उसकी मज़दूरी भी इससे ज़्यादा है।
+</div>
+
+<div class="ok">
+  <b>सिफ़ारिश</b>
+  <code>FREE_SHIPPING_THRESHOLD</code> को <b>₹500 से बढ़ाकर ₹999</b> करें (सटीक बराबरी ₹1,089 पर आती है,
+  पर ₹999 ग्राहक को ज़्यादा आकर्षक लगता है)। साथ ही यह ग्राहक के लिए फ़ायदेमंद ही है — वह एक पैकेट और जोड़ेगा,
+  आपका औसत ऑर्डर मूल्य बढ़ेगा, और आपकी डिलीवरी लागत उतनी ही रहेगी।
+</div>
+
+<h2 class="pb">8. कैशफ़्लो — पैसा कब आता है, कब जाता है</h2>
+
+<table>
+  <tr><th style="width:44%">घटना</th><th style="width:22%">दिन</th><th>पैसा</th></tr>
+  <tr><td>कच्चा माल, पाउच, लेबल ख़रीदना</td><td>–30 से –45</td><td class="neg">बाहर — पूरा, पहले ही</td></tr>
+  <tr><td>ग्राहक ने ऑनलाइन पैसा दिया</td><td>0</td><td>रास्ते में</td></tr>
+  <tr><td>Razorpay सेटलमेंट (फ़ीस कटकर)</td><td class="pos">+2 कार्यदिवस</td><td class="pos">अंदर</td></tr>
+  <tr><td>COD ऑर्डर मिला</td><td>0</td><td class="neg">कुछ नहीं</td></tr>
+  <tr><td>COD माल भेजा — <b>यहीं इनवॉइस बनता है</b></td><td>+1</td><td class="neg">GST की देनदारी शुरू, पैसा नहीं</td></tr>
+  <tr><td>COD डिलीवर हुआ</td><td>+3 से +6</td><td class="neg">अभी भी कुछ नहीं</td></tr>
+  <tr><td>कूरियर ने COD का पैसा भेजा</td><td class="pos">+10 से +20</td><td class="pos">अंदर — तब "नक़द मिला" टिक करें</td></tr>
+  <tr><td>GST जमा करना (GSTR-3B)</td><td>अगले महीने की 20 तारीख़</td><td class="neg">बाहर</td></tr>
+</table>
+
+<div class="warn">
+  <b>तीन बातें जो कैश की तंगी बनाती हैं</b>
+  <ul style="margin-bottom:0">
+    <li><b>COD ग्राहक को दिया गया 2–3 हफ़्ते का ब्याज-मुक्त उधार है।</b> डैशबोर्ड पर
+        <code>cod_pending_amount</code> वही पैसा है जो कूरियर के पास पड़ा है। अगर COD का हिस्सा बड़ा है
+        तो अगली खेप का माल ख़रीदने के लिए अलग पूँजी चाहिए।</li>
+    <li><b>ग्राहक का GST आपके खाते में 50 दिन तक पड़ा रहता है</b> (1 तारीख़ की बिक्री → अगले महीने की
+        20 को जमा)। बैंक बैलेंस देखकर वह मुनाफ़ा लगता है — <b>वह आपका नहीं है।</b> उसे अलग रखें।</li>
+    <li><b>COD में इनवॉइस माल भेजते ही बन जाता है</b>, पैसा बाद में आता है। अगर ऑर्डर वापस आ गया और
+        आपने पैनल में रिफ़ंड दर्ज नहीं किया, तो <b>जो बिक्री हुई ही नहीं उस पर GST भरना पड़ेगा।</b></li>
+  </ul>
+</div>
+
+<h2 class="pb">9. भविष्य के खर्च — जो अभी नहीं लगते, पर लगेंगे</h2>
+
+<h3>9.1 &nbsp; SMS / WhatsApp OTP और ऑर्डर अपडेट</h3>
+<p>अभी OTP ईमेल से जाता है (मुफ़्त)। फ़ोन OTP और WhatsApp अपडेट शुरू करने पर दो तरह का खर्च आएगा:</p>
+<table>
+  <tr><th style="width:34%">मद</th><th class="num" style="width:20%">दर</th><th>टिप्पणी</th></tr>
+  <tr><td>SMS OTP (DLT ट्रांज़ैक्शनल)</td><td class="num">₹0.12 – 0.20</td>
+      <td>MSG91 ~₹0.15, Gupshup ~₹0.17। 1 लाख+/माह पर ₹0.10 तक</td></tr>
+  <tr><td>WhatsApp ऑथेंटिकेशन</td><td class="num">₹0.115</td>
+      <td>Meta की दर + 18% GST। SMS से सस्ता, और पढ़े जाने की दर 85–95% (SMS में 15–25%)</td></tr>
+  <tr><td>WhatsApp यूटिलिटी (ऑर्डर अपडेट)</td><td class="num">₹0.115</td><td>"भेज दिया", "पहुँच गया" वग़ैरह</td></tr>
+  <tr><td>BSP प्लेटफ़ॉर्म फ़ीस</td><td class="num">₹0 – 2,500 / माह</td>
+      <td>Gupshup / Interakt / Wati का मासिक शुल्क — <b>यह फ़िक्स्ड खर्च है</b></td></tr>
+  <tr><td>DLT रजिस्ट्रेशन</td><td class="num">₹5,000 – 6,000</td><td>एक बार का — एंटिटी + हेडर + टेम्पलेट</td></tr>
+</table>
+
+<div class="box">
+  <b>प्रति ऑर्डर कितना पड़ेगा?</b>
+  एक ऑर्डर में औसतन <b>4–5 संदेश</b> जाते हैं — लॉगिन OTP (हर ऑर्डर पर नहीं, ~1.2), ऑर्डर पक्का हुआ,
+  भेज दिया, पहुँच गया, और कभी-कभी डिलीवरी की कोशिश। ₹0.15 औसत दर पर यह
+  <b>लगभग ₹0.70 प्रति ऑर्डर</b> बैठता है।
+  <br><br>
+  300 ऑर्डर/माह पर: ₹210 वैरिएबल + ₹1,500 प्लेटफ़ॉर्म फ़ीस = <b>~₹1,700 / माह</b>।
+  यानी यह मुख्यतः <b>फ़िक्स्ड खर्च</b> है, वैरिएबल नहीं — प्लेटफ़ॉर्म फ़ीस संदेशों से कहीं ज़्यादा है।
+</div>
+
+<h3>9.2 &nbsp; Razorpay Magic Checkout</h3>
+<div class="warn">
+  <b>Razorpay इसकी दर सार्वजनिक नहीं करता</b>
+  Magic Checkout की क़ीमत न वेबसाइट पर है, न डॉक्स में — यह हर व्यापारी से अलग-अलग तय होती है।
+  बाज़ार में आम तौर पर यह <b>सामान्य MDR के ऊपर 0.4% – 1%</b> अतिरिक्त होती है।
+  नीचे <b>0.7%</b> मानकर गणना की गई है। <b>पक्का आँकड़ा Razorpay सेल्स से ही मिलेगा —
+  सौदा करने से पहले उसे इस तालिका में डालकर देख लें।</b>
+</div>
+
+<table>
+  <tr><th style="width:40%">ऑर्डर</th><th class="num">Magic फ़ीस @0.7%</th><th class="num">SMS/WA</th><th class="num">अभी बचत</th><th class="num">आगे बचत</th></tr>
+  <tr><td>A-1 &nbsp;₹400 — ऑनलाइन</td><td class="num neg">3.29</td><td class="num neg">0.70</td><td class="num">83.25</td><td class="num">79.26</td></tr>
+  <tr><td>A-2 &nbsp;₹400 — COD</td><td class="num neg">3.29</td><td class="num neg">0.70</td><td class="num">38.85</td><td class="num pos">41.05</td></tr>
+  <tr><td>B-1 &nbsp;₹700 — ऑनलाइन</td><td class="num neg">4.90</td><td class="num neg">0.70</td><td class="num">75.81</td><td class="num">70.21</td></tr>
+  <tr><td>B-2 &nbsp;₹700 — COD</td><td class="num neg">4.90</td><td class="num neg">0.70</td><td class="num">29.65</td><td class="num pos">33.12</td></tr>
+</table>
+
+<div class="ok">
+  <b>ध्यान दें — COD पर Magic Checkout अपनी लागत ख़ुद निकाल लेता है</b>
+  ऑनलाइन ऑर्डर पर यह सीधा ₹4–6 का घाटा है। पर COD पर इसका असली काम <b>RTO घटाना</b> है —
+  यह संदिग्ध पते पकड़ता है और ग्राहक से ऑर्डर की पुष्टि कराता है।
+  <br><br>
+  अगर RTO 20% से घटकर 12% भी हो गया, तो ₹400 के COD ऑर्डर पर RTO का नुक़सान ₹15.48 से घटकर
+  ₹9.29 रह जाता है — <b>₹6.19 की बचत, जो ₹3.99 के खर्च से ज़्यादा है</b>।
+  <br><br>
+  <b>निष्कर्ष:</b> Magic Checkout को <b>सिर्फ़ COD पर</b> चालू करें, प्रीपेड पर नहीं — अगर Razorpay
+  यह छूट देता है तो।
+</div>
+
+<h2 class="pb">10. "डिलीवरी के बाद वापसी नहीं" नीति का असर</h2>
+
+<div class="box">
+  <b>दो अलग चीज़ें — इन्हें कभी न मिलाएँ</b>
+  <br>
+  <b>1. रिटर्न (वापसी)</b> — माल ग्राहक तक पहुँच गया, फिर उसने लौटाया।
+  <b>आपकी नीति इसे रोकती है। लागत = ₹0।</b> यह अच्छी बात है और इस रिपोर्ट में कहीं भी
+  रिटर्न का खर्च नहीं जोड़ा गया।
+  <br><br>
+  <b>2. RTO (डिलीवरी न होना)</b> — माल ग्राहक तक <b>पहुँचा ही नहीं</b>। दरवाज़े पर मना कर दिया,
+  फ़ोन बंद, पता ग़लत, या ग्राहक शहर से बाहर। कूरियर माल वापस आपके पास लाता है और
+  <b>दोनों तरफ़ का भाड़ा वसूलता है</b>।
+  <br><br>
+  <b class="neg">कोई भी नीति RTO नहीं रोक सकती</b> — क्योंकि वहाँ ग्राहक ने माल स्वीकार ही नहीं किया,
+  इसलिए आपकी शर्तें लागू ही नहीं होतीं। इसीलिए ऊपर की हर COD तालिका में RTO का खर्च बना हुआ है।
+</div>
+
+<table>
+  <tr><th style="width:34%">स्थिति</th><th class="num" style="width:18%">आपकी लागत</th><th>नीति से बचा?</th></tr>
+  <tr><td>डिलीवरी के बाद ग्राहक ने लौटाया</td><td class="num pos">₹0</td><td class="pos">हाँ — नीति काम कर रही है</td></tr>
+  <tr><td>COD — ग्राहक ने दरवाज़े पर मना किया</td><td class="num neg">₹86 – 126</td><td class="neg">नहीं — RTO</td></tr>
+  <tr><td>COD — फ़ोन बंद / पता ग़लत</td><td class="num neg">₹86 – 126</td><td class="neg">नहीं — RTO</td></tr>
+  <tr><td>रास्ते में माल टूटा / ख़राब निकला</td><td class="num neg">माल + भाड़ा</td>
+      <td class="neg">नहीं — उपभोक्ता क़ानून के तहत ख़राब माल पर नीति नहीं चलती</td></tr>
+</table>
+
+<div class="ok">
+  <b>नीति का असली फ़ायदा — हिसाब आसान हो जाता है</b>
+  वापसी न होने का मतलब है कि रिफ़ंड बहुत कम होंगे। इससे <b>GST का हिसाब सीधा रहता है</b> —
+  हर रिफ़ंड पर आउटपुट टैक्स उल्टा करना पड़ता है, और वह उसी महीने में करना होता है जिसमें रिफ़ंड दिया गया।
+  <br><br>
+  <b>पर सावधानी:</b> RTO वाला ऑर्डर COD था, तो उसमें पैसा कभी आया ही नहीं — फिर भी माल भेजते समय
+  <b>इनवॉइस बन चुका होता है</b>। ऐसे ऑर्डर को पैनल में <b>रद्द (cancel)</b> ज़रूर करें, वरना जो बिक्री
+  हुई ही नहीं उस पर GST भरना पड़ेगा।
+</div>
+
+<h2 class="pb">11. कीमत तय करने का फ़ॉर्मूला</h2>
+
+<div class="box">
+  <b>प्रति पैकेट</b>
+  बचत = (MRP ÷ (1 + GST दर)) – मसाला – पाउच – लेबल – मेहनत
+  <br><br>
+  <b>प्रति ऑर्डर</b>
+  कुल बचत = सभी पैकेट की बचत + (59 – असली कूरियर लागत) – Razorpay फ़ीस – COD शुल्क
+  – RTO जोखिम – पैकिंग – कूपन छूट
+  <br>
+  <span class="small">फ़्री डिलीवरी वाले ऑर्डर में <b>(59 – लागत)</b> की जगह <b>(0 – लागत)</b> रखें।</span>
+</div>
+
+<h3>महीने का ब्रेक-ईवन — कितने ऑर्डर चाहिए?</h3>
+<p>ऊपर के मिश्रण से औसत बचत लगभग <b>₹68 प्रति ऑर्डर</b> बैठती है
+(50% छोटे ऑनलाइन, 20% छोटे COD, 20% बड़े ऑनलाइन, 10% बड़े COD)।</p>
+<table>
+  <tr><th style="width:52%">क्या-क्या निकालना है</th><th class="num">₹ / महीना</th><th class="num">ज़रूरी ऑर्डर</th></tr>
+  <tr><td>सिर्फ़ तकनीकी खर्च</td><td class="num">6,000</td><td class="num">89</td></tr>
+  <tr><td>तकनीकी + CA, किराया, मेहनत (₹15,000 माना)</td><td class="num">21,000</td><td class="num">311</td></tr>
+  <tr class="tot"><td>+ ₹20,000 महीने का मुनाफ़ा चाहिए</td><td class="num">41,000</td><td class="num">607</td></tr>
+</table>
+<p class="small">यही वह संख्या है जिससे कीमत तय होनी चाहिए — किसी सीधे "मार्कअप" नियम से नहीं।</p>
+
+<h3>अगर 607 ऑर्डर/माह मुमकिन नहीं, तो MRP बढ़ानी होगी</h3>
+<p>माल की लागत 65% होने का सीधा मतलब है कि <b>बचत का हिस्सा बहुत पतला है</b>। इसे ठीक करने के
+दो ही रास्ते हैं — कच्चा माल थोक में सस्ता ख़रीदें, या दाम बढ़ाएँ। दाम कितना बढ़ाना होगा:</p>
+<table>
+  <tr><th>लक्ष्य</th><th class="num">₹400 की टोकरी बने</th><th class="num">MRP में बढ़ोतरी</th><th class="num">₹100 का पैकेट बने</th></tr>
+  <tr><td>अभी (18.9% बचत)</td><td class="num">₹400</td><td class="num">—</td><td class="num">₹100</td></tr>
+  <tr><td>25% बचत</td><td class="num">₹436</td><td class="num">+9%</td><td class="num">₹109</td></tr>
+  <tr class="sub"><td>30% बचत — सेहतमंद स्तर</td><td class="num">₹476</td><td class="num">+19%</td><td class="num">₹119</td></tr>
+  <tr><td>40% बचत</td><td class="num">₹596</td><td class="num">+49%</td><td class="num">₹149</td></tr>
+</table>
+<p class="small">यह गणना माल की लागत को <b>रुपयों में स्थिर</b> मानकर की गई है (₹247.62) — दाम बढ़ाने पर
+लागत का प्रतिशत अपने आप घटता है। 40% वाली पंक्ति व्यावहारिक नहीं लगती; <b>+19% यथार्थवादी लक्ष्य है</b>,
+और वह भी एक साथ नहीं, दो चरणों में।</p>
+
+<h2 class="pb">12. ठोस सिफ़ारिशें — क्रम से</h2>
+
+<table>
+  <tr><th style="width:5%">#</th><th style="width:38%">काम</th><th class="num" style="width:17%">असर</th><th>क्यों</th></tr>
+  <tr>
+    <td><b>1</b></td><td>पैकिंग हल्की करें — छोटे ऑर्डर डिब्बे की जगह मेलर बैग में</td>
+    <td class="num pos">+₹40 / ऑर्डर</td>
+    <td>550 ग्राम का पार्सल 1 किलो के भाव लगता है; 320 ग्राम 500 ग्राम के भाव</td>
+  </tr>
+  <tr>
+    <td><b>2</b></td><td>फ़्री-शिपिंग सीमा ₹500 → <b>₹999</b> करें</td>
+    <td class="num pos">+₹155 / बड़ा ऑर्डर</td>
+    <td>अभी बड़ा ऑर्डर छोटे ऑर्डर से <b>कम</b> मुनाफ़ा देता है — यह सबसे बड़ी ख़ामी है</td>
+  </tr>
+  <tr>
+    <td><b>3</b></td><td>डिलीवरी शुल्क ₹59 → <b>₹79</b> नेट करें</td>
+    <td class="num pos">+₹20 / ऑर्डर</td>
+    <td>असली लागत ₹86 है; ₹79 पर भी आप थोड़ी सब्सिडी दे रहे हैं</td>
+  </tr>
+  <tr>
+    <td><b>4</b></td><td>COD पर <b>₹30–40 अतिरिक्त शुल्क</b> लगाएँ</td>
+    <td class="num pos">+₹40 / COD ऑर्डर</td>
+    <td>COD की असली अतिरिक्त लागत ₹44–56 है; साथ ही ग्राहक UPI की ओर जाएगा</td>
+  </tr>
+  <tr>
+    <td><b>5</b></td><td>चेकआउट पर <b>UPI सबसे ऊपर</b> दिखाएँ</td>
+    <td class="num pos">+₹11–17 / ऑर्डर</td>
+    <td>UPI पर Razorpay फ़ीस शून्य है</td>
+  </tr>
+  <tr>
+    <td><b>6</b></td><td><b>MRP लगभग 19% बढ़ाएँ</b> (दो चरणों में), या कच्चा माल थोक में सस्ता ख़रीदें</td>
+    <td class="num pos">18.9% → 30%</td>
+    <td>65% माल-लागत पर बाक़ी सब सुधार मिलकर भी 30% तक नहीं पहुँचा सकते</td>
+  </tr>
+  <tr>
+    <td><b>7</b></td><td>Magic Checkout सिर्फ़ <b>COD पर</b> चालू करें; Razorpay से असली दर लिखवाकर लें</td>
+    <td class="num pos">+₹2 / COD</td>
+    <td>प्रीपेड पर यह घाटा है, COD पर RTO घटाकर अपनी लागत निकाल लेता है</td>
+  </tr>
+  <tr>
+    <td><b>8</b></td><td>OTP के लिए <b>WhatsApp चुनें, SMS नहीं</b>; BSP की प्लेटफ़ॉर्म फ़ीस पर मोलभाव करें</td>
+    <td class="num pos">~₹0.05 / संदेश</td>
+    <td>असली खर्च संदेश नहीं, ₹1,500–2,500/माह की प्लेटफ़ॉर्म फ़ीस है</td>
+  </tr>
+  <tr>
+    <td><b>9</b></td><td>RTO वाले COD ऑर्डर पैनल में तुरंत <b>रद्द</b> करें</td>
+    <td class="num">GST</td>
+    <td>माल भेजते ही इनवॉइस बन जाता है — रद्द न करने पर बिना बिक्री के GST भरना पड़ेगा</td>
+  </tr>
+  <tr>
+    <td><b>10</b></td><td>CA से मसाला ब्लेंड की GST दर (5% या 18%) साफ़ कराएँ</td>
+    <td class="num">±13 अंक</td>
+    <td>आधे कैटलॉग की कीमत इसी पर टिकी है</td>
+  </tr>
+  <tr>
+    <td><b>7</b></td><td>AWS Savings Plan लें</td>
+    <td class="num pos">+₹1,200 / माह</td>
+    <td>सर्वर वैसे भी 24 घंटे चलते हैं</td>
+  </tr>
+  <tr>
+    <td><b>8</b></td><td>हर ऑर्डर में <code>shipping_cost</code> भरें</td>
+    <td class="num">मापन</td>
+    <td>न भरने पर रोज़ की रिपोर्ट में "कूरियर लागत दर्ज नहीं" आता है और मार्जिन दिखता ही नहीं</td>
+  </tr>
+  <tr>
+    <td><b>9</b></td><td>COD आने पर तुरंत "नक़द मिला" टिक करें</td>
+    <td class="num">नक़दी</td>
+    <td>वही तारीख़ आपकी असली कैश-इन तारीख़ है; बिना टिक किए रिफ़ंड भी दर्ज नहीं होगा</td>
+  </tr>
+  <tr>
+    <td><b>10</b></td><td>हर SKU की लागत की अलग एक्सेल शीट बनाएँ</td>
+    <td class="num">आधार</td>
+    <td>सिस्टम जानबूझकर ख़रीद-बही नहीं रखता; यह आँकड़ा आपको ही देना होगा</td>
+  </tr>
+</table>
+
+<h2>13. मान्यताएँ — इन्हें अपने असली आँकड़ों से बदलें</h2>
+<table>
+  <tr><th style="width:44%">मान्यता</th><th style="width:20%">यहाँ लिया गया</th><th>कैसे पक्का करें</th></tr>
+  <tr><td>माल की लागत (COGS)</td><td><b>नेट आमदनी का 65%</b></td><td>आपके बताए अनुसार। एक बैच की मसाला + पाउच + लेबल + मेहनत की लागत से पक्का करें</td></tr>
+  <tr><td>पैकिंग सामग्री (बैग/डिब्बा + टेप + लेबल + बबल रैप)</td><td>₹12 छोटा / ₹15 बड़ा</td>
+      <td>आपके बताए अनुसार। 100 नग की थोक ख़रीद का बिल ÷ 100</td></tr>
+  <tr><td>Magic Checkout फ़ीस</td><td>0.7% (0.4–1% की रेंज)</td>
+      <td class="neg">Razorpay यह दर सार्वजनिक नहीं करता — सेल्स से लिखवाकर लें</td></tr>
+  <tr><td>SMS/WhatsApp — प्रति ऑर्डर</td><td>₹0.70 (4–5 संदेश)</td><td>अपने BSP का बिल ÷ ऑर्डर संख्या</td></tr>
+  <tr><td>Magic से RTO में कमी</td><td>20% → 12%</td><td>चालू करने के 2 महीने बाद ख़ुद नापें</td></tr>
+  <tr><td>औसत कूरियर लागत</td><td>₹86 / ₹126</td><td>पिछले 30 ऑर्डर के Delhivery बिल का औसत</td></tr>
+  <tr><td>ज़ोन मिश्रण</td><td>25% पास, 25% मेट्रो, 40% दूर, 5% NE</td><td>ऑर्डर के पिनकोड से निकालें</td></tr>
+  <tr><td>RTO दर</td><td>20% (सिर्फ़ COD पर)</td>
+      <td>पिछले 3 महीने में कितने COD पार्सल बिना डिलीवर हुए वापस आए — <b>डिलीवरी के बाद की वापसी नहीं</b>
+      (वह आपकी नीति से बंद है)</td></tr>
+  <tr><td>COD का हिस्सा</td><td>~30% ऑर्डर</td><td>पैनल के डैशबोर्ड से</td></tr>
+  <tr><td>सर्वर का आकार</td><td>t3-श्रेणी, x86</td><td>AWS कंसोल में जाकर देखें</td></tr>
+  <tr><td>अन्य मासिक खर्च</td><td>₹15,000</td><td>किराया + CA + बिजली + मेहनत जोड़ें</td></tr>
+</table>
+
+<div class="ok" style="margin-top:14px">
+  <b>अगला क़दम</b>
+  सिर्फ़ दो आँकड़े चाहिए — <b>(1)</b> पिछले 30 ऑर्डर की असली औसत Delhivery लागत, और
+  <b>(2)</b> आपके ऑर्डर में COD का प्रतिशत। ये मिलते ही हर SKU के लिए सटीक कीमत-सूची
+  और ब्रेक-ईवन तालिका बनाई जा सकती है।
+</div>
+
+<p class="small" style="margin-top:16px; border-top:1px solid #E2E8F0; padding-top:8px">
+  <b>स्रोत:</b> Delhivery दर सूची 2026 (ClickPost, Finifi, FlexiCommerce), Delhivery One Help Center।
+  SMS/WhatsApp दरें: Message Central, Gupshup, Meta WhatsApp Business Platform मूल्य-सूची (भारत, 2026)।
+  Magic Checkout की दर सार्वजनिक नहीं है — बाज़ार की सामान्य रेंज मानी गई है।
+  तकनीकी लागत AWS ap-south-1 (मुंबई) की सार्वजनिक ऑन-डिमांड दरों पर आधारित।
+  GST दरें और शुल्क आपके सिस्टम की सेटिंग्स से लिए गए हैं। यह रिपोर्ट लेखांकन सलाह नहीं है —
+  अंतिम कर-निर्णय आपके CA का है।
+</p>
+
+</body>
+</html>

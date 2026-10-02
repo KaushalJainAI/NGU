@@ -1,0 +1,74 @@
+{
+  "flow": "netbanking-prod",
+  "base": "https://nidhigrahudyog.com",
+  "orderId": 77,
+  "paid": true,
+  "when": "2026-07-22T10:26:58.922Z",
+  "findings": [
+    {
+      "level": "info",
+      "msg": "logged in",
+      "t": "2026-07-22T10:26:10.060Z"
+    },
+    {
+      "level": "info",
+      "msg": "test-mode confirmed rzp_test_TG4 amount=114240",
+      "t": "2026-07-22T10:26:10.836Z"
+    },
+    {
+      "level": "console",
+      "msg": "Refused to get unsafe header \"x-rtb-fingerprint-id\"",
+      "t": "2026-07-22T10:26:14.700Z"
+    },
+    {
+      "level": "console",
+      "msg": "Refused to get unsafe header \"request-id\"",
+      "t": "2026-07-22T10:26:14.701Z"
+    },
+    {
+      "level": "info",
+      "msg": "clicked Netbanking via text=/netbanking/i",
+      "t": "2026-07-22T10:26:17.298Z"
+    },
+    {
+      "level": "info",
+      "msg": "popup opened: about:blank",
+      "t": "2026-07-22T10:26:20.330Z"
+    },
+    {
+      "level": "info",
+      "msg": "clicked bank via text=/HDFC/i",
+      "t": "2026-07-22T10:26:20.450Z"
+    },
+    {
+      "level": "info",
+      "msg": "popup: clicked text=/^Success$/i",
+      "t": "2026-07-22T10:26:25.543Z"
+    },
+    {
+      "level": "console",
+      "msg": "Refused to get unsafe header \"x-rtb-fingerprint-id\"",
+      "t": "2026-07-22T10:26:35.728Z"
+    },
+    {
+      "level": "console",
+      "msg": "Refused to get unsafe header \"request-id\"",
+      "t": "2026-07-22T10:26:35.728Z"
+    },
+    {
+      "level": "warn",
+      "msg": "Success button not found",
+      "t": "2026-07-22T10:26:53.895Z"
+    },
+    {
+      "level": "info",
+      "msg": "verify handler: status=200 body={\"success\":true,\"order_id\":77}",
+      "t": "2026-07-22T10:26:56.736Z"
+    },
+    {
+      "level": "info",
+      "msg": "order 77 PAID",
+      "t": "2026-07-22T10:26:57.696Z"
+    }
+  ]
+}

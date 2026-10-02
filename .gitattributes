@@ -1,0 +1,6 @@
+# Files that run inside Linux containers must keep LF endings even on a Windows
+# checkout: a CRLF shebang makes the container exit 127 ("not found") at start.
+# (The storefront and the admin panel repeat these rules in their own folders.)
+*.sh text eol=lf
+nginx.conf text eol=lf
+Dockerfile text eol=lf

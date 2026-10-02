@@ -1,0 +1,364 @@
+{
+  "persona": "malicious",
+  "device": "desktop",
+  "base": "https://nidhimasala.com",
+  "when": "2026-07-07T11:46:04.770Z",
+  "findings": [
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:37.220Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 400 ()",
+      "t": "2026-07-07T11:45:37.290Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Ia: Authentication credentials were not provided.\n    at ke (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:39697)\n    at async Object.getAll (https://nidhimasala.com/assets/index-C2ZDHhiG.js:39",
+      "t": "2026-07-07T11:45:37.300Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: Provided button width is invalid: 100%",
+      "t": "2026-07-07T11:45:37.687Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Provider's accounts list is empty.",
+      "t": "2026-07-07T11:45:38.736Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token.",
+      "t": "2026-07-07T11:45:38.854Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "/my-orders correctly redirected anon → /login",
+      "t": "2026-07-07T11:45:41.050Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:41.282Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:41.284Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 400 ()",
+      "t": "2026-07-07T11:45:41.354Z"
+    },
+    {
+      "level": "issue",
+      "area": "authz",
+      "msg": "/profile did NOT redirect anon user (landed https://nidhimasala.com/profile)",
+      "t": "2026-07-07T11:45:43.717Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:43.816Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /auth/profile/ unauth → 401 (protected)",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:43.822Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:43.896Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /orders/ unauth → 401 (protected)",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:43.897Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:43.998Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /cart/ unauth → 401 (protected)",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:43.998Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.068Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /favorites/ unauth → 401 (protected)",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.070Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.169Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /payment-methods/ unauth → 401 (protected)",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.170Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.275Z"
+    },
+    {
+      "level": "info",
+      "area": "idor",
+      "msg": "GET /orders/1/ → 401",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.283Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.467Z"
+    },
+    {
+      "level": "info",
+      "area": "idor",
+      "msg": "GET /orders/2/ → 401",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.477Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.607Z"
+    },
+    {
+      "level": "info",
+      "area": "idor",
+      "msg": "GET /orders/42/ → 401",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.609Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:44.703Z"
+    },
+    {
+      "level": "info",
+      "area": "idor",
+      "msg": "GET /orders/99999/ → 401",
+      "snippet": "{\"success\":false,\"error\":\"Authentication credentials were not provided.\"}",
+      "t": "2026-07-07T11:45:44.703Z"
+    },
+    {
+      "level": "info",
+      "area": "xss",
+      "msg": "injection payloads rendered inert (no script exec)",
+      "t": "2026-07-07T11:45:52.248Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 404 ()",
+      "t": "2026-07-07T11:45:52.330Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /admin/dashboard/ anon → 404",
+      "t": "2026-07-07T11:45:52.332Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 404 ()",
+      "t": "2026-07-07T11:45:52.408Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /admin/coupons/ anon → 404",
+      "t": "2026-07-07T11:45:52.409Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 404 ()",
+      "t": "2026-07-07T11:45:52.499Z"
+    },
+    {
+      "level": "info",
+      "area": "authz",
+      "msg": "GET /analytics/insights/ anon → 404",
+      "t": "2026-07-07T11:45:52.500Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:53.119Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:53.120Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:53.120Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:53.121Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 400 ()",
+      "t": "2026-07-07T11:45:53.202Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Get cart error: Ia: Validation error\n    at ke (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:39697)\n    at async Object.get (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:42261)\n    at ",
+      "t": "2026-07-07T11:45:53.213Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to fetch cart from backend: Ia: Validation error\n    at ke (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:39697)\n    at async Object.get (https://nidhimasala.com/assets/index-C2ZDHhiG.js",
+      "t": "2026-07-07T11:45:53.215Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Ia: Validation error\n    at ke (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:39697)\n    at async Object.getAll (https://nidhimasala.com/assets/index-C2ZDHhiG.js:396:43381)\n    at async https:/",
+      "t": "2026-07-07T11:45:53.215Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: Provided button width is invalid: 100%",
+      "t": "2026-07-07T11:45:53.270Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Not signed in with the identity provider.",
+      "t": "2026-07-07T11:45:53.287Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 403 ()",
+      "t": "2026-07-07T11:45:53.382Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "[GSI_LOGGER]: FedCM get() rejects with NetworkError: Error retrieving a token.",
+      "t": "2026-07-07T11:45:56.713Z"
+    },
+    {
+      "level": "info",
+      "area": "authn",
+      "msg": "tampered token rejected → forced logout / redirect (good)",
+      "t": "2026-07-07T11:45:56.814Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:58.069Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:45:59.446Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:46:00.893Z"
+    },
+    {
+      "level": "info",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 401 ()",
+      "t": "2026-07-07T11:46:02.600Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 429 ()",
+      "t": "2026-07-07T11:46:02.918Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 429 ()",
+      "t": "2026-07-07T11:46:03.290Z"
+    },
+    {
+      "level": "issue",
+      "area": "console",
+      "msg": "Failed to load resource: the server responded with a status of 429 ()",
+      "t": "2026-07-07T11:46:03.636Z"
+    },
+    {
+      "level": "info",
+      "area": "ratelimit",
+      "msg": "login attempts → [401,401,401,401,429,429,429] (429 throttle observed)",
+      "t": "2026-07-07T11:46:03.842Z"
+    }
+  ],
+  "counts": {
+    "issues": 15,
+    "warns": 0
+  },
+  "requests": 115
+}

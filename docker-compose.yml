@@ -1,0 +1,220 @@
+
+
+services:
+  # Redis Cache - Required for caching
+  redis:
+    image: redis:7-alpine
+    container_name: ngu-redis
+    restart: unless-stopped
+    # 256mb headroom + volatile-lru so anonymous analytics counters aren't
+    # evicted before the scheduler drains them. See prod compose for rationale.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy volatile-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - ngu-network
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Self-hosted speech-to-text (whisper.cpp, small-q5) for assistant voice input
+  whisper:
+    build:
+      context: ./whisper
+      dockerfile: Dockerfile
+    container_name: ngu-whisper
+    restart: unless-stopped
+    expose:
+      - "8080"
+    networks:
+      - ngu-network
+    deploy:
+      resources:
+        limits:
+          memory: 500M
+
+  # Django Backend API
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: ngu-backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,backend}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001}
+      - RAZORPAY_TEST_MODE=${RAZORPAY_TEST_MODE:-True}
+      - RAZORPAY_TEST_KEY_ID=${RAZORPAY_TEST_KEY_ID}
+      - RAZORPAY_TEST_KEY_SECRET=${RAZORPAY_TEST_KEY_SECRET}
+      - RAZORPAY_TEST_WEBHOOK_SECRET=${RAZORPAY_TEST_WEBHOOK_SECRET}
+      - RAZORPAY_LIVE_KEY_ID=${RAZORPAY_LIVE_KEY_ID}
+      - RAZORPAY_LIVE_KEY_SECRET=${RAZORPAY_LIVE_KEY_SECRET}
+      - RAZORPAY_LIVE_WEBHOOK_SECRET=${RAZORPAY_LIVE_WEBHOOK_SECRET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+      # Redis cache URL
+      - REDIS_URL=redis://redis:6379/0
+      # Voice transcription. STT_PROVIDER: 'voxtral' (Voxtral Mini Transcribe
+      # over OpenRouter, reuses LLM_API_KEY) or 'whisper' (local container).
+      - USE_SELF_HOSTED_STT=${USE_SELF_HOSTED_STT:-True}
+      - STT_PROVIDER=${STT_PROVIDER:-voxtral}
+      - STT_FALLBACK_TO_WHISPER=${STT_FALLBACK_TO_WHISPER:-True}
+      - WHISPER_URL=http://whisper:8080/inference
+    volumes:
+      - media_data:/app/media
+      - static_data:/app/staticfiles
+#    ports:
+#      - "8000:8000"
+    expose:
+      - "8000"
+    networks:
+      - ngu-network
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Background job scheduler — payment reconciliation (L3 self-healing) +
+  # analytics rollups. Reuses the backend image so it stays in lock-step.
+  scheduler:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    container_name: ngu-scheduler
+    restart: unless-stopped
+    command: python manage.py run_scheduler
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,backend}
+      - RAZORPAY_TEST_MODE=${RAZORPAY_TEST_MODE:-True}
+      - RAZORPAY_TEST_KEY_ID=${RAZORPAY_TEST_KEY_ID}
+      - RAZORPAY_TEST_KEY_SECRET=${RAZORPAY_TEST_KEY_SECRET}
+      - RAZORPAY_TEST_WEBHOOK_SECRET=${RAZORPAY_TEST_WEBHOOK_SECRET}
+      - RAZORPAY_LIVE_KEY_ID=${RAZORPAY_LIVE_KEY_ID}
+      - RAZORPAY_LIVE_KEY_SECRET=${RAZORPAY_LIVE_KEY_SECRET}
+      - RAZORPAY_LIVE_WEBHOOK_SECRET=${RAZORPAY_LIVE_WEBHOOK_SECRET}
+      - REDIS_URL=redis://redis:6379/0
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # Customer-facing Frontend
+  frontend:
+    build:
+      context: ./Frontend/nidhi-brand-forge
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:8000/api}
+    container_name: ngu-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Admin Panel
+  admin-panel:
+    build:
+      context: ./Admin Panel/e-commerce-command-center
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=${VITE_ADMIN_API_URL:-http://localhost:8000/api}
+    container_name: ngu-admin-panel
+    restart: unless-stopped
+    environment:
+      # Runtime API URL (overrides the baked build arg without a rebuild)
+      - API_URL=${ADMIN_API_URL:-http://localhost:8000/api}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+#    ports:
+#      - "3001:80"
+    expose:
+      - "80"
+    networks:
+      - ngu-network
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M  # Low memory - admin panel has less traffic
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: PostgreSQL Database (uncomment if needed)
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: ngu-postgres
+  #   restart: unless-stopped
+  #   environment:
+  #     - POSTGRES_USER=${POSTGRES_USER:-ngu}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #     - POSTGRES_DB=${POSTGRES_DB:-ngu_db}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - ngu-network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ngu}"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+networks:
+  ngu-network:
+    driver: bridge
+
+volumes:
+  media_data:
+  static_data:
+  redis_data:
+  # postgres_data:  # Uncomment if using PostgreSQL
+
