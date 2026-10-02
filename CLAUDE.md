@@ -714,3 +714,44 @@ suites against a **local seeded server or staging** instead:
   models appeared in the working tree during this deploy (not from this session); it
   was NOT shipped — the backend image was built from a clean checkout. Committing it
   would silently turn the assistant's reasoning off.
+
+## Sizes, combos, bulk edit and the Recycle Bin (2026-10-02 — in the working tree, NOT deployed)
+
+- ⚠ **Not committed, not deployed.** Needs migration `admin_panel/0013_deletedrecord`
+  and a rebuild of BOTH the backend and admin-panel images (the panel calls the new
+  `/api/admin/recycle-bin/` routes and reads new fields).
+- **Recycle Bin now covers every admin delete.** Products, combos, sizes, categories,
+  sections and orders were already soft-deleted. Coupons, reviews (staff deletes only —
+  a customer deleting their own review is still a hard delete), expenses, gallery
+  images, receivable accounts and contact messages are now snapshotted into
+  `admin_panel.DeletedRecord` before the row is removed (`RecycleBinDestroyMixin` in
+  `admin_panel/recycle.py`) and restored under their original id from the panel's
+  Recycle Bin → "Other" tab. ⚠ A new admin-deletable model must take the mixin, or its
+  DELETE is permanent again. Restore answers 409 with a reason when a unique value
+  (coupon code, UPI id) has been reused or the parent row is gone.
+- `purge_recycle_bin` also drops expired snapshots, and reports a binned product that
+  is still a component of a combo as skipped for that reason. ⚠ Such a product could
+  never be hard-deleted anyway: deleting it deletes its sizes, and
+  `ProductComboItem.variant` is PROTECT (verified 2026-10-02 — `Product.delete()`
+  raises `ProtectedError`). A combo line is only ever removed by editing the combo or
+  deleting the combo itself.
+- ✅ **A switched-off product is removed from every combo** (owner's decision
+  2026-10-02; `products/combo_membership.py`, called from `Product.save()` on the
+  `is_active` flip — PATCH, DELETE and Django admin alike). Each removed line is
+  remembered in `products.DetachedComboLine` (migration `products/0044`).
+  - A combo that was on sale is **switched off at the same moment** (no
+    `deactivated_at` stamp, so the purge never takes it): it is no longer the bundle
+    its price was set for. ⚠ Don't change this to "keep selling" without the owner —
+    the customer would pay the old price for fewer goods.
+  - Switching the product back on restores the lines and switches back on the combos
+    this rule had switched off — unless an admin edited or re-activated the combo
+    meanwhile (`forget_detached_lines`), or it was sent to the Recycle Bin.
+  - The product PATCH response carries `combo_changes`; combos expose staff-only
+    `missing_products`. `ProductCombo.clean()` now enforces price ≤ MRP only while the
+    combo is ACTIVE, so a reduced combo can be edited/binned but not put back on sale
+    above its new MRP.
+  - Rows changed behind `save()` (queryset `.update()`, bulk SQL) are still covered:
+    `available_stock` returns 0 and checkout refuses a combo whose component product
+    is off. One-off for existing data, **dry-run first — it switches live combos off**:
+    `python manage.py detach_inactive_products_from_combos --dry-run`.
+

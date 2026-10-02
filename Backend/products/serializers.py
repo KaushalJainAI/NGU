@@ -2,6 +2,7 @@ import json
 from decimal import Decimal
 
 from rest_framework import serializers
+from django.db import transaction
 from django.db.models import Avg
 from .models import (
     Category, Product, ProductImage, ProductCombo, ProductComboItem,
@@ -9,6 +10,16 @@ from .models import (
     default_variant_for as _default_variant_for,
     ensure_default_variant_for as _ensure_default_variant_for,
 )
+
+
+def _int_or_none(value):
+    """An id from a client payload as an int, or None if it is not one."""
+    if isinstance(value, bool) or value in (None, ''):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +464,8 @@ class ProductListSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     discount_percentage = serializers.ReadOnlyField()
     in_stock = serializers.ReadOnlyField()
 
-    staff_only_fields = ('stock', 'low_stock_threshold')
+    # `deactivated_at` tells the panel's Recycle Bin when the purge clock started.
+    staff_only_fields = ('stock', 'low_stock_threshold', 'deactivated_at')
     sections = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=ProductSection.objects.all(),
@@ -472,9 +484,10 @@ class ProductListSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
             'stock', 'in_stock', 'low_stock_threshold', 'weight', 'unit', 'organic',
             'image', 'thumbnail', 'is_featured',
             'average_rating', 'reviews_count', 'created_at', 'badge', 'is_active',
+            'deactivated_at',
             'sections', 'section_names', 'variants', 'variant_count'
         ]
-        read_only_fields = ['slug', 'created_at']
+        read_only_fields = ['slug', 'created_at', 'deactivated_at']
 
     def get_section_names(self, obj):
         return [section.name for section in obj.sections.all()]
@@ -609,6 +622,8 @@ class ProductComboItemReadSerializer(StaffOnlyFieldsMixin, serializers.ModelSeri
     )
     variant_stock = serializers.IntegerField(source='variant.stock', read_only=True)
     variant_is_active = serializers.BooleanField(source='variant.is_active', read_only=True)
+    # Lets the panel flag a combo whose component was sent to the Recycle Bin.
+    product_is_active = serializers.BooleanField(source='product.is_active', read_only=True)
     quantity = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -617,19 +632,50 @@ class ProductComboItemReadSerializer(StaffOnlyFieldsMixin, serializers.ModelSeri
             'product', 'product_name', 'product_slug',
             'product_image', 'product_thumbnail', 'product_price',
             'variant', 'variant_label', 'variant_price', 'variant_stock',
-            'variant_is_active', 'quantity'
+            'variant_is_active', 'product_is_active', 'quantity'
         ]
+
+
+class ComboItemsField(serializers.Field):
+    """The combo's component lines, write-only.
+
+    Arrives as a JSON STRING from the panel's multipart form (a file upload
+    cannot carry a nested list) and as a real list from a JSON body. Both are
+    passed through untouched; `ProductComboSerializer._parse_items` turns either
+    into a list of dicts. A CharField here rejected the list form outright with
+    "Not a valid string", so a JSON client could not write components at all.
+    """
+
+    def to_internal_value(self, data):
+        return data
+
+    def to_representation(self, value):  # pragma: no cover — write-only
+        return value
 
 
 class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     # Accept items as a JSON string (for FormData) or list
-    items = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    items = ComboItemsField(write_only=True, required=False)
 
     # AP8/S12: the alert threshold and the exact buildable count are internal;
     # the storefront renders combos without them (availability reads is_active).
-    staff_only_fields = ('low_stock_threshold', 'available_stock')
+    staff_only_fields = ('low_stock_threshold', 'available_stock', 'deactivated_at',
+                         'missing_products')
+    # Switched-off products that were taken out of this combo and will return to
+    # it if switched back on (products/combo_membership.py). Non-empty means
+    # the combo is currently SMALLER than the bundle its price was set for.
+    missing_products = serializers.SerializerMethodField(read_only=True)
+
+    def get_missing_products(self, obj):
+        # .all() so the viewset's `detached_lines__product` prefetch is reused.
+        names = []
+        for line in obj.detached_lines.all():
+            if line.product.name not in names:
+                names.append(line.product.name)
+        return names
+
     sections = serializers.PrimaryKeyRelatedField(
-        many=True, 
+        many=True,
         queryset=ProductSection.objects.all(),
         required=False
     )
@@ -663,10 +709,11 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
             'discount_percentage', 'total_original_price', 'total_weight',
             'low_stock_threshold', 'available_stock',
             'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at',
+            'deactivated_at', 'missing_products',
             'average_rating', 'reviews_count',
             'items', 'sections', 'section_names'
         ]
-        read_only_fields = ['slug', 'created_at']
+        read_only_fields = ['slug', 'created_at', 'deactivated_at']
 
     def get_section_names(self, obj):
         return [section.name for section in obj.sections.all()]
@@ -681,22 +728,26 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
         return data
 
     def _parse_items(self, items_raw):
-        """Parse items from JSON string or return as-is if already a list"""
+        """Parse items from a JSON string (FormData) or a list, into a list of
+        dicts. Anything else is a 400, not something for later code to trip on:
+        `"5"` and `{}` are both valid JSON and neither is a list of lines."""
         if items_raw is None or items_raw == '':
             return []
-        
-        if isinstance(items_raw, list):
-            return items_raw
-        
+
         if isinstance(items_raw, str):
             try:
-                return json.loads(items_raw)
+                items_raw = json.loads(items_raw)
             except json.JSONDecodeError:
                 raise serializers.ValidationError({
                     'items': 'Invalid JSON format for items.'
                 })
-        
-        return []
+
+        if not isinstance(items_raw, list) or not all(
+                isinstance(item, dict) for item in items_raw):
+            raise serializers.ValidationError({
+                'items': 'Items must be a list of {product, variant, quantity}.'
+            })
+        return items_raw
 
     def _validate_and_get_items(self, items_data):
         """Validate items and return (variant, quantity) pairs.
@@ -736,9 +787,11 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
                         'items': f'Size with ID {variant_id} does not exist.'
                     })
                 # Guard against a mismatched pair arriving from a stale form.
-                if product_id and int(product_id) != variant.product_id:
+                if product_id and str(product_id) != str(variant.product_id):
                     raise serializers.ValidationError({
-                        'items': f'Size {variant_id} does not belong to product {product_id}.'
+                        'items': f'{variant.formatted_weight or "That size"} is not a '
+                                 f'size of the product it was added under. Pick the '
+                                 f'size again.'
                     })
             else:
                 try:
@@ -759,13 +812,15 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
 
             if not variant.is_active:
                 raise serializers.ValidationError({
-                    'items': f'{variant.product.name} ({variant.formatted_weight}) is not an active size.'
+                    'items': f'{variant.product.name} ({variant.formatted_weight}) has been '
+                             f'retired. Pick another size or remove it from the combo.'
                 })
 
             # The same size twice in one combo is a quantity, not two lines.
             if variant.pk in seen_variant_ids:
                 raise serializers.ValidationError({
-                    'items': 'Cannot add the same product size multiple times.'
+                    'items': f'{variant.product.name} ({variant.formatted_weight}) is '
+                             f'listed twice. Keep one line and raise its quantity.'
                 })
             seen_variant_ids.append(variant.pk)
 
@@ -789,18 +844,25 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
 
         return validated_items
 
+    # create() and update() are each ONE transaction. A combo is its header row
+    # plus its component lines, and a failure between the two used to leave a
+    # half-written bundle behind: a new combo with no components (MRP 0), or an
+    # edited one whose old lines were already deleted when a new line was
+    # rejected. Either the whole save lands or none of it does.
+
+    @transaction.atomic
     def create(self, validated_data):
         items_raw = validated_data.pop('items', '[]')
         sections = validated_data.pop('sections', [])
         items_data = self._parse_items(items_raw)
         validated_items = self._validate_and_get_items(items_data)
-        
+
         combo = ProductCombo.objects.create(**validated_data)
-        
+
         # Add sections
         if sections:
             combo.sections.set(sections)
-        
+
         for item_data in validated_items:
             ProductComboItem.objects.create(
                 combo=combo,
@@ -811,27 +873,21 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
 
         return combo
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         items_raw = validated_data.pop('items', None)
         sections = validated_data.pop('sections', None)
-        
-        # Update main combo fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        
-        # Update sections if provided
-        if sections is not None:
-            instance.sections.set(sections)
-        
-        # Handle nested items only if items were provided
+
+        # Resolve the new component lines BEFORE touching the combo, so a bad
+        # line rejects the request while nothing has been written yet.
+        validated_items = None
         if items_raw is not None and items_raw != '':
-            items_data = self._parse_items(items_raw)
-            validated_items = self._validate_and_get_items(items_data)
-            
-            # Clear existing items and create new ones
+            validated_items = self._validate_and_get_items(self._parse_items(items_raw))
+
+        # Replace the components first: ProductCombo.clean() checks the selling
+        # price against the MRP, and that MRP has to be the NEW components'.
+        if validated_items is not None:
             instance.productcomboitem_set.all().delete()
-            
             for item_data in validated_items:
                 ProductComboItem.objects.create(
                     combo=instance,
@@ -839,6 +895,24 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
                     variant=item_data['variant'],
                     quantity=item_data['quantity']
                 )
+            # Drop a stale with_mrp() annotation so clean() re-derives the MRP.
+            instance.__dict__.pop('_mrp', None)
+
+        # An admin re-defining the combo (new lines) or putting it back on sale
+        # is them saying "this is the bundle now". Lines remembered from a
+        # switched-off product must not be pushed back into it later.
+        if validated_items is not None or validated_data.get('is_active') is True:
+            from .combo_membership import forget_detached_lines
+            forget_detached_lines(instance)
+
+        # Update main combo fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        # Update sections if provided
+        if sections is not None:
+            instance.sections.set(sections)
 
         return instance
 
@@ -863,17 +937,19 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
                 quantity = 1
 
             price = None
-            if item.get('variant'):
+            variant_pk = _int_or_none(item.get('variant'))
+            product_pk = _int_or_none(item.get('product'))
+            if variant_pk:
                 price = (ProductVariant.objects
-                         .filter(pk=item['variant'])
+                         .filter(pk=variant_pk)
                          .values_list('price', flat=True).first())
-            elif item.get('product'):
-                variant = _default_variant_for(item['product'])
+            elif product_pk:
+                variant = _default_variant_for(product_pk)
                 # No size yet: the legacy Product.price is what such a product
                 # would be sold at, and is exactly what create() will copy onto
                 # the variant it mints.
                 price = variant.price if variant is not None else (
-                    Product.objects.filter(pk=item['product'])
+                    Product.objects.filter(pk=product_pk)
                     .values_list('price', flat=True).first())
 
             if price:

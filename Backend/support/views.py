@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from rest_framework.throttling import AnonRateThrottle
 from django.utils import timezone
 
+from admin_panel.recycle import RecycleBinDestroyMixin
 from .models import ContactSubmission
 from .serializers import (
     ContactSubmissionSerializer,
@@ -18,12 +19,17 @@ class ContactRateThrottle(AnonRateThrottle):
     scope = 'contact'
 
 
-class ContactSubmissionViewSet(viewsets.ModelViewSet):
+class ContactSubmissionViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     """
     ViewSet for contact form submissions.
     - Anyone can POST (submit a contact form) - rate limited to 5/hour
-    - Only admins can GET/PUT/DELETE
+    - Only admins can GET/PUT/DELETE (DELETE moves it to the Recycle Bin)
     """
+    recycle_kind = 'contact_submission'
+
+    def recycle_label(self, instance):
+        return f"{instance.name} — {instance.subject}"
+
     throttle_classes = [ContactRateThrottle]
     # Admin inbox has no pagination UI, so return every submission — otherwise
     # the 13th+ customer message is invisible (hidden by global PAGE_SIZE).

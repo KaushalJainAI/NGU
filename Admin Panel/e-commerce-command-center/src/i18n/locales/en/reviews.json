@@ -18,7 +18,7 @@
     "hidden": "Hidden",
     "showInStore": "Show in store",
     "hideFromStore": "Hide from store",
-    "deletePermanently": "Delete permanently",
+    "deletePermanently": "Delete (goes to the Recycle Bin)",
     "pager": "Page {{page}} of {{totalPages}} ({{count}} reviews)",
 
     "slotCounter": "{{count}} of {{max}} on the home page",
@@ -45,9 +45,9 @@
     "visibleBody": "This review is shown in the store again.",
     "updateFailed": "Could not update the review.",
 
-    "confirmDelete": "Permanently delete this review of \"{{name}}\"? This cannot be undone — hiding is usually enough.",
+    "confirmDelete": "Move this review of \"{{name}}\" to the Recycle Bin? You can restore it from there — hiding is usually enough.",
     "deletedTitle": "Deleted",
-    "deletedBody": "The review has been removed.",
+    "deletedBody": "The review is in the Recycle Bin.",
     "deleteFailed": "Could not delete the review."
   }
 }

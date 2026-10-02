@@ -147,6 +147,44 @@ class Coupon(models.Model):
     def __str__(self):
         return self.code
     
+class DeletedRecord(models.Model):
+    """Recycle Bin entry for a row removed through an admin DELETE.
+
+    Products, combos, sizes and orders are soft-deleted on their own tables (an
+    `is_active` / `is_deleted` flag) because history points at them. Everything
+    else an admin can delete — a coupon, a review, an expense, a gallery image,
+    a payment account, a contact message — used to be a plain SQL DELETE with no
+    way back. Those rows now land here first: `payload` holds the serialized row
+    (plus whatever its deletion cascaded to or nulled), and `restore` puts it
+    back under its original primary key. See admin_panel/recycle.py.
+
+    A snapshot table rather than a `deleted_at` column on each model, on
+    purpose: a soft-delete flag has to be remembered by every query that ever
+    reads the table (rating averages, coupon validation, the books summary…),
+    and one forgotten filter resurrects a deleted row somewhere it matters.
+    Here the row is genuinely gone until it is restored.
+    """
+    # Short machine name the panel groups and translates by, e.g. 'coupon'.
+    kind = models.CharField(max_length=40, db_index=True)
+    model_label = models.CharField(max_length=100)   # 'admin_panel.coupon'
+    object_pk = models.CharField(max_length=64)
+    # What the admin sees in the bin — captured at delete time, because the row
+    # it describes no longer exists to be asked.
+    label = models.CharField(max_length=255)
+    preview_url = models.CharField(max_length=500, blank=True, default='')
+    payload = models.JSONField()
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+')
+    deleted_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-deleted_at', '-id']
+
+    def __str__(self):
+        return f"{self.kind}: {self.label}"
+
+
 class Policy(models.Model):
     POLICY_TYPES = [
         ('shipping', 'Shipping'),

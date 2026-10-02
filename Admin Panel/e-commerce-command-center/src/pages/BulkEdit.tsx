@@ -3,10 +3,10 @@ import { useAdminData, useInvalidate } from '@/hooks/useAdminData';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import {
   getBulkProducts, applyBulkChanges, importProductsCsv, exportProductsCsv,
-  BulkProductRow, BulkVariant, BulkChange, ImportPreview,
+  BulkProductRow, BulkVariant, BulkChange, BulkApplyError, ImportPreview,
 } from '@/api/bulk';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -14,41 +14,49 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Save, Download, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Search, Save, Download, Upload, CheckCircle2, AlertTriangle, Undo2 } from 'lucide-react';
 import { PageHelp } from '@/components/PageHelp';
 import { useTranslation } from 'react-i18next';
 
 type Field = 'price' | 'discount_price' | 'stock';
+const FIELDS: Field[] = ['price', 'discount_price', 'stock'];
 
-/** Pending edits, keyed by the thing being edited: `p:<productId>` for a
- *  product's own price/stock, or `v:<variantId>` for one packaging size. */
-type Edits = Record<string, {
+/** Pending edits, keyed by the SIZE being edited. Price and stock live on a
+ *  size, never on the product itself, so there is no product-level key. */
+type Edits = Record<number, {
   productId: number;
-  variantId?: number;
   price?: string;
   discount_price?: string;
   stock?: string;
 }>;
 
-/** The size the grid is currently editing for a product, or `null` for the
- *  product's own (legacy, size-less) fields. Defaults to the default size. */
-const defaultVariant = (row: BulkProductRow): BulkVariant | null =>
-  row.variants?.find(v => v.is_default) ?? row.variants?.[0] ?? null;
+/** One grid line: a single size of a product. */
+type Line = {
+  product: BulkProductRow;
+  /** `null` only for a product with no active size — shown, but not editable. */
+  variant: BulkVariant | null;
+  /** First line of its product, so the name is printed once per group. */
+  first: boolean;
+  sizeCount: number;
+};
+
+const original = (variant: BulkVariant, field: Field) =>
+  String(field === 'stock' ? variant.stock : variant[field] ?? '');
 
 const BulkEdit = () => {
   const { t } = useTranslation();
   const {
-    data: rows = [], isInitialLoading, refreshing, refetch: fetchRows,
+    data: rows = [], isInitialLoading, refreshing,
   } = useAdminData(['bulk-products'], () => getBulkProducts().then(r => r.data));
   const invalidate = useInvalidate();
   const [edits, setEdits] = useState<Edits>({});
   const [search, setSearch] = useState('');
+  const [changedOnly, setChangedOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  /** What the server refused on the last save, by size id. */
+  const [serverErrors, setServerErrors] = useState<Record<number, string>>({});
   const { toast } = useToast();
 
   // Import wizard state
@@ -56,99 +64,127 @@ const BulkEdit = () => {
   const [importing, setImporting] = useState(false);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
 
-  const visible = useMemo(() => {
+  // Every size on its own line. The old grid showed one line per product with a
+  // size dropdown, which hid all but one size at a time: an edit to the 500g
+  // pack disappeared from view the moment the dropdown moved to 1kg.
+  const lines = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(r => r.name.toLowerCase().includes(q) || r.category_name.toLowerCase().includes(q));
-  }, [rows, search]);
-
-  // Which size each product row is editing, by variant id. Unset rows fall back
-  // to the product's default size. There is deliberately no "edit the product
-  // itself" option: price and stock live on the size, and the product's own
-  // columns are a read-only mirror of the default size — writing them looks
-  // like it worked and is then overwritten by the next size save.
-  const [sizeChoice, setSizeChoice] = useState<Record<number, string>>({});
-
-  const activeVariant = (row: BulkProductRow): BulkVariant | null => {
-    const choice = sizeChoice[row.id];
-    if (choice === undefined) return defaultVariant(row);
-    return row.variants?.find(v => String(v.id) === choice) ?? defaultVariant(row);
-  };
-
-  // The row's edit key + the values the inputs compare against.
-  const target = (row: BulkProductRow) => {
-    const variant = activeVariant(row);
-    const source = variant ?? row;
-    return {
-      key: variant ? `v:${variant.id}` : `p:${row.id}`,
-      variantId: variant?.id,
-      original: (field: Field) =>
-        String(field === 'stock' ? source.stock : source[field] ?? ''),
-    };
-  };
-
-  const setEdit = (row: BulkProductRow, field: Field, value: string) => {
-    const { key, variantId, original } = target(row);
-    setEdits(prev => {
-      const next = {
-        ...prev,
-        [key]: { ...prev[key], productId: row.id, variantId, [field]: value },
-      };
-      // Drop the edit if it matches the original again (no longer dirty).
-      if (value === original(field)) {
-        delete next[key][field];
-        const { productId: _p, variantId: _v, ...fields } = next[key];
-        if (Object.keys(fields).length === 0) delete next[key];
+    const out: Line[] = [];
+    for (const product of rows) {
+      const variants = product.variants ?? [];
+      const productMatches = !q
+        || product.name.toLowerCase().includes(q)
+        || product.category_name.toLowerCase().includes(q);
+      let shown = variants.filter(v =>
+        productMatches || v.label.toLowerCase().includes(q));
+      if (changedOnly) shown = shown.filter(v => edits[v.id]);
+      if (variants.length === 0) {
+        if (productMatches && !changedOnly) {
+          out.push({ product, variant: null, first: true, sizeCount: 0 });
+        }
+        continue;
       }
-      return next;
+      shown.forEach((variant, index) => out.push({
+        product, variant, first: index === 0, sizeCount: variants.length,
+      }));
+    }
+    return out;
+  }, [rows, search, changedOnly, edits]);
+
+  const value = (variant: BulkVariant, field: Field) =>
+    edits[variant.id]?.[field] ?? original(variant, field);
+
+  const isDirty = (variant: BulkVariant, field: Field) =>
+    edits[variant.id]?.[field] !== undefined;
+
+  const setEdit = (product: BulkProductRow, variant: BulkVariant, field: Field, next: string) => {
+    setServerErrors(prev => {
+      if (!(variant.id in prev)) return prev;
+      const { [variant.id]: _gone, ...rest } = prev;
+      return rest;
+    });
+    setEdits(prev => {
+      const entry = { ...prev[variant.id], productId: product.id, [field]: next };
+      // Typing the original value back means "not changed" again.
+      if (next === original(variant, field)) delete entry[field];
+      const copy = { ...prev };
+      if (FIELDS.some(f => entry[f] !== undefined)) copy[variant.id] = entry;
+      else delete copy[variant.id];
+      return copy;
     });
   };
 
-  const isDirty = (row: BulkProductRow, field: Field) =>
-    edits[target(row).key]?.[field] !== undefined;
+  const resetLine = (variant: BulkVariant) =>
+    setEdits(prev => {
+      const { [variant.id]: _gone, ...rest } = prev;
+      return rest;
+    });
 
-  const cellValue = (row: BulkProductRow, field: Field) => {
-    const { key, original } = target(row);
-    return edits[key]?.[field] ?? original(field);
+  /** Why this line can't be saved as typed, or null. Mirrors the server's
+   *  rules so the problem shows beside the box instead of after Save. */
+  const problem = (variant: BulkVariant): string | null => {
+    if (!edits[variant.id]) return null;
+    const price = value(variant, 'price').trim();
+    const discount = value(variant, 'discount_price').trim();
+    const stock = value(variant, 'stock').trim();
+    if (price === '' || !(Number(price) > 0)) return t('bulkEdit.errPrice');
+    if (discount !== '' && (Number.isNaN(Number(discount)) || Number(discount) < 0)) {
+      return t('bulkEdit.errDiscount');
+    }
+    if (Number(discount) > 0 && Number(discount) >= Number(price)) {
+      return t('bulkEdit.errDiscountTooHigh');
+    }
+    if (stock === '' || !Number.isInteger(Number(stock)) || Number(stock) < 0) {
+      return t('bulkEdit.errStock');
+    }
+    return null;
   };
+
+  const variantById = useMemo(() => {
+    const map = new Map<number, { product: BulkProductRow; variant: BulkVariant }>();
+    for (const product of rows) {
+      for (const variant of product.variants ?? []) map.set(variant.id, { product, variant });
+    }
+    return map;
+  }, [rows]);
+
+  const problemCount = Object.keys(edits).filter(id => {
+    const found = variantById.get(Number(id));
+    return found ? problem(found.variant) !== null : false;
+  }).length;
 
   // A plain-language description of every pending change, for the review step.
   const changeList = useMemo(() => {
     const list: { name: string; description: string }[] = [];
-    for (const entry of Object.values(edits)) {
-      const { productId, variantId, ...fields } = entry;
-      const row = rows.find(r => r.id === productId);
-      if (!row) continue;
-      const variant = variantId ? row.variants?.find(v => v.id === variantId) : null;
-      const before = variant ?? row;
+    for (const [id, fields] of Object.entries(edits)) {
+      const found = variantById.get(Number(id));
+      if (!found) continue;
+      const { product, variant } = found;
       const parts: string[] = [];
       if (fields.price !== undefined) {
-        parts.push(t('bulkEdit.change.price', { from: before.price || 0, to: fields.price }));
+        parts.push(t('bulkEdit.change.price', { from: variant.price || 0, to: fields.price }));
       }
       if (fields.discount_price !== undefined) {
         const money = (v?: string | number | null) =>
-          v ? `₹${v}` : t('bulkEdit.none');
+          v && Number(v) > 0 ? `₹${v}` : t('bulkEdit.none');
         parts.push(t('bulkEdit.change.discountPrice', {
-          from: money(before.discount_price), to: money(fields.discount_price),
+          from: money(variant.discount_price), to: money(fields.discount_price),
         }));
       }
       if (fields.stock !== undefined) {
-        parts.push(t('bulkEdit.change.stock', { from: before.stock, to: fields.stock }));
+        parts.push(t('bulkEdit.change.stock', { from: variant.stock, to: fields.stock }));
       }
       if (parts.length) {
-        list.push({
-          name: variant ? `${row.name} (${variant.label})` : row.name,
-          description: parts.join(', '),
-        });
+        list.push({ name: `${product.name} (${variant.label})`, description: parts.join(', ') });
       }
     }
-    return list;
-  }, [edits, rows, t]);
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [edits, variantById, t]);
 
   const applyEdits = async () => {
-    const changes: BulkChange[] = Object.values(edits).map(({ productId, variantId, ...fields }) => ({
+    const changes: BulkChange[] = Object.entries(edits).map(([id, { productId, ...fields }]) => ({
       id: productId,
-      ...(variantId ? { variant_id: variantId } : {}),
+      variant_id: Number(id),
       ...fields,
     }));
     if (changes.length === 0) return;
@@ -160,15 +196,27 @@ const BulkEdit = () => {
         description: t('bulkEdit.savedBody', { count: res.data.applied }),
       });
       setEdits({});
+      setServerErrors({});
       setReviewOpen(false);
       // Prices/stock just changed — the Products page and dashboard low-stock
       // counts are now stale, so drop their caches too.
-      invalidate(['bulk-products'], ['products'], ['dashboard']);
+      invalidate(['bulk-products'], ['products'], ['combos'], ['dashboard']);
     } catch (error: unknown) {
-      // The apply endpoint returns per-row errors on 400.
-      const errs = (error as { response?: { data?: { errors?: { error: string }[] } } })?.response?.data?.errors;
-      const msg = errs?.length ? errs.map(e => e.error).join(' ') : t('bulkEdit.saveFailed');
-      toast({ title: t('bulkEdit.nothingSavedTitle'), description: msg, variant: 'destructive' });
+      // The apply endpoint returns per-row errors on 400. Nothing was saved, so
+      // the edits stay in the grid; mark the rows it refused.
+      const errs = (error as { response?: { data?: { errors?: BulkApplyError[] } } })
+        ?.response?.data?.errors ?? [];
+      const byVariant: Record<number, string> = {};
+      for (const e of errs) if (e.variant_id) byVariant[e.variant_id] = e.error;
+      setServerErrors(byVariant);
+      setReviewOpen(false);
+      toast({
+        title: t('bulkEdit.nothingSavedTitle'),
+        description: errs.length
+          ? errs.slice(0, 3).map(e => e.error).join(' ')
+          : t('bulkEdit.saveFailed'),
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -207,11 +255,15 @@ const BulkEdit = () => {
       });
       setImportOpen(false);
       setPreview(null);
-      invalidate(['bulk-products'], ['products'], ['dashboard']);
-    } catch {
+      invalidate(['bulk-products'], ['products'], ['combos'], ['dashboard']);
+    } catch (error: unknown) {
+      const errs = (error as { response?: { data?: { errors?: BulkApplyError[] } } })
+        ?.response?.data?.errors ?? [];
       toast({
         title: t('common.error'),
-        description: t('bulkEdit.importApplyFailed'),
+        description: errs.length
+          ? errs.slice(0, 3).map(e => e.error).join(' ')
+          : t('bulkEdit.importApplyFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -220,6 +272,8 @@ const BulkEdit = () => {
   };
 
   const dirtyCount = Object.keys(edits).length;
+  const dirtyClass = 'border-amber-500 bg-amber-50 dark:bg-amber-950/30';
+  const errorClass = 'border-red-500 bg-red-50 dark:bg-red-950/30';
 
   return (
     <div className="space-y-6 p-6">
@@ -243,84 +297,148 @@ const BulkEdit = () => {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input placeholder={t('bulkEdit.searchPlaceholder')} className="pl-8"
-                value={search} onChange={(e) => setSearch(e.target.value)} />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full">
+              <div className="relative max-w-sm w-full">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input placeholder={t('bulkEdit.searchPlaceholder')} className="pl-8"
+                  value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer whitespace-nowrap">
+                <input type="checkbox" className="rounded" checked={changedOnly}
+                  onChange={e => setChangedOnly(e.target.checked)} />
+                {t('bulkEdit.changedOnly')}
+              </label>
             </div>
-            <Button disabled={dirtyCount === 0} onClick={() => setReviewOpen(true)}>
-              <Save className="mr-2 h-4 w-4" />
-              {t('bulkEdit.reviewAndSave')}{dirtyCount ? ` (${dirtyCount})` : ''}
-            </Button>
+            <div className="flex items-center gap-3">
+              {problemCount > 0 && (
+                <span className="flex items-center gap-1 text-sm text-red-600 whitespace-nowrap">
+                  <AlertTriangle className="h-4 w-4" />
+                  {t('bulkEdit.problemCount', { count: problemCount })}
+                </span>
+              )}
+              <Button disabled={dirtyCount === 0 || problemCount > 0}
+                onClick={() => setReviewOpen(true)}>
+                <Save className="mr-2 h-4 w-4" />
+                {t('bulkEdit.reviewAndSave')}{dirtyCount ? ` (${dirtyCount})` : ''}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent
           className={`overflow-x-auto transition-opacity ${refreshing ? 'opacity-60' : 'opacity-100'}`}
         >
-          {isInitialLoading ? <TableSkeleton rows={8} columns={6} /> : (
-          <Table className="min-w-[820px]">
+          {isInitialLoading ? <TableSkeleton rows={8} columns={5} /> : (
+          <Table className="min-w-[760px]">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('bulkEdit.colProduct')}</TableHead>
-                <TableHead>{t('bulkEdit.colCategory')}</TableHead>
-                <TableHead className="w-40">{t('bulkEdit.colSize')}</TableHead>
+                <TableHead className="w-36">{t('bulkEdit.colSize')}</TableHead>
                 <TableHead className="w-32">{t('bulkEdit.colPrice')}</TableHead>
                 <TableHead className="w-32">{t('bulkEdit.colDiscountPrice')}</TableHead>
                 <TableHead className="w-28">{t('bulkEdit.colStock')}</TableHead>
+                <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visible.map(row => {
-                const variant = activeVariant(row);
-                const dirtyClass = 'border-amber-500 bg-amber-50 dark:bg-amber-950/30';
-                return (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.category_name || '—'}</TableCell>
-                  <TableCell>
-                    {row.variants?.length ? (
-                      <Select
-                        value={variant ? String(variant.id) : 'base'}
-                        onValueChange={(v) => setSizeChoice(prev => ({ ...prev, [row.id]: v }))}
-                      >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {row.variants.map(v => (
-                            <SelectItem key={v.id} value={String(v.id)}>
-                              {v.label}{v.is_default ? t('bulkEdit.defaultSuffix') : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number" inputMode="decimal"
-                      className={isDirty(row, 'price') ? dirtyClass : ''}
-                      value={cellValue(row, 'price')}
-                      onChange={(e) => setEdit(row, 'price', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number" inputMode="decimal" placeholder={t('bulkEdit.none')}
-                      className={isDirty(row, 'discount_price') ? dirtyClass : ''}
-                      value={cellValue(row, 'discount_price')}
-                      onChange={(e) => setEdit(row, 'discount_price', e.target.value)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number" inputMode="numeric"
-                      className={isDirty(row, 'stock') ? dirtyClass : ''}
-                      value={cellValue(row, 'stock')}
-                      onChange={(e) => setEdit(row, 'stock', e.target.value)}
-                    />
+              {lines.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    {changedOnly ? t('bulkEdit.noChangesYet') : t('bulkEdit.noMatch')}
                   </TableCell>
                 </TableRow>
+              )}
+              {lines.map(({ product, variant, first, sizeCount }) => {
+                const productCell = first ? (
+                  <div>
+                    <div className="font-medium">
+                      {product.name}
+                      {product.is_active === false && (
+                        <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                          {t('common.inactive')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {product.category_name || '—'}
+                      {sizeCount > 1 && ` · ${t('bulkEdit.sizesCount', { count: sizeCount })}`}
+                    </div>
+                  </div>
+                ) : null;
+
+                if (!variant) {
+                  return (
+                    <TableRow key={`p-${product.id}`} className="border-t-2">
+                      <TableCell>{productCell}</TableCell>
+                      <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                        {t('bulkEdit.noActiveSize')}
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+
+                const issue = problem(variant) ?? serverErrors[variant.id] ?? null;
+                const cellClass = (field: Field) =>
+                  issue && edits[variant.id] ? errorClass
+                    : isDirty(variant, field) ? dirtyClass : '';
+                return (
+                  <TableRow key={variant.id} className={first ? 'border-t-2' : 'border-t-0'}>
+                    <TableCell className="align-top">
+                      {productCell}
+                      {/* In the wide column, so the reason reads on one line
+                          instead of wrapping under a narrow number box. */}
+                      {issue && (
+                        <p className={`flex items-center gap-1 text-xs text-red-600 ${first ? 'mt-1' : 'pt-2.5'}`}>
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {issue}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div className="pt-2 font-mono text-sm">
+                        {variant.label}
+                        {variant.is_default && sizeCount > 1 && (
+                          <span className="ml-1 font-sans text-[10px] text-muted-foreground">
+                            {t('bulkEdit.defaultSuffix')}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Input
+                        type="number" inputMode="decimal" min="0" step="0.01"
+                        aria-label={`${product.name} ${variant.label} ${t('bulkEdit.colPrice')}`}
+                        className={cellClass('price')}
+                        value={value(variant, 'price')}
+                        onChange={(e) => setEdit(product, variant, 'price', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Input
+                        type="number" inputMode="decimal" min="0" step="0.01"
+                        placeholder={t('bulkEdit.none')}
+                        aria-label={`${product.name} ${variant.label} ${t('bulkEdit.colDiscountPrice')}`}
+                        className={cellClass('discount_price')}
+                        value={value(variant, 'discount_price')}
+                        onChange={(e) => setEdit(product, variant, 'discount_price', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <Input
+                        type="number" inputMode="numeric" min="0" step="1"
+                        aria-label={`${product.name} ${variant.label} ${t('bulkEdit.colStock')}`}
+                        className={cellClass('stock')}
+                        value={value(variant, 'stock')}
+                        onChange={(e) => setEdit(product, variant, 'stock', e.target.value)}
+                      />
+                    </TableCell>
+                    <TableCell className="align-top">
+                      {edits[variant.id] && (
+                        <Button variant="ghost" size="icon" title={t('bulkEdit.undoRow')}
+                          onClick={() => resetLine(variant)}>
+                          <Undo2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
                 );
               })}
             </TableBody>
@@ -365,7 +483,7 @@ const BulkEdit = () => {
               {/* The column names are literal CSV headers the backend parses —
                   they stay in English in every language or the import breaks. */}
               {t('bulkEdit.importTitlePrefix')}<b>name</b>{' '}
-              {t('bulkEdit.importColumnsHint')} <b>price</b>, <b>discount_price</b>, <b>stock</b>.{' '}
+              {t('bulkEdit.importColumnsHint')} <b>size</b>, <b>price</b>, <b>discount_price</b>, <b>stock</b>.{' '}
               {t('bulkEdit.importTip')}
             </DialogDescription>
           </DialogHeader>

@@ -5,9 +5,11 @@ All three speak the SAME small vocabulary — a product identified by its id (or
 for import, its exact name) plus optional `price`, `discount_price`, `stock` —
 so the frontend can drive edit and import through one apply path.
 
-Everything here is staff-only and read/write on Product (and, when a change names
-a `variant_id`, that product's ProductVariant size row). No raw SQL: each
-change is a validated ORM update inside a transaction (all-or-nothing).
+Everything here is staff-only. Price and stock are written to the ProductVariant
+(size) row — the one checkout prices and stocks from — never to the Product's
+own columns, which only mirror the default size. `hsn_code` alone is written to
+the Product. No raw SQL: each change is a validated ORM update inside a
+transaction (all-or-nothing).
 """
 import csv
 from decimal import Decimal, InvalidOperation
@@ -235,7 +237,7 @@ def bulk_products(request):
         Product.objects.select_related('category')
         .order_by('name')
         .values('id', 'name', 'price', 'discount_price', 'stock',
-                'low_stock_threshold', 'hsn_code', 'tax_rate')
+                'low_stock_threshold', 'hsn_code', 'tax_rate', 'is_active')
     )
     # category_name via a light second pass to avoid a values() join surprise.
     cat_names = dict(
@@ -270,6 +272,8 @@ def bulk_products(request):
             # product shares one HSN code and one GST rate.
             'hsn_code': p['hsn_code'] or '',
             'tax_rate': str(p['tax_rate']) if p['tax_rate'] is not None else '',
+            # So the grid can mark a product that is switched off / in the bin.
+            'is_active': p['is_active'],
             'variants': variants_by_product.get(p['id'], []),
         })
     return Response(rows)
@@ -280,11 +284,13 @@ def bulk_products(request):
 def bulk_products_apply(request):
     """Apply a batch of price/stock changes, all-or-nothing.
 
-    Body: {"changes": [{"id": 3, "price": "120", "stock": 40}, …]}
-    A change may also carry "variant_id" — then the named SIZE of that product is
-    updated instead of the legacy product-level fields.
+    Body: {"changes": [{"id": 3, "variant_id": 9, "price": "120", "stock": 40}, …]}
+    `variant_id` names the SIZE to edit. Without it the change lands on the
+    product's default size (what a pre-variant client meant). `hsn_code` is the
+    one product-level field and is always written to the product.
     Only the keys present on each change are updated. Validates every row first;
-    if ANY row is invalid nothing is saved and the errors are returned.
+    if ANY row is invalid nothing is saved and the errors are returned, each
+    carrying the `id`/`variant_id` it belongs to so the grid can mark the row.
     """
     changes = request.data.get('changes')
     if not isinstance(changes, list) or not changes:
@@ -306,9 +312,19 @@ def bulk_products_apply(request):
                                  if isinstance(c, dict) and c.get('variant_id'))
                    if pk is not None]
     variants = {v.id: v for v in ProductVariant.objects.filter(id__in=variant_ids)}
+    # Default size per product, for a change that names no size. One query for
+    # the whole batch; the flagged default wins, else the first active size.
+    default_variants = {}
+    for v in ProductVariant.objects.filter(
+            product_id__in=list(products), is_active=True
+    ).order_by('product_id', '-is_default', 'display_order', 'weight'):
+        default_variants.setdefault(v.product_id, v)
 
     errors = []
-    updates = []  # (instance, {field: value})
+    # Keyed by target so two changes to the same row merge into ONE write
+    # (later values win) instead of locking and saving it twice.
+    size_updates = {}     # variant id -> (variant, {field: value})
+    hsn_updates = {}      # product id -> (product, code)
     for i, change in enumerate(changes):
         if not isinstance(change, dict) or 'id' not in change:
             errors.append({'row': i, 'error': 'Missing product id.'})
@@ -317,67 +333,127 @@ def bulk_products_apply(request):
         if product is None:
             errors.append({'row': i, 'id': change.get('id'), 'error': 'Product not found.'})
             continue
-        # Resolve the edit target: a specific size, or the product itself.
-        target = product
-        if change.get('variant_id'):
-            target = variants.get(_as_id(change['variant_id']))
-            if target is None or target.product_id != product.id:
-                errors.append({'row': i, 'id': product.id,
-                               'error': 'Size not found for this product.'})
-                continue
-        fields = {}
-        if 'price' in change:
-            value, err = _parse_decimal(change['price'])
-            if err:
-                errors.append({'row': i, 'id': product.id, 'error': f"Price {err}."})
-            elif value is not None:
-                fields['price'] = value
-        if 'discount_price' in change:
-            value, err = _parse_decimal(change['discount_price'])
-            if err:
-                errors.append({'row': i, 'id': product.id, 'error': f"Discounted price {err}."})
-            else:
-                fields['discount_price'] = value  # may be None to clear
-        if 'stock' in change:
-            value, err = _parse_int(change['stock'])
-            if err:
-                errors.append({'row': i, 'id': product.id, 'error': f"Stock {err}."})
-            elif value is not None:
-                fields['stock'] = value
-        if fields:
-            updates.append((target, fields))
+
+        def fail(message, variant=None):
+            errors.append({'row': i, 'id': product.id,
+                           'variant_id': getattr(variant, 'id', None),
+                           'name': product.name, 'error': message})
+
         # HSN is a property of the GOODS, not of a packaging size — a 100g and a
         # 500g pack of the same masala are the same tariff line. So it is always
-        # written to the Product even when the row targets a variant, and it gets
-        # its own update entry rather than joining `fields`.
+        # written to the Product even when the row targets a variant.
         if 'hsn_code' in change:
             value, err = _parse_hsn(change['hsn_code'])
             if err:
-                errors.append({'row': i, 'id': product.id, 'error': f"HSN code: {err}"})
+                fail(f"HSN code: {err}")
             else:
-                updates.append((product, {'hsn_code': value}))
+                hsn_updates[product.id] = (product, value)
+
+        if not any(f in change for f in ('price', 'discount_price', 'stock')):
+            continue
+
+        # Price and stock live on a SIZE. A change that names one edits it; a
+        # change that names none edits the product's default size — never the
+        # product's own columns, which only mirror the default size and are
+        # overwritten by the next size save (signals._mirror_default_variant).
+        if change.get('variant_id'):
+            target = variants.get(_as_id(change['variant_id']))
+            if target is None or target.product_id != product.id:
+                fail('Size not found for this product.')
+                continue
+        else:
+            target = default_variants.get(product.id)
+            if target is None:
+                fail(f"'{product.name}' has no active size to update. Add or "
+                     f"re-activate a size in the product form first.")
+                continue
+
+        size = target.formatted_weight
+        where = f"{product.name} ({size})" if size else product.name
+        _, fields = size_updates.get(target.id, (target, {}))
+        fields = dict(fields)
+        bad = False
+        if 'price' in change:
+            value, err = _parse_decimal(change['price'])
+            if err:
+                fail(f"{where}: price {err}.", target)
+                bad = True
+            elif value is not None:
+                if value <= 0:
+                    fail(f"{where}: price must be more than 0.", target)
+                    bad = True
+                else:
+                    fields['price'] = value
+        if 'discount_price' in change:
+            value, err = _parse_decimal(change['discount_price'])
+            if err:
+                fail(f"{where}: discounted price {err}.", target)
+                bad = True
+            else:
+                # Blank and 0 both mean "no discount".
+                fields['discount_price'] = value or None
+        if 'stock' in change:
+            value, err = _parse_int(change['stock'])
+            if err:
+                fail(f"{where}: stock {err}.", target)
+                bad = True
+            elif value is not None:
+                fields['stock'] = value
+        if bad:
+            continue
+
+        # Cross-field rule, checked against what the row will hold AFTER this
+        # change — raising the price or clearing the discount can each make a
+        # previously invalid pair valid, and vice versa.
+        price = fields.get('price', target.price)
+        discount = fields['discount_price'] if 'discount_price' in fields \
+            else target.discount_price
+        if discount is not None and price is not None and discount >= price:
+            fail(f"{where}: discounted price ₹{discount} must be less than the "
+                 f"price ₹{price}.", target)
+            continue
+        if fields:
+            size_updates[target.id] = (target, fields)
 
     if errors:
         return Response({'applied': 0, 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
 
     # Lock the rows while writing so an absolute stock value can't clobber a
     # checkout's concurrent decrement mid-save (checkout locks the same rows).
-    with transaction.atomic():
-        locked = {}
-        for model in (Product, ProductVariant):
-            model_ids = [o.id for o, _ in updates if isinstance(o, model)]
-            if model_ids:
-                locked[model] = model.objects.select_for_update().filter(
-                    id__in=model_ids).in_bulk()
-        for obj, fields in updates:
-            row = locked.get(type(obj), {}).get(obj.id)
-            if row is None:  # deleted since validation
-                continue
-            for field, value in fields.items():
-                setattr(row, field, value)
-            row.save(update_fields=list(fields.keys()))
+    applied = 0
+    try:
+        with transaction.atomic():
+            locked_sizes = ProductVariant.objects.select_for_update().filter(
+                id__in=list(size_updates)).in_bulk() if size_updates else {}
+            for variant_id, (_, fields) in size_updates.items():
+                row = locked_sizes.get(variant_id)
+                if row is None:  # removed since validation
+                    continue
+                for field, value in fields.items():
+                    setattr(row, field, value)
+                row.save(update_fields=list(fields.keys()))
+                applied += 1
 
-    return Response({'applied': len(updates), 'errors': []})
+            locked_products = Product.objects.select_for_update().filter(
+                id__in=list(hsn_updates)).in_bulk() if hsn_updates else {}
+            for product_id, (_, code) in hsn_updates.items():
+                row = locked_products.get(product_id)
+                if row is None:
+                    continue
+                row.hsn_code = code
+                row.save(update_fields=['hsn_code'])
+                applied += 1
+    except DjangoValidationError as exc:
+        # Product.save() runs full_clean(), so an unrelated bad column on an old
+        # row can refuse the save. Nothing was committed; say which and why
+        # rather than surfacing a bare "Validation error".
+        detail = '; '.join(exc.messages) if getattr(exc, 'messages', None) else str(exc)
+        return Response(
+            {'applied': 0,
+             'errors': [{'row': None, 'error': f'Nothing was saved. {detail}'}]},
+            status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({'applied': applied, 'errors': []})
 
 
 @api_view(['POST'])
@@ -464,6 +540,7 @@ def bulk_products_import(request):
     rows_out = []
     ok_count = 0
     hsn_seen = {}  # product id -> code already taken from an earlier row
+    seen_sizes = {}  # variant id -> sheet row that first named it
     for line_no, raw_row in sheet:
         name = (raw_row.get(name_col) or '').strip()
         product = products_by_name.get(name.lower())
@@ -484,6 +561,19 @@ def bulk_products_import(request):
             rows_out.append({'name': name, 'size': size, 'id': product.id,
                              'variant_id': None, 'changes': {}, 'error': size_error})
             continue
+
+        # The same size on two rows is a slip of the spreadsheet, and applying
+        # both would quietly keep whichever came last. Refuse the repeat.
+        first_line = seen_sizes.get(variant.id)
+        if first_line is not None:
+            rows_out.append({
+                'name': name, 'size': variant.formatted_weight or '',
+                'id': product.id, 'variant_id': variant.id, 'changes': {},
+                'error': f"Row {line_no}: '{product.name}' "
+                         f"{variant.formatted_weight or 'default size'} is already "
+                         f"on row {first_line}. Keep one row per size."})
+            continue
+        seen_sizes[variant.id] = line_no
 
         changes = {}
         row_error = None
@@ -516,11 +606,24 @@ def bulk_products_import(request):
                 value, err = _parse_int(raw)
             else:
                 value, err = _parse_decimal(raw)
+            if not err and field == 'price' and value is not None and value <= 0:
+                err = 'must be more than 0'
             if err:
                 row_error = f"Row {line_no}: {field.replace('_', ' ')} {err}."
                 break
             if value is not None or (field == 'discount_price' and (raw or '').strip() != ''):
                 changes[field] = str(value) if value is not None else ''
+        # Same cross-field rule bulk_products_apply enforces, checked here so the
+        # preview is truthful: a row shown as "ready" must actually apply.
+        if not row_error:
+            price = Decimal(changes['price']) if 'price' in changes else variant.price
+            if 'discount_price' in changes:
+                discount = Decimal(changes['discount_price']) if changes['discount_price'] else None
+            else:
+                discount = variant.discount_price
+            if discount and price is not None and discount >= price:
+                row_error = (f"Row {line_no}: discounted price ₹{discount} must be "
+                             f"less than the price ₹{price}.")
         label = variant.formatted_weight or ''
         if row_error:
             rows_out.append({'name': name, 'size': label, 'id': product.id,

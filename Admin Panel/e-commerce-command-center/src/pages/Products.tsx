@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   getProducts, getProduct, createProduct, updateProduct, updateProductSections, Product, ProductImage,
   createProductImage, deleteProductImage, getSpiceForms,
-  getProductVariants, createProductVariant, updateProductVariant, deleteProductVariant,
+  getProductVariants, createProductVariant, updateProductVariant,
 } from '@/api/products';
 import { getCategories, Category } from '@/api/categories';
 import { getSections, ProductSection } from '@/api/sections';
@@ -20,10 +20,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit, ToggleLeft, ToggleRight, X, ImagePlus, Loader2, Trash2, Search, Copy } from 'lucide-react';
+import { Plus, Edit, ToggleLeft, ToggleRight, X, ImagePlus, Loader2, Trash2, Search, Copy, RotateCcw } from 'lucide-react';
 import { checkImageFile } from '@/lib/imageCheck';
 import { PageHelp } from '@/components/PageHelp';
 import { useTranslation } from 'react-i18next';
+import { comboChangesMessage } from '@/lib/comboLines';
 
 const UNIT_OPTIONS = ['g', 'kg', 'ml', 'l', 'pc', 'box', 'pack'];
 
@@ -45,6 +46,31 @@ const blankVariantRow = (is_default = false): VariantRow => ({
   key: newRowKey(), weight: '', unit: 'g', price: '', discount_price: '',
   stock: '0', is_default, is_active: true,
 });
+
+// A product is "low"/"out" when ANY of its sizes is. The product's own stock
+// column only mirrors the default size, so reading it alone hid a 1kg pack
+// that had run out behind a well-stocked 250g one.
+const sizesOf = (p: Product) => (p.variants || []).filter(v => v.is_active);
+// The product's "Low-stock alert level" applies to every one of its sizes — it is
+// the only level the form lets the owner set, and the dashboard, the digest and
+// the assistant all use it, so this list must too. (A size's own threshold column
+// is not editable anywhere and is 5 everywhere.)
+const sizeIsLow = (p: Product, v: { stock: number }) =>
+  v.stock > 0 && v.stock <= (p.low_stock_threshold ?? 5);
+const isLowStock = (p: Product) => {
+  const sizes = sizesOf(p);
+  return sizes.length
+    ? sizes.some(v => sizeIsLow(p, v))
+    : p.stock > 0 && p.stock <= (p.low_stock_threshold ?? 5);
+};
+const isOutOfStock = (p: Product) => {
+  const sizes = sizesOf(p);
+  return sizes.length ? sizes.some(v => v.stock === 0) : p.stock === 0;
+};
+const lowestStock = (p: Product) => {
+  const sizes = sizesOf(p);
+  return sizes.length ? Math.min(...sizes.map(v => v.stock)) : p.stock;
+};
 
 const Products = () => {
   const { t } = useTranslation();
@@ -102,7 +128,6 @@ const Products = () => {
 
   // Packaging sizes (variants)
   const [variantRows, setVariantRows] = useState<VariantRow[]>([blankVariantRow(true)]);
-  const [removedVariantIds, setRemovedVariantIds] = useState<number[]>([]);
   
   // Gallery images state
   const [galleryImages, setGalleryImages] = useState<ProductImage[]>([]);
@@ -156,18 +181,31 @@ const Products = () => {
     setVariantRows(prev => prev.map(r => ({ ...r, is_default: r.key === key })));
   };
 
+  /** Hand the default flag to the first active row if no active row holds it. */
+  const withOneDefault = (rows: VariantRow[]): VariantRow[] => {
+    if (rows.some(r => r.is_active && r.is_default)) {
+      return rows.map(r => (r.is_active ? r : { ...r, is_default: false }));
+    }
+    const heir = rows.find(r => r.is_active);
+    return rows.map(r => ({ ...r, is_default: !!heir && r.key === heir.key }));
+  };
+
+  // The bin icon. A size that was never saved is simply dropped. A SAVED size
+  // is retired in place instead — it stays in the list, greyed out, with a
+  // restore button — because the server never deletes a size (orders and
+  // invoices point at it) and "remove" used to make it vanish from this form
+  // with no visible way to get it back.
   const removeVariantRow = (key: string) => {
-    setVariantRows(prev => {
-      const row = prev.find(r => r.key === key);
-      if (row?.id) setRemovedVariantIds(ids => [...ids, row.id as number]);
-      const remaining = prev.filter(r => r.key !== key);
-      // Ensure one default remains among active rows
-      if (row?.is_default) {
-        const firstActive = remaining.find(r => r.is_active);
-        if (firstActive) firstActive.is_default = true;
-      }
-      return [...remaining];
-    });
+    setVariantRows(prev => withOneDefault(
+      prev.flatMap(r => {
+        if (r.key !== key) return [r];
+        return r.id ? [{ ...r, is_active: false }] : [];
+      })));
+  };
+
+  const setVariantActive = (key: string, isActive: boolean) => {
+    setVariantRows(prev => withOneDefault(
+      prev.map(r => (r.key === key ? { ...r, is_active: isActive } : r))));
   };
 
   const buildFormData = () => {
@@ -204,18 +242,17 @@ const Products = () => {
     return form;
   };
 
-  const syncVariants = async (productId: number) => {
-    // Removals first — the API retires the size, it never deletes the row
-    for (const id of removedVariantIds) {
-      try { await deleteProductVariant(id); } catch { /* ignore individual failures */ }
-    }
-    // Guarantee one default among active rows
-    const hasDefault = variantRows.some(r => r.is_active && r.is_default);
-    let assignedDefault = hasDefault;
-    let idx = 0;
-    for (const r of variantRows) {
-      let isDefault = r.is_active && r.is_default;
-      if (!assignedDefault && r.is_active) { isDefault = true; assignedDefault = true; }
+  /** Saves every size row. Returns the sizes the server REFUSED to change, as
+   *  ready-to-show sentences — it never throws for one bad row, because the
+   *  product itself is already saved by the time this runs. */
+  const syncVariants = async (productId: number): Promise<string[]> => {
+    const rows = withOneDefault(variantRows).map((r, index) => ({ row: r, index }));
+    // ACTIVE rows first, retirements last. The server refuses to retire a
+    // product's last active size, so "switch off 250g, add 500g" only works if
+    // the 500g exists before the 250g goes.
+    const ordered = [...rows.filter(x => x.row.is_active), ...rows.filter(x => !x.row.is_active)];
+    const refused: string[] = [];
+    for (const { row: r, index } of ordered) {
       const payload = {
         product: productId,
         weight: parseNumberOrZero(r.weight),
@@ -223,13 +260,20 @@ const Products = () => {
         price: parseNumberOrZero(r.price),
         discount_price: r.discount_price ? parseNumberOrZero(r.discount_price) : null,
         stock: parseInt(r.stock) || 0,
-        is_default: isDefault,
+        is_default: r.is_active && r.is_default,
         is_active: r.is_active,
-        display_order: idx++,
+        display_order: index,
       };
-      if (r.id) await updateProductVariant(r.id, payload);
-      else await createProductVariant(payload);
+      try {
+        if (r.id) await updateProductVariant(r.id, payload);
+        else await createProductVariant(payload);
+      } catch (error: unknown) {
+        // Typically: the size is part of a combo, so it can't be switched off.
+        const reason = (error as { message?: string })?.message || t('products.saveFailed');
+        refused.push(`${parseNumberOrZero(r.weight)}${r.unit}: ${reason}`);
+      }
     }
+    return refused;
   };
 
   /** Returns a translation KEY, not a sentence, so the caller renders it in
@@ -237,11 +281,16 @@ const Products = () => {
   const validateVariants = (): string | null => {
     const active = variantRows.filter(r => r.is_active);
     if (active.length === 0) return 'products.needOneSize';
+    const seen = new Set<string>();
     for (const r of active) {
       if (!(parseNumberOrZero(r.weight) > 0)) return 'products.needWeight';
       if (!(parseNumberOrZero(r.price) > 0)) return 'products.needPrice';
       if (r.discount_price && parseNumberOrZero(r.discount_price) >= parseNumberOrZero(r.price))
         return 'products.discountTooHigh';
+      // Two live rows for the same pack would show the shopper "250g" twice.
+      const size = `${parseNumberOrZero(r.weight)}${r.unit}`;
+      if (seen.has(size)) return 'products.duplicateSize';
+      seen.add(size);
     }
     return null;
   };
@@ -275,8 +324,12 @@ const Products = () => {
       // so section placement PATCHes must use the slug, not the numeric id.
       let productSlug: string;
 
+      // Set when this save switched the product off/on and that moved it out
+      // of (or back into) combos — shown below so it never happens silently.
+      let comboNote: string | null = null;
       if (editingProduct) {
-        await updateProduct(editingProduct.slug, form);
+        const saved = await updateProduct(editingProduct.slug, form);
+        comboNote = comboChangesMessage(saved.combo_changes, t);
         productId = editingProduct.id;
         productSlug = editingProduct.slug;
       } else {
@@ -286,7 +339,7 @@ const Products = () => {
       }
 
       // Sync packaging sizes (variants) — keyed by the numeric product id.
-      await syncVariants(productId);
+      const refusedSizes = await syncVariants(productId);
 
       // Replace homepage-section placements. Sent as a separate JSON PATCH so an
       // empty selection cleanly clears all placements (a multipart body can't
@@ -298,15 +351,29 @@ const Products = () => {
         await uploadGalleryImages(productId);
       }
 
-      toast({
-        title: t('products.successTitle'),
-        description: editingProduct ? t('products.updatedBody') : t('products.createdBody'),
-      });
+      if (refusedSizes.length > 0) {
+        // The product saved; some size changes did not. Say exactly which —
+        // these used to be swallowed, so a size that "wouldn't switch off"
+        // looked like a bug with no explanation.
+        toast({
+          title: t('products.sizesNotChangedTitle'),
+          description: refusedSizes.join(' '),
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: t('products.successTitle'),
+          description: editingProduct ? t('products.updatedBody') : t('products.createdBody'),
+        });
+      }
+      if (comboNote) {
+        toast({ title: t('combos.changeTitle'), description: comboNote });
+      }
       setDialogOpen(false);
       resetForm();
       // Saving a product can change its sections and its stock, so the pages
       // built on those (Sections, Bulk edit, dashboard low-stock) go stale too.
-      invalidate(['products'], ['sections'], ['bulk-products'], ['dashboard']);
+      invalidate(['products'], ['sections'], ['bulk-products'], ['combos'], ['dashboard']);
     } catch (error: any) {
       console.error('Submit error:', error);
       toast({
@@ -331,11 +398,18 @@ const Products = () => {
       const formData = new FormData();
       formData.append('is_active', String(newStatus));
       
-      await updateProduct(product.slug, formData);
+      const saved = await updateProduct(product.slug, formData);
+      // Switching a product off takes it out of every combo (and switching it
+      // on puts it back). Say which, so a combo never leaves the shop unnoticed.
+      const comboNote = comboChangesMessage(saved.combo_changes, t);
       toast({
-        title: t('products.successTitle'),
-        description: newStatus ? t('products.markedActive') : t('products.markedInactive'),
+        title: comboNote ? t('combos.changeTitle') : t('products.successTitle'),
+        description: [
+          newStatus ? t('products.markedActive') : t('products.markedInactive'),
+          comboNote,
+        ].filter(Boolean).join('. '),
       });
+      if (comboNote) invalidate(['combos'], ['recycle-bin']);
       
       // Also update editingProduct if it's the same product being edited
       if (editingProduct && editingProduct.id === product.id) {
@@ -390,7 +464,6 @@ const Products = () => {
       setGalleryImages(fullProduct.images || []);
       setNewGalleryImages([]);
       // Load packaging sizes (variants), including inactive ones, for editing
-      setRemovedVariantIds([]);
       try {
         const variants = await getProductVariants(product.id);
         if (variants.length > 0) {
@@ -465,7 +538,6 @@ const Products = () => {
     setNewGalleryImages([]);
     // Reset packaging sizes to a single default row
     setVariantRows([blankVariantRow(true)]);
-    setRemovedVariantIds([]);
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -518,6 +590,21 @@ const Products = () => {
         is_active: false, // start hidden so the admin reviews it before it goes live
         is_featured: false,
       });
+      // Carry every active size across, so a three-size product does not have
+      // to be re-typed. Stock starts at 0: the copy is a new, unstocked SKU.
+      const sizes = (fullProduct.variants || []).filter(v => v.is_active);
+      if (sizes.length > 0) {
+        setVariantRows(sizes.map(v => ({
+          key: newRowKey(),
+          weight: v.weight != null ? String(v.weight) : '',
+          unit: v.unit || 'g',
+          price: v.price != null ? String(v.price) : '',
+          discount_price: v.discount_price != null ? String(v.discount_price) : '',
+          stock: '0',
+          is_default: !!v.is_default,
+          is_active: true,
+        })));
+      }
       setDialogOpen(true);
       toast({
         title: t('products.copyReadyTitle'),
@@ -717,9 +804,7 @@ const Products = () => {
                 <TableHead>{t('common.image')}</TableHead>
                 <TableHead>{t('common.name')}</TableHead>
                 <TableHead>{t('common.category')}</TableHead>
-                <TableHead>{t('common.price')}</TableHead>
-                <TableHead>{t('products.colWeight')}</TableHead>
-                <TableHead>{t('common.stock')}</TableHead>
+                <TableHead>{t('products.colSizes')}</TableHead>
                 <TableHead>{t('common.status')}</TableHead>
                 <TableHead className="text-right">{t('common.actions')}</TableHead>
               </TableRow>
@@ -727,7 +812,7 @@ const Products = () => {
             <TableBody>
               {visibleProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                     {products.length === 0
                       ? t('products.emptyNoProducts')
                       : t('products.emptyNoMatch')}
@@ -735,8 +820,6 @@ const Products = () => {
                 </TableRow>
               )}
               {visibleProducts.map((product) => {
-                const price = formatMoney(product.price);
-                const discount = formatMoney(product.discount_price);
                 return (
                   <TableRow key={product.id}>
                     <TableCell>
@@ -750,35 +833,41 @@ const Products = () => {
                     </TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.category_name || '—'}</TableCell>
-                    <TableCell className="font-mono">
-                      {discount !== null ? (
+                    <TableCell>
+                      {/* One row per pack size: its price and its own stock.
+                          The product-level price/stock are only the default
+                          size's, which told half the story for a product sold
+                          in several packs. */}
+                      {sizesOf(product).length > 0 ? (
                         <div className="space-y-0.5">
-                          <div className="line-through text-xs text-muted-foreground">₹{price}</div>
-                          <div className="text-green-600 font-semibold">₹{discount}</div>
+                          {sizesOf(product).map(v => (
+                            <div key={v.id} className="flex items-baseline gap-2 text-sm">
+                              <span className="w-14 font-mono text-muted-foreground">
+                                {v.formatted_weight || '—'}
+                              </span>
+                              <span className="font-mono">
+                                {v.discount_price ? (
+                                  <>
+                                    <span className="mr-1 text-xs line-through text-muted-foreground">₹{formatMoney(v.price)}</span>
+                                    <span className="text-green-600 font-semibold">₹{formatMoney(v.discount_price)}</span>
+                                  </>
+                                ) : `₹${formatMoney(v.price)}`}
+                              </span>
+                              <span className={`text-xs ${
+                                !v.stock ? 'text-red-600 font-semibold'
+                                  : sizeIsLow(product, v) ? 'text-amber-600 font-semibold'
+                                  : 'text-green-600'
+                              }`}>
+                                {t('products.inStockCount', { count: v.stock || 0 })}
+                                {!v.stock ? t('products.outSuffix')
+                                  : sizeIsLow(product, v) ? t('products.lowSuffix') : ''}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       ) : (
-                        `₹${price}`
+                        <span className="text-sm text-red-600">{t('products.noActiveSize')}</span>
                       )}
-                    </TableCell>
-                    <TableCell className="font-mono text-muted-foreground">
-                      <div>{product.weight ? `${product.weight}${product.unit || ''}` : '—'}</div>
-                      {product.variant_count && product.variant_count > 1 ? (
-                        <div className="text-[10px] text-primary font-sans">
-                          {t('products.sizesCount', { count: product.variant_count })}
-                        </div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell>
-                      <span className={
-                        !product.stock ? 'text-red-600 font-semibold'
-                          : isLowStock(product) ? 'text-amber-600 font-semibold'
-                          : 'text-green-600'
-                      }>
-                        {product.stock || 0}
-                        {!product.stock
-                          ? t('products.outSuffix')
-                          : isLowStock(product) ? t('products.lowSuffix') : ''}
-                      </span>
                     </TableCell>
                     <TableCell>
                       <span className={
@@ -965,7 +1054,7 @@ const Products = () => {
                 {variantRows.map((row) => (
                   <div
                     key={row.key}
-                    className={`grid grid-cols-12 gap-2 items-end rounded-md border p-2 ${row.is_active ? '' : 'opacity-60'}`}
+                    className={`grid grid-cols-12 gap-2 items-end rounded-md border p-2 ${row.is_active ? '' : 'bg-muted/40'}`}
                   >
                     <div className="col-span-3 sm:col-span-2">
                       <Label className="text-xs">{t('products.weight')}</Label>
@@ -1001,22 +1090,29 @@ const Products = () => {
                         placeholder="0" />
                     </div>
                     <div className="col-span-6 sm:col-span-2 flex items-center gap-3 pb-2 flex-wrap">
-                      <label className="flex items-center gap-1 text-xs cursor-pointer" title={t('products.defaultSize')}>
-                        <input type="radio" name="default-variant" checked={row.is_default}
-                          onChange={() => setDefaultRow(row.key)} />
-                        {t('products.default')}
-                      </label>
-                      <label className="flex items-center gap-1 text-xs cursor-pointer" title={t('products.activeVisible')}>
-                        <input type="checkbox" checked={row.is_active}
-                          onChange={e => updateVariantRow(row.key, { is_active: e.target.checked })} />
-                        {t('products.active')}
-                      </label>
-                      <Button type="button" variant="ghost" size="icon" className="ml-auto"
-                        onClick={() => removeVariantRow(row.key)}
-                        disabled={variantRows.length <= 1}
-                        title={t('products.removeSize')}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      {row.is_active ? (
+                        <>
+                          <label className="flex items-center gap-1 text-xs cursor-pointer" title={t('products.defaultSize')}>
+                            <input type="radio" name="default-variant" checked={row.is_default}
+                              onChange={() => setDefaultRow(row.key)} />
+                            {t('products.default')}
+                          </label>
+                          <Button type="button" variant="ghost" size="icon" className="ml-auto"
+                            onClick={() => removeVariantRow(row.key)}
+                            disabled={variantRows.filter(r => r.is_active).length <= 1}
+                            title={row.id ? t('products.retireSize') : t('products.removeSize')}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-muted-foreground">{t('products.sizeRetired')}</span>
+                          <Button type="button" variant="outline" size="sm" className="ml-auto h-8"
+                            onClick={() => setVariantActive(row.key, true)}>
+                            <RotateCcw className="mr-1 h-3.5 w-3.5" /> {t('products.restoreSize')}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

@@ -354,12 +354,22 @@ class Product(models.Model):
     # Slug this instance was loaded from the DB with, so save() can detect a
     # rename without re-querying. None for never-saved instances.
     _loaded_slug = None
+    # Likewise for is_active, so save() can tell "switched off" / "switched back
+    # on" from a save that left it alone. None when unknown (never saved, or
+    # loaded with the column deferred) — then nothing is inferred.
+    _loaded_is_active = None
+    # What the last save() did to combos, for the API to report: None, or
+    # {'removed_from': [...], 'switched_off': [...]} / {'restored_to': [...],
+    # 'switched_on': [...]}. See products/combo_membership.py.
+    _combo_changes = None
 
     @classmethod
     def from_db(cls, db, field_names, values):
         instance = super().from_db(db, field_names, values)
         if 'slug' in field_names:
             instance._loaded_slug = values[field_names.index('slug')]
+        if 'is_active' in field_names:
+            instance._loaded_is_active = values[field_names.index('is_active')]
         return instance
 
     def save(self, *args, **kwargs):
@@ -381,7 +391,24 @@ class Product(models.Model):
         # reactivation path (admin edit form PATCH, restore action, Django admin).
         _clear_deactivated_at_if_active(self, kwargs)
 
-        super().save(*args, **kwargs)
+        # A product that is switched off must stop being sold through combos
+        # too, and one switched back on returns to the combos it was taken out
+        # of. Same transaction as the save, so the two can never disagree.
+        was_active = self._loaded_is_active
+        update_fields = kwargs.get('update_fields')
+        flipped = (was_active is not None and was_active != self.is_active
+                   and (update_fields is None or 'is_active' in update_fields))
+        self._combo_changes = None
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if flipped:
+                from .combo_membership import (
+                    detach_product_from_combos, reattach_product_to_combos,
+                )
+                self._combo_changes = (
+                    reattach_product_to_combos(self) if self.is_active
+                    else detach_product_from_combos(self))
+        self._loaded_is_active = self.is_active
 
         # A slug change orphans every indexed/bookmarked URL for this product,
         # so keep the outgoing slug resolvable. _loaded_slug is captured in
@@ -856,7 +883,15 @@ class ProductCombo(models.Model):
         rows only after the combo row exists. A zero MRP therefore means
         "components not attached yet", not "free": skip the check rather than
         reject every new combo. Any later save re-runs it for real.
+
+        Only a combo that is ON SALE is held to this. One that is switched off
+        may sit at any price — otherwise a bundle whose MRP has dropped below
+        its selling price (a component re-priced, or a switched-off product
+        taken out of it) could not even be switched off or edited until the
+        price was fixed. Putting it back on sale runs the check.
         """
+        if not self.is_active:
+            return
         mrp = self.price
         if self.discount_price and mrp and self.discount_price > mrp:
             raise ValidationError({
@@ -975,10 +1010,11 @@ class ProductCombo(models.Model):
     def available_stock(self):
         """How many of this combo can still be built, limited by the scarcest
         component SIZE (min of each variant's stock // its required quantity).
-        An inactive component size makes the combo unbuildable. Returns 0 for an
-        empty combo."""
+        An inactive component size — or a component whose PRODUCT is switched
+        off — makes the combo unbuildable. Returns 0 for an empty combo."""
         # .all() (not .select_related) so the list endpoint's existing
-        # `productcomboitem_set__variant` prefetch is reused — no N+1 on list.
+        # `productcomboitem_set__variant` / `__product` prefetches are reused —
+        # no N+1 on list.
         items = list(self.productcomboitem_set.all())
         if not items:
             return 0
@@ -986,6 +1022,11 @@ class ProductCombo(models.Model):
         for item in items:
             variant = item.variant
             if variant is None or not variant.is_active or not item.quantity:
+                return 0
+            # Switching a product off normally removes it from its combos
+            # (Product.save). This covers rows changed behind save()'s back —
+            # a queryset .update(), a script, bulk SQL.
+            if not item.product.is_active:
                 return 0
             counts.append(variant.stock // item.quantity)
         return min(counts)
@@ -1039,6 +1080,36 @@ class ProductComboItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity} x {self.variant} in {self.combo.name}"
+
+
+class DetachedComboLine(models.Model):
+    """A combo line that was removed because its product was switched off.
+
+    Switching a product off takes it out of every combo (a discontinued product
+    must not keep selling inside a bundle). That would be a one-way door without
+    this table: it remembers each removed line so that switching the product
+    back on puts it back where it was. See products/combo_membership.py.
+
+    Everything here CASCADEs. If the product is purged its sizes go, and these
+    with them; if the combo is deleted there is nothing left to restore into.
+    """
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name='detached_combo_lines')
+    combo = models.ForeignKey(
+        ProductCombo, on_delete=models.CASCADE, related_name='detached_lines')
+    variant = models.ForeignKey(
+        ProductVariant, on_delete=models.CASCADE, related_name='+')
+    quantity = models.PositiveIntegerField(default=1)
+    # True when the combo was on sale and removing this line is what switched
+    # it off — so the restore knows which combos it may switch back on.
+    combo_was_active = models.BooleanField(default=False)
+    detached_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('combo', 'variant')
+
+    def __str__(self):
+        return f"{self.quantity} x {self.variant} (out of {self.combo.name})"
 
 
 class ProductSearchKB(models.Model):

@@ -8,7 +8,8 @@ from rest_framework.views import APIView
 from rest_framework.throttling import UserRateThrottle
 from decimal import Decimal
 
-from .models import Expense, ReceivableAccount, Coupon, Policy
+from .models import DeletedRecord, Expense, ReceivableAccount, Coupon, Policy
+from .recycle import RecycleBinDestroyMixin, RestoreConflict, restore_record
 from .serializers import (
     ExpenseSerializer,
     ReceivableAccountSerializer,
@@ -44,7 +45,7 @@ class IsReadOnlyOrAdmin(permissions.BasePermission):
 
 # ==================== VIEWSETS ====================
 
-class ReceivableAccountViewSet(viewsets.ModelViewSet):
+class ReceivableAccountViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     """
     ViewSet to manage receivable accounts - admin only for security
     Protects payment collection accounts from unauthorized access
@@ -52,6 +53,10 @@ class ReceivableAccountViewSet(viewsets.ModelViewSet):
     queryset = ReceivableAccount.objects.all()
     serializer_class = ReceivableAccountSerializer
     permission_classes = [IsAdminUser]
+    recycle_kind = 'receivable_account'
+
+    def recycle_label(self, instance):
+        return f"{instance.account_holder_name} — {instance.upi_id}"
 
 
 class PaymentAccountView(APIView):
@@ -80,7 +85,7 @@ class PaymentAccountView(APIView):
         })
 
 
-class CouponViewSet(viewsets.ModelViewSet):
+class CouponViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     queryset = Coupon.objects.all()
     serializer_class = CouponSerializer
     permission_classes = [IsAdminUser]
@@ -88,6 +93,16 @@ class CouponViewSet(viewsets.ModelViewSet):
     # Admin management list with no pagination UI: return every coupon so the
     # 13th+ isn't silently hidden by the global PAGE_SIZE. (Small, admin-only.)
     pagination_class = None
+    # DELETE bins the coupon. `Order.coupon` is SET_NULL, so the orders that
+    # used it are recorded in the snapshot and re-attached on restore.
+    recycle_kind = 'coupon'
+
+    def recycle_label(self, instance):
+        if instance.discount_type == 'fixed':
+            worth = f"₹{instance.discount_amount or 0} off"
+        else:
+            worth = f"{instance.discount_percent or 0}% off"
+        return f"{instance.code} — {worth}"
 
     @action(detail=False, methods=['post'])
     def validate(self, request):
@@ -132,7 +147,7 @@ class CouponViewSet(viewsets.ModelViewSet):
         })
 
 
-class ExpenseViewSet(viewsets.ModelViewSet):
+class ExpenseViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     """Admin-entered business expenses (no courier/gateway here — those come
     from orders/payments automatically, and entering them too would count them
     twice)."""
@@ -143,6 +158,14 @@ class ExpenseViewSet(viewsets.ModelViewSet):
     throttle_classes = [UserRateThrottle]
     # Small, admin-only list: return everything like coupons, not page 1 of N.
     pagination_class = None
+    recycle_kind = 'expense'
+
+    def recycle_label(self, instance):
+        parts = [instance.date.isoformat(), instance.get_category_display(),
+                 f"₹{instance.amount}"]
+        if instance.vendor:
+            parts.append(instance.vendor)
+        return ' · '.join(parts)
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -184,6 +207,59 @@ class ExpenseViewSet(viewsets.ModelViewSet):
 
         return csv_response(
             f"expenses-{timezone.now().strftime('%Y%m%d')}.csv", header, rows())
+
+
+class RecycleBinView(APIView):
+    """GET the Recycle Bin entries for rows that were hard-deleted.
+
+    Soft-deleted products, combos and orders are NOT here — they never left
+    their own tables and the panel reads them from their own endpoints. This is
+    everything else: coupons, reviews, expenses, gallery images, payment
+    accounts and contact messages (see admin_panel/recycle.py).
+
+    The `payload` is deliberately not returned: it can hold bank details and
+    customer messages, and the list only needs enough to recognise the row.
+    """
+
+    permission_classes = [IsAdminUser]
+    throttle_classes = [UserRateThrottle]
+
+    def get(self, request):
+        from datetime import timedelta
+        from django.conf import settings
+
+        retention = getattr(settings, 'RECYCLE_BIN_RETENTION_DAYS', 30)
+        records = DeletedRecord.objects.select_related('deleted_by')
+        items = []
+        for record in records:
+            purge_at = (record.deleted_at + timedelta(days=retention)
+                        if retention > 0 else None)
+            items.append({
+                'id': record.id,
+                'kind': record.kind,
+                'label': record.label,
+                'preview_url': record.preview_url,
+                'deleted_at': record.deleted_at,
+                'deleted_by': getattr(record.deleted_by, 'email', None),
+                'purge_at': purge_at,
+            })
+        return Response({'retention_days': retention, 'items': items})
+
+
+class RecycleBinRestoreView(APIView):
+    """POST: put one binned row back under its original id."""
+
+    permission_classes = [IsAdminUser]
+    throttle_classes = [UserRateThrottle]
+
+    def post(self, request, pk):
+        record = get_object_or_404(DeletedRecord, pk=pk)
+        try:
+            restore_record(record)
+        except RestoreConflict as exc:
+            return Response({'success': False, 'error': str(exc)},
+                            status=status.HTTP_409_CONFLICT)
+        return Response({'success': True, 'kind': record.kind, 'label': record.label})
 
 
 class BooksSummaryView(APIView):

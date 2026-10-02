@@ -601,7 +601,10 @@ class OrderViewSet(viewsets.ModelViewSet):
                         'variant', 'variant__product'):
                     required = ci.quantity * cart_item.quantity
                     label = f'{ci.variant.product.name} ({ci.variant.formatted_weight})'
-                    if not ci.variant.is_active:
+                    # A switched-off product is removed from its combos when it
+                    # is saved (products/combo_membership.py); the product check
+                    # here catches one switched off behind save()'s back.
+                    if not ci.variant.is_active or not ci.variant.product.is_active:
                         return Response({
                             'error': f'{label} (in {item_name}) is no longer available'
                         }, status=status.HTTP_400_BAD_REQUEST)

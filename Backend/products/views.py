@@ -1,6 +1,7 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import api_view, action, throttle_classes
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -31,6 +32,7 @@ from .serializers import (
     ProductSectionSerializer,
     ProductVariantWriteSerializer,
 )
+from admin_panel.recycle import RecycleBinDestroyMixin
 from .cache import (
     make_cache_key,
     get_cached_or_set,
@@ -40,6 +42,8 @@ from .cache import (
     CACHE_PREFIX_SECTIONS,
     CACHE_PREFIX_SEARCH,
     TTL_MEDIUM,
+    invalidate_combo_cache,
+    invalidate_search_cache,
 )
 
 # Cache TTLs from settings
@@ -52,6 +56,25 @@ class IsAdminOrReadOnly(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return bool(request.user and request.user.is_staff)
+
+
+# Largest id a 32-bit AutoField can hold. A longer digit string is not an id of
+# anything, and handing it to the database is an overflow error, not a miss.
+_MAX_PK = 2147483647
+
+
+def _as_pk(value):
+    """A URL/query value as a primary key, or None if it cannot be one.
+
+    `str.isdigit()` is not enough on its own: it is True for characters like
+    '²' that `int()` rejects, and for digit strings far too long to be a key.
+    Anything that is not a plausible id is "no such row", never an exception.
+    """
+    text = str(value).strip() if value is not None else ''
+    if not (text.isascii() and text.isdigit()):
+        return None
+    number = int(text)
+    return number if 0 < number <= _MAX_PK else None
 
 
 @api_view(['GET'])
@@ -109,19 +132,17 @@ class CategoryViewSet(viewsets.ModelViewSet):
         lookup_value = kwargs.get('slug')
         qs = self.get_queryset()
         
-        try:
-            if lookup_value and lookup_value.isdigit():
-                # Numeric ID lookup
-                instance = get_object_or_404(qs, id=int(lookup_value))
-            else:
-                # Slug lookup
-                instance = get_object_or_404(qs, slug=lookup_value)
-        except Category.DoesNotExist:
+        pk = _as_pk(lookup_value)
+        if pk is not None:
+            instance = qs.filter(id=pk).first()
+        else:
+            instance = qs.filter(slug=lookup_value).first()
+        if instance is None:
             return Response(
                 {"detail": "No Category matches the given query."},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
@@ -296,9 +317,10 @@ class ProductViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset()
         
         selected_variant_id = None
-        if lookup_value and lookup_value.isdigit():
+        pk = _as_pk(lookup_value)
+        if pk is not None:
             # Numeric ID lookup
-            instance = qs.filter(id=int(lookup_value)).first()
+            instance = qs.filter(id=pk).first()
         else:
             # Slug lookup — first as a product, then fall back to a variant slug
             # so per-size URLs (e.g. /products/jeeravan-500g) resolve to the
@@ -345,11 +367,30 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Soft-delete into the Recycle Bin: deactivate and stamp the deletion
         # time so the purge job can age it out. Restoring (is_active=True) clears
         # the stamp in Product.save().
+        # Product.save() also takes it out of every combo (and remembers the
+        # lines, so a restore puts them back) — see products/combo_membership.py.
         instance = self.get_object()
         instance.is_active = False
         instance.deactivated_at = timezone.now()
         instance.save(update_fields=['is_active', 'deactivated_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        self._combo_changes = getattr(serializer.instance, '_combo_changes', None)
+
+    def update(self, request, *args, **kwargs):
+        """Adds `combo_changes` to the response when this save switched the
+        product off or back on and that changed any combo:
+        {'removed_from': [...], 'switched_off': [...]} on the way out,
+        {'restored_to': [...], 'switched_on': [...]} on the way back. The panel
+        shows it, so a combo never goes off sale without the admin being told.
+        """
+        self._combo_changes = None
+        response = super().update(request, *args, **kwargs)
+        if self._combo_changes:
+            response.data = {**response.data, 'combo_changes': self._combo_changes}
+        return response
 
     @action(detail=False, methods=['get'])
     def sections(self, request):
@@ -440,6 +481,8 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         qs = qs.prefetch_related(
             'productcomboitem_set__product', 'productcomboitem_set__variant',
             'sections',
+            # For `missing_products` (lines taken out by a switched-off product).
+            'detached_lines__product',
         )
 
         return qs
@@ -471,14 +514,12 @@ class ComboProductViewSet(viewsets.ModelViewSet):
         lookup_value = kwargs.get('slug')
         qs = self.get_queryset()
         
-        try:
-            if lookup_value and lookup_value.isdigit():
-                # Numeric ID lookup
-                instance = get_object_or_404(qs, id=int(lookup_value))
-            else:
-                # Slug lookup
-                instance = get_object_or_404(qs, slug=lookup_value)
-        except ProductCombo.DoesNotExist:
+        pk = _as_pk(lookup_value)
+        if pk is not None:
+            instance = qs.filter(id=pk).first()
+        else:
+            instance = qs.filter(slug=lookup_value).first()
+        if instance is None:
             return Response(
                 {"detail": "No ProductCombo matches the given query."},
                 status=status.HTTP_404_NOT_FOUND
@@ -489,23 +530,46 @@ class ComboProductViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         # Soft-delete into the Recycle Bin (see ProductViewSet.destroy).
+        #
+        # A queryset .update(), not instance.save(): save() runs full_clean(),
+        # and a combo whose selling price is above its current MRP (a component
+        # was re-priced, or a switched-off product took a line out) would
+        # refuse to save — i.e. the one combo that most needs binning couldn't
+        # be. Taking something OFF sale must never be blocked by its price.
         instance = self.get_object()
-        instance.is_active = False
-        instance.deactivated_at = timezone.now()
-        instance.save(update_fields=['is_active', 'deactivated_at'])
+        ProductCombo.objects.filter(pk=instance.pk).update(
+            is_active=False, deactivated_at=timezone.now())
+        invalidate_combo_cache()
+        invalidate_search_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ProductImageViewSet(viewsets.ModelViewSet):
+class ProductImageViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     queryset = ProductImage.objects.all()
     serializer_class = ProductImageSerializer
     permission_classes = [IsAdminOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
-    
+    # DELETE moves the gallery image to the Recycle Bin. The file itself is not
+    # touched (Django never removes stored files on delete), so restoring the
+    # row brings the picture straight back.
+    recycle_kind = 'product_image'
+
+    def recycle_label(self, instance):
+        return f"Gallery image — {instance.product.name}"
+
+    def recycle_preview_url(self, instance):
+        try:
+            return instance.image.url if instance.image else ''
+        except ValueError:
+            return ''
+
     def get_queryset(self):
         qs = ProductImage.objects.select_related('product')
         product_id = self.request.query_params.get('product', None)
         if product_id:
+            product_id = _as_pk(product_id)
+            if product_id is None:
+                return qs.none()
             qs = qs.filter(product_id=product_id)
         return qs
 
@@ -524,6 +588,9 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         qs = ProductVariant.objects.select_related('product')
         product_id = self.request.query_params.get('product')
         if product_id:
+            product_id = _as_pk(product_id)
+            if product_id is None:
+                return qs.none()
             qs = qs.filter(product_id=product_id)
         return qs.order_by('product_id', 'display_order', 'weight')
 
@@ -540,11 +607,49 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        # Un-ticking "active" in the product form retires a size exactly as
+        # DELETE does, so it has to pass the same two checks. It used to skip
+        # them: a size could be switched off while a combo was still built from
+        # it, which left that combo unbuildable with nothing on screen to say so.
+        if instance.is_active and serializer.validated_data.get('is_active') is False:
+            blocker = self._retire_blocker(instance)
+            if blocker:
+                raise ValidationError({'is_active': blocker['detail']})
+            # A retired size cannot stay the default; the post_save signal then
+            # promotes a surviving sibling.
+            serializer.validated_data['is_default'] = False
         if serializer.validated_data.get('is_default'):
-            self._unset_other_defaults(
-                serializer.instance.product_id, exclude_pk=serializer.instance.pk
-            )
+            self._unset_other_defaults(instance.product_id, exclude_pk=instance.pk)
         serializer.save()
+
+    def _retire_blocker(self, instance):
+        """Why this size cannot be retired, as a response body — or None.
+
+        1. The last active size cannot go. A product with no sellable size still
+           lists and still shows a (now stale) mirrored price, but nothing can be
+           added to a cart — a silent dead product. Deactivate the product.
+        2. A size a combo is built from cannot go. The combo consumes that exact
+           packaging, so retiring it makes the bundle unbuildable (available
+           stock 0) rather than repricing it. Fix the combos first.
+        """
+        siblings = ProductVariant.objects.filter(
+            product_id=instance.product_id, is_active=True
+        ).exclude(pk=instance.pk).exists()
+        if not siblings:
+            return {'detail': 'This is the only active size for this product. '
+                              'Add another size first, or deactivate the whole '
+                              'product instead of removing its last size.'}
+
+        combo_names = list(
+            ProductCombo.objects.filter(productcomboitem__variant=instance)
+            .values_list('name', flat=True).distinct()
+        )
+        if combo_names:
+            return {'detail': 'This size is part of the combo(s): '
+                              f"{', '.join(combo_names)}. Remove it from them first.",
+                    'combos': combo_names}
+        return None
 
     def destroy(self, request, *args, **kwargs):
         """RETIRE a size. A variant row is NEVER removed from the database.
@@ -560,15 +665,8 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
           * every past order, invoice and report still resolves it,
           * it can be switched back on if it was retired by mistake.
 
-        Two guards still run first, because retiring the wrong size breaks the
-        catalog in ways deactivation alone does not fix:
-
-        1. The last active size cannot go. A product with no sellable size still
-           lists and still shows a (now stale) mirrored price, but nothing can be
-           added to a cart — a silent dead product. Deactivate the product.
-        2. A size a combo is built from cannot go. The combo consumes that exact
-           packaging, so retiring it makes the bundle unbuildable (available
-           stock 0) rather than repricing it. Fix the combos first.
+        Two guards still run first (see `_retire_blocker`), because retiring the
+        wrong size breaks the catalog in ways deactivation alone does not fix.
 
         Live carts holding the size are reported back so the admin knows how many
         customers are about to hit "no longer available" at checkout. Those rows
@@ -583,31 +681,9 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK,
             )
 
-        # 1. Never strand a product without a sellable size.
-        siblings = ProductVariant.objects.filter(
-            product_id=instance.product_id, is_active=True
-        ).exclude(pk=instance.pk).count()
-        if siblings == 0:
-            return Response(
-                {'detail': 'This is the only active size for this product. '
-                           'Add another size first, or deactivate the whole '
-                           'product instead of removing its last size.'},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # 2. Combos are built from this exact size — retiring it would silently
-        #    make the bundle unbuildable.
-        combo_names = list(
-            ProductCombo.objects.filter(productcomboitem__variant=instance)
-            .values_list('name', flat=True).distinct()
-        )
-        if combo_names:
-            return Response(
-                {'detail': 'This size is part of the combo(s): '
-                           f"{', '.join(combo_names)}. Remove it from them first.",
-                 'combos': combo_names},
-                status=status.HTTP_409_CONFLICT,
-            )
+        blocker = self._retire_blocker(instance)
+        if blocker:
+            return Response(blocker, status=status.HTTP_409_CONFLICT)
 
         # Retire, never delete. Dropping is_default lets the post_save signal
         # promote a surviving sibling as the product's default size.

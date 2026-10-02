@@ -94,6 +94,21 @@ api.interceptors.response.use(
       if (data) {
         if (typeof data === 'string') {
           error.message = data;
+        } else if (data.details && typeof data.details === 'object') {
+          // The backend wraps field errors as {error: 'Validation error',
+          // details: {field: [msg]}}. Showing only `error` told the admin
+          // "Validation error" and nothing else — surface the actual reason.
+          const details = data.details as Record<string, unknown> | unknown[];
+          const field = Array.isArray(details) ? '' : Object.keys(details)[0] ?? '';
+          const first = Array.isArray(details) ? details[0] : details[field];
+          const reason = Array.isArray(first) ? first[0] : first;
+          // Name the field unless the message already stands on its own.
+          const anonymous = ['', 'items', 'error', 'detail', 'non_field_errors', 'is_active'];
+          const label = anonymous.includes(field)
+            ? ''
+            : `${field.charAt(0).toUpperCase()}${field.slice(1).replace(/_/g, ' ')}: `;
+          error.message = typeof reason === 'string' && reason
+            ? `${label}${reason}` : data.error;
         } else if (data.error) {
           error.message = data.error;
         } else if (data.detail) {

@@ -21,6 +21,8 @@ export interface ProductVariant {
   discount_percentage?: number;
   stock: number;
   in_stock?: boolean;
+  /** Warn when THIS size's stock falls to or below this (backend default 5). */
+  low_stock_threshold?: number;
   sku?: string;
   is_default: boolean;
   is_active: boolean;
@@ -40,10 +42,25 @@ export type ProductVariantInput = {
   display_order: number;
 };
 
+/**
+ * What switching a product off / back on did to combos. A switched-off product
+ * is removed from every combo, and a combo that was on sale goes off sale with
+ * it (it is no longer the bundle its price was set for). Switching the product
+ * back on reverses both, for combos nobody has edited since.
+ */
+export interface ComboChanges {
+  removed_from?: string[];
+  switched_off?: string[];
+  restored_to?: string[];
+  switched_on?: string[];
+}
+
 export interface Product {
   id: number;
   slug: string;
   name: string;
+  /** Present only on the response to an update that changed any combo. */
+  combo_changes?: ComboChanges;
   category: number;
   category_name?: string;
   spice_form: string;
@@ -72,6 +89,9 @@ export interface Product {
   is_active?: boolean;
   average_rating?: number;
   created_at?: string;
+  /** Set when the product was DELETED (starts the Recycle Bin countdown); null
+   *  for one that was merely switched off, which is never purged. */
+  deactivated_at?: string | null;
   badge?: string;
   description?: string;
   ingredients?: string;

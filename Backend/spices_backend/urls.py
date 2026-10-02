@@ -39,6 +39,7 @@ from payments.views import PaymentMethodViewSet
 from admin_panel.views import (
     ReceivableAccountViewSet, DashboardViewSet, CouponViewSet, PaymentAccountView,
     GlobalAdminSearchView, AdminCustomerViewSet, ExpenseViewSet, BooksSummaryView,
+    RecycleBinView, RecycleBinRestoreView,
 )
 from support.views import ContactSubmissionViewSet
 from assistant.views import (
@@ -138,6 +139,11 @@ urlpatterns = [
 
     # Basic accounts: monthly books estimate (no ledgers).
     path('api/admin/books/summary/', BooksSummaryView.as_view(), name='books-summary'),
+
+    # Recycle Bin for hard-deleted rows (coupons, reviews, expenses, images, …)
+    path('api/admin/recycle-bin/', RecycleBinView.as_view(), name='recycle-bin'),
+    path('api/admin/recycle-bin/<int:pk>/restore/', RecycleBinRestoreView.as_view(),
+         name='recycle-bin-restore'),
 
     # Admin panel bulk product tools (edit grid + CSV import/export)
     path('api/admin/bulk-products/', bulk_products, name='bulk-products'),

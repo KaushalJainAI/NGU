@@ -14,7 +14,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Edit, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { Plus, Edit, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
+import { ComboItemsEditor } from '@/components/ComboItemsEditor';
+import { ComboLine, lineProblem } from '@/lib/comboLines';
 import { PageHelp } from '@/components/PageHelp';
 import { useTranslation } from 'react-i18next';
 
@@ -41,7 +43,7 @@ const Combos = () => {
     slug: '',
     description: '',
     // `variant` is the packaging size bundled — the unit of price and stock.
-    items: [] as { product: string; variant: string; quantity: number }[],
+    items: [] as ComboLine[],
     // NOTE: no `price`. A combo's MRP is DERIVED server-side as the sum of its
     // component sizes' prices, so it is displayed (see computedMrp) but never
     // typed or posted. `discount_price` is the only price an admin sets.
@@ -117,6 +119,19 @@ const Combos = () => {
       toast({
         title: t('combos.validationTitle'),
         description: t('combos.needOneProduct'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // A line whose size was retired, or whose product is gone, can't be saved —
+    // the server would refuse it. Say which line, here, instead of after upload.
+    const broken = validItems.find(line => lineProblem(line, allProducts));
+    if (broken) {
+      const name = getProductById(broken.product)?.name || broken.productName || '';
+      toast({
+        title: t('combos.validationTitle'),
+        description: `${name}: ${t(lineProblem(broken, allProducts)!)}`,
         variant: 'destructive',
       });
       return;
@@ -200,49 +215,17 @@ const handleToggleStatus = async (combo: Combo) => {
     // Revert on error
     setComboActive(combo.id, !newStatus);
 
+    // Show the server's reason: a combo that lost a line to a switched-off
+    // product can't go back on sale above its new MRP, and "failed" alone
+    // gives the admin nothing to act on.
     toast({
       title: t('common.error'),
-      description: t('combos.statusFailed'),
+      description: (error as { message?: string })?.message || t('combos.statusFailed'),
       variant: 'destructive',
     });
   }
 };
 
-
-  const addProductToCombo = async () => {
-    await fetchAllProducts();
-    setFormData((prev) => ({
-      ...prev,
-      items: [...prev.items, { product: '', variant: '', quantity: 1 }],
-    }));
-  };
-
-  const removeProductFromCombo = (index: number) => {
-    setFormData((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
-    }));
-  };
-
-  const updateItem = (
-    index: number,
-    field: 'product' | 'variant' | 'quantity',
-    value: string | number,
-  ) => {
-    setFormData((prev) => {
-      const updated = [...prev.items];
-      updated[index] = { ...updated[index], [field]: value };
-      // Switching product invalidates the chosen size — preselect that
-      // product's default so the line is never left without one.
-      if (field === 'product') {
-        const product = allProducts.find(p => String(p.id) === String(value));
-        const sizes = (product?.variants || []).filter(v => v.is_active);
-        const preferred = sizes.find(v => v.is_default) ?? sizes[0];
-        updated[index].variant = preferred ? String(preferred.id) : '';
-      }
-      return { ...prev, items: updated };
-    });
-  };
 
   const openEditDialog = async (combo: Combo) => {
     setEditingCombo(combo);
@@ -254,10 +237,13 @@ const handleToggleStatus = async (combo: Combo) => {
       const fullCombo = await getCombo(combo.slug);
       
       // Map items - use product ID from the response
-      const mappedItems = (fullCombo.items || []).map((i: ComboItem) => ({
+      const mappedItems: ComboLine[] = (fullCombo.items || []).map((i: ComboItem) => ({
         product: String(i.product),  // This is the product ID
         variant: i.variant ? String(i.variant) : '',
         quantity: i.quantity,
+        // Kept so a line whose size has since been retired can still be named.
+        productName: i.product_name,
+        variantLabel: i.variant_label,
       }));
       
       setEditingCombo(fullCombo);
@@ -336,8 +322,7 @@ const handleToggleStatus = async (combo: Combo) => {
   const computedMrp = formData.items.reduce((total, item) => {
     const product = getProductById(item.product);
     const size = (product?.variants || []).find(v => String(v.id) === item.variant);
-    const unitPrice = Number(size?.price ?? product?.price ?? 0);
-    return total + unitPrice * (item.quantity || 1);
+    return total + Number(size?.price ?? 0) * (item.quantity || 1);
   }, 0);
 
   return (
@@ -347,7 +332,7 @@ const handleToggleStatus = async (combo: Combo) => {
           <h1 className="text-3xl font-bold tracking-tight">{t('combos.title')}</h1>
           <p className="text-muted-foreground">{t('combos.subtitle')}</p>
         </div>
-        <Button onClick={() => { resetForm(); setDialogOpen(true); }}>
+        <Button onClick={() => { resetForm(); fetchAllProducts(); setDialogOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" /> {t('combos.addButton')}
         </Button>
       </div>
@@ -392,7 +377,48 @@ const handleToggleStatus = async (combo: Combo) => {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{combo.name}</TableCell>
-                    <TableCell>{t('combos.productsCount', { count: combo.items?.length || 0 })}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {(combo.items || []).map((item) => {
+                          // Either makes the combo unsellable (checkout refuses
+                          // it). A switched-off product is normally taken out of
+                          // the combo automatically, so `productOff` only shows
+                          // for a row that was changed outside the panel.
+                          const sizeRetired = item.variant_is_active === false;
+                          const productOff = !sizeRetired && item.product_is_active === false;
+                          return (
+                            <span
+                              key={item.variant}
+                              title={sizeRetired ? t('combos.componentUnavailable')
+                                : productOff ? t('combos.componentProductOff') : undefined}
+                              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs ${
+                                sizeRetired ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/30'
+                                  : productOff ? 'border-red-400 bg-red-50 text-red-700 dark:bg-red-950/30'
+                                  : 'bg-muted/50'
+                              }`}
+                            >
+                              {(sizeRetired || productOff) && <AlertTriangle className="h-3 w-3" />}
+                              {item.product_name} {item.variant_label}
+                              {item.quantity > 1 ? ` ×${item.quantity}` : ''}
+                            </span>
+                          );
+                        })}
+                        {!combo.items?.length && (
+                          <span className="text-xs text-red-600">{t('combos.noComponents')}</span>
+                        )}
+                      </div>
+                      {!!combo.missing_products?.length && (
+                        <div className="mt-1 flex items-start gap-1 text-xs text-amber-700">
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                          {t('combos.missingProducts', { products: combo.missing_products.join(', ') })}
+                        </div>
+                      )}
+                      {combo.available_stock !== undefined && (
+                        <div className={`mt-1 text-xs ${combo.available_stock > 0 ? 'text-muted-foreground' : 'text-red-600 font-medium'}`}>
+                          {t('combos.canBuild', { count: combo.available_stock })}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono">
                       {price !== null ? `₹${price}` : '—'}
                     </TableCell>
@@ -400,7 +426,8 @@ const handleToggleStatus = async (combo: Combo) => {
                       {discount !== null ? `₹${discount}` : '—'}
                     </TableCell>
                     <TableCell className="font-mono text-muted-foreground">
-                      {combo.weight ? `${combo.weight}${combo.unit || ''}` : '—'}
+                      {/* The form posts 0 for a blank weight; "0.00g" is not a weight. */}
+                      {Number(combo.weight) > 0 ? `${Number(combo.weight)}${combo.unit || ''}` : '—'}
                     </TableCell>
                     <TableCell>
                       <span className={
@@ -611,168 +638,12 @@ const handleToggleStatus = async (combo: Combo) => {
               </p>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>{t('combos.productsInCombo')}</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addProductToCombo}>
-                  <Plus className="h-4 w-4 mr-1" /> {t('combos.addProduct')}
-                </Button>
-              </div>
-              
-              {formData.items.map((item, index) => {
-                const selectedProduct = getProductById(item.product);
-                const isProductMissing = item.product !== '' && !selectedProduct;
-                
-                return (
-                  <div
-                    key={index}
-                    className={`border rounded-lg p-4 space-y-3 ${isProductMissing ? 'border-red-500 bg-red-50 dark:bg-red-950/20' : ''}`}
-                  >
-                    <div className="flex flex-col sm:flex-row gap-3 items-start">
-                      <div className="flex-1 space-y-3 w-full">
-                        <div>
-                          <Label htmlFor={`product-${index}`}>
-                            {t('combos.productLabel')}{' '}
-                            {isProductMissing && (
-                              <span className="text-red-600">{t('combos.notAvailable')}</span>
-                            )}
-                          </Label>
-                          <Select
-                            value={item.product === '' ? '' : item.product}
-                            onValueChange={value => updateItem(index, 'product', value)}
-                          >
-                            <SelectTrigger id={`product-${index}`} className={isProductMissing ? 'border-red-500' : ''}>
-                              <SelectValue placeholder={isProductMissing
-                                ? t('combos.productNotFound', { id: item.product })
-                                : t('combos.selectProduct')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {allProducts.map(product => (
-                                <SelectItem key={product.id} value={String(product.id)}>
-                                  {product.name} {product.weight ? `- ${product.weight}` : ''}
-                                  {!product.is_active && t('combos.inactiveSuffix')}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {isProductMissing && (
-                            <p className="text-xs text-red-600 mt-1">{t('combos.productMissingHint')}</p>
-                          )}
-                        </div>
-                        
-                        {selectedProduct && !isProductMissing && (() => {
-                          // The combo consumes a SIZE, so the size drives both
-                          // the picker below and the price/stock shown.
-                          const sizes = (selectedProduct.variants || []).filter(v => v.is_active);
-                          const selectedSize = sizes.find(v => String(v.id) === item.variant) ?? null;
-                          return (
-                            <>
-                              <div>
-                                <Label htmlFor={`size-${index}`}>{t('combos.sizeLabel')}</Label>
-                                <Select
-                                  value={item.variant || ''}
-                                  onValueChange={value => updateItem(index, 'variant', value)}
-                                >
-                                  <SelectTrigger id={`size-${index}`}>
-                                    <SelectValue placeholder={t('combos.selectSize')} />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {sizes.map(v => (
-                                      <SelectItem key={v.id} value={String(v.id)}>
-                                        {v.formatted_weight || t('combos.defaultSize')}
-                                        {v.is_default ? t('combos.defaultSuffix') : ''} — ₹{Number(v.price).toFixed(2)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                {sizes.length === 0 && (
-                                  <p className="text-xs text-red-600 mt-1">{t('combos.noActiveSize')}</p>
-                                )}
-                              </div>
+            <ComboItemsEditor
+              products={allProducts}
+              lines={formData.items}
+              onChange={(items) => setFormData(prev => ({ ...prev, items }))}
+            />
 
-                              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-md">
-                                {selectedProduct.image &&
-                                  <img src={selectedProduct.image} alt={selectedProduct.name} className="h-12 w-12 rounded object-cover" />}
-                                <div className="flex-1 text-sm space-y-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-medium">
-                                      {selectedProduct.name}
-                                      {selectedSize?.formatted_weight ? ` (${selectedSize.formatted_weight})` : ''}
-                                    </span>
-                                    {(selectedSize ? selectedSize.stock > 0 : selectedProduct.in_stock)
-                                      ? <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">{t('combos.inStock')}</span>
-                                      : <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">{t('combos.outOfStock')}</span>}
-                                  </div>
-                                  <div className="text-muted-foreground flex gap-4">
-                                    <span>{t('combos.priceLine', {
-                                      price: Number(selectedSize?.price ?? selectedProduct.price).toFixed(2),
-                                    })}</span>
-                                    <span>{t('combos.weightLine', {
-                                      weight: selectedSize?.formatted_weight || selectedProduct.weight,
-                                    })}</span>
-                                    <span>{t('combos.stockLine', {
-                                      stock: selectedSize?.stock ?? selectedProduct.stock,
-                                    })}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          );
-                        })()}
-                      </div>
-                      
-                      <div className="w-24">
-                        <Label htmlFor={`quantity-${index}`}>{t('combos.qty')}</Label>
-                        <Input
-                          id={`quantity-${index}`}
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={e =>
-                            updateItem(index, 'quantity',
-                              Number.isNaN(parseInt(e.target.value, 10))
-                                ? 1
-                                : parseInt(e.target.value, 10)
-                            )
-                          }
-                          placeholder="1"
-                        />
-                        {selectedProduct && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            ₹{(Number(selectedProduct.price) * item.quantity).toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-                      
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeProductFromCombo(index)}
-                        className="text-destructive hover:text-destructive mt-6"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-              
-              {formData.items.length === 0 && (
-                <p className="text-sm text-muted-foreground">{t('combos.noProductsAdded')}</p>
-              )}
-              
-              {formData.items.length > 0 && (
-                <div className="border-t pt-3 mt-2">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="font-medium">{t('combos.comboMrp')}</span>
-                    <span className="font-mono font-semibold">₹{computedMrp.toFixed(2)}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">{t('combos.comboMrpHint')}</p>
-                </div>
-              )}
-            </div>
-            
             {/* Homepage Sections */}
             <div className="space-y-2 rounded-lg border p-3">
               <div>

@@ -13,6 +13,8 @@ export interface ComboItem {
   variant_price?: string;
   variant_stock?: number;
   variant_is_active?: boolean;
+  /** False once the component's product has been switched off / binned. */
+  product_is_active?: boolean;
   quantity: number;
 }
 
@@ -47,6 +49,12 @@ export interface Combo {
   /** Read-only: how many combos can still be built (scarcest component). */
   available_stock?: number;
   created_at?: string;
+  /** Set when the combo was DELETED (starts the Recycle Bin countdown); null
+   *  for one that was merely switched off, which is never purged. */
+  deactivated_at?: string | null;
+  /** Switched-off products that were taken out of this combo. Non-empty means
+   *  it is smaller than the bundle its selling price was set for. */
+  missing_products?: string[];
   items?: ComboItem[];
   products?: number[];  // Product IDs in combo
   /** IDs of the homepage sections this combo is placed in. */

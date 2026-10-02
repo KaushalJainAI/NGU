@@ -4,6 +4,9 @@ The admin panel's Recycle Bin holds soft-deleted items:
   * Orders    — is_deleted=True, timestamped by Order.deleted_at
   * Products  — is_active=False, timestamped by Product.deactivated_at
   * Combos    — is_active=False, timestamped by ProductCombo.deactivated_at
+  * Everything else an admin can delete (coupons, reviews, expenses, gallery
+    images, payment accounts, contact messages) — a DeletedRecord snapshot,
+    timestamped by DeletedRecord.deleted_at (see admin_panel/recycle.py)
 
 Each item is purged permanently once it has sat in the bin longer than
 RECYCLE_BIN_RETENTION_DAYS (default 30) — a rolling, per-item countdown from the
@@ -35,6 +38,7 @@ from django.core.management.base import BaseCommand
 from django.db.models import ProtectedError
 from django.utils import timezone
 
+from admin_panel.models import DeletedRecord
 from orders.models import Invoice, Order, OrderItem
 from products.models import Product, ProductCombo
 
@@ -66,12 +70,27 @@ class Command(BaseCommand):
             f"(retention {days} days){' [dry-run]' if dry_run else ''}.")
 
         orders = self._purge_orders(cutoff, dry_run)
-        products = self._purge_soft_deleted(Product, cutoff, dry_run, "product")
+        # Combos before products: a binned product still inside a binned combo
+        # is only free to go once that combo has.
         combos = self._purge_soft_deleted(ProductCombo, cutoff, dry_run, "combo")
+        products = self._purge_soft_deleted(Product, cutoff, dry_run, "product")
+        records = self._purge_deleted_records(cutoff, dry_run)
 
         verb = "Would purge" if dry_run else "Purged"
         self.stdout.write(self.style.SUCCESS(
-            f"{verb}: {orders} order(s), {products} product(s), {combos} combo(s)."))
+            f"{verb}: {orders} order(s), {products} product(s), {combos} combo(s), "
+            f"{records} other record(s)."))
+
+    def _purge_deleted_records(self, cutoff, dry_run):
+        """Drop Recycle Bin snapshots (coupons, reviews, expenses, gallery
+        images, payment accounts, contact messages) past the cutoff. The rows
+        they describe are already gone; this only ends the window in which they
+        could be restored."""
+        qs = DeletedRecord.objects.filter(deleted_at__lt=cutoff)
+        count = qs.count()
+        if not dry_run:
+            qs.delete()
+        return count
 
     def _purge_orders(self, cutoff, dry_run):
         """Hard-delete soft-deleted orders past the cutoff (cascades line items,
@@ -126,6 +145,20 @@ class Command(BaseCommand):
                     f"  {'would skip' if dry_run else 'skipped'} {label} #{obj.pk} "
                     f"'{obj.name}' — referenced by an order.")
                 continue
+            # A product that is still a component of a combo cannot go: deleting
+            # it would delete its sizes, and ProductComboItem.variant is PROTECT,
+            # so the database refuses (the ProtectedError below). Checking here
+            # first makes the dry-run count honest and reports the real reason —
+            # the catch-all used to say "referenced by an order" for this too.
+            if model is Product:
+                in_combos = list(
+                    ProductCombo.objects.filter(productcomboitem__product=obj)
+                    .values_list('name', flat=True).distinct())
+                if in_combos:
+                    self.stdout.write(
+                        f"  {'would skip' if dry_run else 'skipped'} {label} #{obj.pk} "
+                        f"'{obj.name}' — still part of combo(s): {', '.join(in_combos)}.")
+                    continue
             if dry_run:
                 purged += 1
                 continue
@@ -136,5 +169,6 @@ class Command(BaseCommand):
                 # Belt-and-braces: a reference created between the check and the
                 # delete still can't be hard-deleted — leave it in the bin.
                 self.stdout.write(
-                    f"  skipped {label} #{obj.pk} '{obj.name}' — referenced by an order.")
+                    f"  skipped {label} #{obj.pk} '{obj.name}' — still referenced "
+                    f"by an order or a combo.")
         return purged

@@ -5,6 +5,7 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { getProducts, updateProduct, Product } from '@/api/products';
 import { getCombos, updateCombo, Combo } from '@/api/combos';
 import { getDeletedOrders, restoreOrder, Order } from '@/api/orders';
+import { getRecycleBin, restoreRecycleBinItem, RecycleBinItem } from '@/api/recycleBin';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -22,9 +23,20 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { RotateCcw, Loader2, AlertTriangle } from 'lucide-react';
 import { PageHelp } from '@/components/PageHelp';
 import { useTranslation } from 'react-i18next';
+import { comboChangesMessage } from '@/lib/comboLines';
 
-// Keep in sync with the backend RECYCLE_BIN_RETENTION_DAYS setting.
-const RETENTION_DAYS = 30;
+// Only a fallback: the page shows the retention the backend reports
+// (RECYCLE_BIN_RETENTION_DAYS), so the two can no longer drift apart.
+const DEFAULT_RETENTION_DAYS = 30;
+
+const formatDate = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+const addDays = (iso: string, days: number) => {
+  const date = new Date(iso);
+  date.setDate(date.getDate() + days);
+  return date.toISOString();
+};
 
 const RecycleBin = () => {
   const { t } = useTranslation();
@@ -36,10 +48,14 @@ const RecycleBin = () => {
 
   const queryKey = ['recycle-bin'];
   const { data, isInitialLoading, refreshing } = useAdminData(queryKey, async () => {
-    const [productsRes, combosRes, ordersRes] = await Promise.all([
+    const [productsRes, combosRes, ordersRes, bin] = await Promise.all([
       getProducts(),
       getCombos(),
       getDeletedOrders(),
+      // Everything that is HARD-deleted (coupons, reviews, expenses, gallery
+      // images, payment accounts, contact messages). A failure here must not
+      // blank the other three tabs.
+      getRecycleBin().catch(() => ({ retention_days: DEFAULT_RETENTION_DAYS, items: [] })),
     ]);
     // Deleted products/combos are the soft-deleted (is_active = false) ones —
     // DELETE on those endpoints deactivates rather than destroys.
@@ -47,11 +63,22 @@ const RecycleBin = () => {
       products: productsRes.data.filter((p) => p.is_active === false),
       combos: combosRes.data.filter((c) => c.is_active === false),
       orders: ordersRes,
+      other: bin.items,
+      retentionDays: bin.retention_days,
     };
   });
   const inactiveProducts = data?.products ?? [];
   const inactiveCombos = data?.combos ?? [];
   const deletedOrders = data?.orders ?? [];
+  const otherItems = data?.other ?? [];
+  const RETENTION_DAYS = data?.retentionDays ?? DEFAULT_RETENTION_DAYS;
+
+  /** Where a product/combo stands: switched off (kept forever) or deleted
+   *  (counting down). Only a DELETE stamps `deactivated_at`. */
+  const binStatus = (deactivatedAt?: string | null) =>
+    deactivatedAt
+      ? `${formatDate(deactivatedAt)} → ${formatDate(addDays(deactivatedAt, RETENTION_DAYS))}`
+      : t('recycleBin.switchedOff');
 
   /** Drop the restored row from the cached bin without a full reload. */
   const dropFromBin = (patch: (d: NonNullable<typeof data>) => NonNullable<typeof data>) =>
@@ -60,13 +87,17 @@ const RecycleBin = () => {
   const handleRestoreProduct = async (product: Product) => {
     setRestoringKey(`product-${product.id}`);
     try {
-      await updateProduct(product.slug, { is_active: true });
+      const saved = await updateProduct(product.slug, { is_active: true });
       dropFromBin(d => ({ ...d, products: d.products.filter(p => p.id !== product.id) }));
-      // The product is live again — the Products page's cache is now stale.
-      invalidate(['products']);
+      // The product is live again — the Products page's cache is now stale. It
+      // also returns to the combos it was taken out of, which may switch some
+      // of them back on, so this page's own combo tab is stale too.
+      const comboNote = comboChangesMessage(saved.combo_changes, t);
+      invalidate(['products'], ['combos'], ...(comboNote ? [queryKey] : []));
       toast({
         title: t('recycleBin.restoredTitle'),
-        description: t('recycleBin.productRestored', { name: product.name }),
+        description: [t('recycleBin.productRestored', { name: product.name }), comboNote]
+          .filter(Boolean).join(' '),
       });
     } catch {
       toast({
@@ -89,10 +120,12 @@ const RecycleBin = () => {
         title: t('recycleBin.restoredTitle'),
         description: t('recycleBin.comboRestored', { name: combo.name }),
       });
-    } catch {
+    } catch (error: unknown) {
+      // The server says why — typically the selling price is now above the MRP
+      // because a switched-off product was taken out of the bundle.
       toast({
         title: t('common.error'),
-        description: t('recycleBin.comboRestoreFailed'),
+        description: (error as { message?: string })?.message || t('recycleBin.comboRestoreFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -114,6 +147,30 @@ const RecycleBin = () => {
       toast({
         title: t('common.error'),
         description: t('recycleBin.orderRestoreFailed'),
+        variant: 'destructive',
+      });
+    } finally {
+      setRestoringKey(null);
+    }
+  };
+
+  const handleRestoreOther = async (item: RecycleBinItem) => {
+    setRestoringKey(`other-${item.id}`);
+    try {
+      await restoreRecycleBinItem(item.id);
+      dropFromBin(d => ({ ...d, other: d.other.filter(o => o.id !== item.id) }));
+      // The row is back on whichever page it came from; refresh them all
+      // rather than keep a map of kind → cache key that will fall out of date.
+      queryClient.invalidateQueries({ predicate: q => q.queryKey[0] !== 'recycle-bin' });
+      toast({
+        title: t('recycleBin.restoredTitle'),
+        description: t('recycleBin.itemRestored', { label: item.label }),
+      });
+    } catch (error: unknown) {
+      // 409 carries the reason (e.g. the coupon code has been reused).
+      toast({
+        title: t('common.error'),
+        description: (error as { message?: string })?.message || t('recycleBin.itemRestoreFailed'),
         variant: 'destructive',
       });
     } finally {
@@ -177,6 +234,9 @@ const RecycleBin = () => {
           <TabsTrigger value="orders">
             {t('recycleBin.tabOrders', { count: deletedOrders.length })}
           </TabsTrigger>
+          <TabsTrigger value="other">
+            {t('recycleBin.tabOther', { count: otherItems.length })}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="products">
@@ -191,6 +251,7 @@ const RecycleBin = () => {
                     <TableHead>{t('common.image')}</TableHead>
                     <TableHead>{t('common.name')}</TableHead>
                     <TableHead>{t('common.category')}</TableHead>
+                    <TableHead>{t('recycleBin.colGoneOn')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -204,12 +265,15 @@ const RecycleBin = () => {
                       </TableCell>
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>{product.category_name || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {binStatus(product.deactivated_at)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <RestoreButton itemKey={`product-${product.id}`} onClick={() => handleRestoreProduct(product)} />
                       </TableCell>
                     </TableRow>
                   ))}
-                  {inactiveProducts.length === 0 && emptyRow(4, t('recycleBin.noInactiveProducts'))}
+                  {inactiveProducts.length === 0 && emptyRow(5, t('recycleBin.noInactiveProducts'))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -228,6 +292,7 @@ const RecycleBin = () => {
                     <TableHead>{t('common.image')}</TableHead>
                     <TableHead>{t('common.name')}</TableHead>
                     <TableHead>{t('recycleBin.colProducts')}</TableHead>
+                    <TableHead>{t('recycleBin.colGoneOn')}</TableHead>
                     <TableHead className="text-right">{t('common.actions')}</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -243,12 +308,15 @@ const RecycleBin = () => {
                       <TableCell>
                         {t('recycleBin.productsCount', { count: combo.items?.length || 0 })}
                       </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {binStatus(combo.deactivated_at)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <RestoreButton itemKey={`combo-${combo.id}`} onClick={() => handleRestoreCombo(combo)} />
                       </TableCell>
                     </TableRow>
                   ))}
-                  {inactiveCombos.length === 0 && emptyRow(4, t('recycleBin.noInactiveCombos'))}
+                  {inactiveCombos.length === 0 && emptyRow(5, t('recycleBin.noInactiveCombos'))}
                 </TableBody>
               </Table>
             </CardContent>
@@ -286,6 +354,59 @@ const RecycleBin = () => {
                     </TableRow>
                   ))}
                   {deletedOrders.length === 0 && emptyRow(5, t('recycleBin.binEmpty'))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="other">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('recycleBin.otherTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent className="overflow-x-auto">
+              <Table className="min-w-[640px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('recycleBin.colType')}</TableHead>
+                    <TableHead>{t('recycleBin.colItem')}</TableHead>
+                    <TableHead>{t('recycleBin.colDeleted')}</TableHead>
+                    <TableHead>{t('recycleBin.colGoneOn')}</TableHead>
+                    <TableHead className="text-right">{t('common.actions')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {otherItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {t(`recycleBin.kind.${item.kind}`, { defaultValue: item.kind })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {item.preview_url && (
+                            <img src={item.preview_url} alt="" className="h-8 w-8 rounded object-cover" />
+                          )}
+                          <span className="font-medium">{item.label}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(item.deleted_at)}
+                        {item.deleted_by && (
+                          <div className="text-xs">
+                            {t('recycleBin.deletedByLine', { who: item.deleted_by })}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.purge_at ? formatDate(item.purge_at) : t('recycleBin.protectedLine')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <RestoreButton itemKey={`other-${item.id}`} onClick={() => handleRestoreOther(item)} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {otherItems.length === 0 && emptyRow(5, t('recycleBin.noOther'))}
                 </TableBody>
               </Table>
             </CardContent>

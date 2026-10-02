@@ -19,21 +19,33 @@ export interface BulkProductRow {
   discount_price: string;
   stock: number;
   low_stock_threshold: number;
+  /** False when the product is switched off / in the Recycle Bin. */
+  is_active?: boolean;
+  /** Every ACTIVE size. Price and stock are edited here, one line per size. */
   variants: BulkVariant[];
 }
 
 export interface BulkChange {
   id: number;
-  /** Omit to edit the product's own price/stock; set to edit one size. */
+  /** The size to edit. Omitted, the server edits the product's default size. */
   variant_id?: number;
   price?: string;
   discount_price?: string;
   stock?: number | string;
 }
 
+export interface BulkApplyError {
+  row: number | null;
+  id?: number;
+  /** Which size the server refused, so the grid can mark that line. */
+  variant_id?: number | null;
+  name?: string;
+  error: string;
+}
+
 export interface BulkApplyResult {
   applied: number;
-  errors: { row: number; id?: number; error: string }[];
+  errors: BulkApplyError[];
 }
 
 export interface ImportRow {

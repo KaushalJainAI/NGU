@@ -14,7 +14,7 @@
     "courierCoverage": "Courier cost recorded on {{a}} of {{b}} dispatched orders.",
     "expenses": "Expenses",
     "saveFailed": "Could not save the expense.",
-    "deleteConfirm": "Delete this expense?",
+    "deleteConfirm": "Move this expense to the Recycle Bin? You can restore it from there.",
     "itc": "GST can be claimed",
     "vendor": "Vendor",
     "gstInAmount": "GST included",

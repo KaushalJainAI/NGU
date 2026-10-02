@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from .models import MAX_FEATURED_REVIEWS, Review
 from .serializers import ReviewSerializer
 from orders.models import OrderItem
+from admin_panel.recycle import RecycleBinDestroyMixin
 
 # An order only counts as a purchase once it has left the pending/payment stage.
 PURCHASED_ORDER_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered', 'delivering']
@@ -28,9 +29,21 @@ def has_purchased(user, item_type, product=None, combo=None):
     return False
 
 
-class ReviewViewSet(viewsets.ModelViewSet):
+class ReviewViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    recycle_kind = 'review'
+
+    def should_recycle(self, instance):
+        # An ADMIN removing a review can be a mis-click on the moderation table,
+        # so it goes to the Recycle Bin. A customer deleting their own words is
+        # a decision about their own content and is honoured outright.
+        user = self.request.user
+        return bool(user.is_authenticated and user.is_staff)
+
+    def recycle_label(self, instance):
+        author = getattr(instance.user, 'email', '') or 'customer'
+        return f"{instance.rating}★ on {instance.item_name} — {author}"
 
     def get_queryset(self):
         user = self.request.user
@@ -56,9 +69,15 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('featured') in ('1', 'true', 'True'):
             queryset = queryset.filter(is_featured=True)
 
+        # A non-numeric id names no product; answer with an empty list rather
+        # than letting the ORM raise on it.
         if product_id:
+            if not str(product_id).isascii() or not str(product_id).isdigit():
+                return queryset.none()
             queryset = queryset.filter(product_id=product_id, item_type='product')
         elif combo_id:
+            if not str(combo_id).isascii() or not str(combo_id).isdigit():
+                return queryset.none()
             queryset = queryset.filter(combo_id=combo_id, item_type='combo')
         elif is_staff and self.action == 'list' and self.request.query_params.get('all') in ('1', 'true', 'True'):
             pass  # admin moderation view: every review, all products
