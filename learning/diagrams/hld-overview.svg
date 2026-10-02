@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 520" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="940" height="520" fill="#ffffff"/>
+  <text x="470" y="30" text-anchor="middle" font-size="18" font-weight="600" fill="#0f172a">NGU (Nidhi Masala) — high-level design</text>
+
+  <!-- Browsers -->
+  <rect x="16" y="96" width="150" height="70" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="91" y="126" text-anchor="middle" font-size="14" font-weight="600" fill="#0c4a6e">Customer browser</text>
+  <text x="91" y="146" text-anchor="middle" font-size="12" fill="#0c4a6e">Storefront (React)</text>
+  <rect x="16" y="186" width="150" height="70" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="91" y="216" text-anchor="middle" font-size="14" font-weight="600" fill="#0c4a6e">Owner browser</text>
+  <text x="91" y="236" text-anchor="middle" font-size="12" fill="#0c4a6e">Admin panel (React)</text>
+
+  <!-- VM boundary -->
+  <rect x="196" y="48" width="536" height="420" rx="16" fill="#f8fafc" stroke="#64748b" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="212" y="68" font-size="12" font-weight="600" fill="#475569">One VM · Docker Compose · one private network</text>
+
+  <!-- Edge -->
+  <rect x="212" y="120" width="96" height="112" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="260" y="164" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">Edge proxy</text>
+  <text x="260" y="183" text-anchor="middle" font-size="11" fill="#64748b">Caddy</text>
+  <text x="260" y="199" text-anchor="middle" font-size="11" fill="#64748b">HTTPS · 80/443</text>
+
+  <!-- Frontend nginx -->
+  <rect x="330" y="84" width="150" height="92" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="405" y="108" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">frontend (nginx)</text>
+  <text x="405" y="127" text-anchor="middle" font-size="11" fill="#64748b">serves the storefront files</text>
+  <text x="405" y="143" text-anchor="middle" font-size="11" fill="#64748b">/api/ → backend</text>
+  <text x="405" y="159" text-anchor="middle" font-size="11" fill="#64748b">/panel/ → admin-panel</text>
+
+  <!-- Admin nginx -->
+  <rect x="330" y="196" width="150" height="54" rx="10" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="405" y="219" text-anchor="middle" font-size="13" font-weight="600" fill="#1e293b">admin-panel (nginx)</text>
+  <text x="405" y="237" text-anchor="middle" font-size="11" fill="#64748b">serves the panel files</text>
+
+  <!-- Backend -->
+  <rect x="506" y="84" width="200" height="166" rx="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="606" y="110" text-anchor="middle" font-size="14" font-weight="600" fill="#3b0764">backend</text>
+  <text x="606" y="130" text-anchor="middle" font-size="12" fill="#3b0764">Django + DRF on gunicorn</text>
+  <text x="606" y="149" text-anchor="middle" font-size="11" fill="#6d28d9">3 workers × 2 threads</text>
+  <text x="606" y="176" text-anchor="middle" font-size="11" fill="#6d28d9">users · products · cart · orders</text>
+  <text x="606" y="193" text-anchor="middle" font-size="11" fill="#6d28d9">payments · reviews · assistant</text>
+  <text x="606" y="210" text-anchor="middle" font-size="11" fill="#6d28d9">analytics · admin_panel · support</text>
+  <text x="606" y="236" text-anchor="middle" font-size="11" fill="#6d28d9">ten apps, one process</text>
+
+  <!-- Scheduler -->
+  <rect x="556" y="270" width="150" height="52" rx="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="631" y="292" text-anchor="middle" font-size="14" font-weight="600" fill="#3b0764">scheduler</text>
+  <text x="631" y="310" text-anchor="middle" font-size="11" fill="#6d28d9">same image · timed jobs</text>
+
+  <!-- Data -->
+  <rect x="212" y="360" width="118" height="92" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="271" y="392" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">Redis</text>
+  <text x="271" y="411" text-anchor="middle" font-size="11" fill="#166534">cache · throttles</text>
+  <text x="271" y="427" text-anchor="middle" font-size="11" fill="#166534">counters</text>
+
+  <rect x="346" y="360" width="118" height="92" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="405" y="392" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">PgBouncer</text>
+  <text x="405" y="411" text-anchor="middle" font-size="11" fill="#166534">connection pool</text>
+  <text x="405" y="427" text-anchor="middle" font-size="11" fill="#166534">transaction mode</text>
+
+  <rect x="484" y="360" width="112" height="92" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="540" y="392" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">PostgreSQL 17</text>
+  <text x="540" y="411" text-anchor="middle" font-size="11" fill="#166534">the source</text>
+  <text x="540" y="427" text-anchor="middle" font-size="11" fill="#166534">of truth</text>
+
+  <rect x="614" y="360" width="104" height="92" rx="10" fill="#fee2e2" stroke="#dc2626"/>
+  <text x="666" y="392" text-anchor="middle" font-size="13" font-weight="600" fill="#7f1d1d">whisper</text>
+  <text x="666" y="411" text-anchor="middle" font-size="11" fill="#991b1b">speech-to-text</text>
+  <text x="666" y="427" text-anchor="middle" font-size="11" fill="#991b1b">fallback only</text>
+
+  <!-- Outside services -->
+  <rect x="762" y="84" width="164" height="36" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text x="844" y="100" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">Razorpay</text>
+  <text x="844" y="114" text-anchor="middle" font-size="10.5" fill="#92400e">payments + webhook</text>
+
+  <rect x="762" y="128" width="164" height="36" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text x="844" y="144" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">OpenRouter</text>
+  <text x="844" y="158" text-anchor="middle" font-size="10.5" fill="#92400e">chat model · voice-to-text</text>
+
+  <rect x="762" y="172" width="164" height="36" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text x="844" y="188" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">Cloudinary</text>
+  <text x="844" y="202" text-anchor="middle" font-size="10.5" fill="#92400e">product and profile images</text>
+
+  <rect x="762" y="216" width="164" height="36" rx="10" fill="#fef3c7" stroke="#d97706"/>
+  <text x="844" y="232" text-anchor="middle" font-size="12" font-weight="600" fill="#78350f">Email (SMTP) · Google</text>
+  <text x="844" y="246" text-anchor="middle" font-size="10.5" fill="#92400e">order mail · sign-in</text>
+
+  <!-- browsers to edge -->
+  <line x1="166" y1="134" x2="208" y2="162" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="166" y1="220" x2="208" y2="194" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- edge to frontend -->
+  <line x1="308" y1="160" x2="326" y2="138" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- frontend to backend -->
+  <line x1="480" y1="128" x2="502" y2="128" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- frontend to admin -->
+  <line x1="405" y1="176" x2="405" y2="192" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- backend to pgbouncer and redis -->
+  <path d="M536,250 L536,340 L405,340 L405,356" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <path d="M520,250 L520,330 L271,330 L271,356" fill="none" stroke="#475569" stroke-width="1.4" marker-end="url(#a)"/>
+  <!-- scheduler joins the database line -->
+  <path d="M600,322 L600,340 L536,340" fill="none" stroke="#475569" stroke-width="1.4"/>
+  <!-- pgbouncer to postgres -->
+  <line x1="464" y1="406" x2="480" y2="406" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- backend to whisper (fallback) -->
+  <path d="M706,240 L719,240 L719,344 L666,344 L666,356" fill="none" stroke="#475569" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <!-- backend to outside -->
+  <line x1="706" y1="102" x2="758" y2="102" stroke="#475569" stroke-width="1.6" marker-end="url(#a)" marker-start="url(#a)"/>
+  <line x1="706" y1="146" x2="758" y2="146" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="706" y1="190" x2="758" y2="190" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="706" y1="226" x2="758" y2="232" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+
+  <text x="470" y="498" text-anchor="middle" font-size="12" fill="#475569">Modular monolith · one database · the browser calls the API on its own origin · timed work runs in its own container</text>
+</svg>

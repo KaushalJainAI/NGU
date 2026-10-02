@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 420" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="920" height="420" fill="#ffffff"/>
+  <text x="460" y="30" text-anchor="middle" font-size="18" font-weight="600" fill="#0f172a">Three ways a payment gets confirmed — one function does the work</text>
+
+  <!-- L1 -->
+  <rect x="20" y="66" width="270" height="84" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <text x="155" y="92" text-anchor="middle" font-size="14" font-weight="600" fill="#0c4a6e">L1 · the browser</text>
+  <text x="155" y="112" text-anchor="middle" font-size="12" fill="#0c4a6e">POST /api/payments/verify/</text>
+  <text x="155" y="131" text-anchor="middle" font-size="11" fill="#0369a1">fast, but the tab can close first</text>
+
+  <!-- L2 -->
+  <rect x="20" y="168" width="270" height="84" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="1.5"/>
+  <text x="155" y="194" text-anchor="middle" font-size="14" font-weight="600" fill="#78350f">L2 · Razorpay's webhook</text>
+  <text x="155" y="214" text-anchor="middle" font-size="12" fill="#78350f">POST /api/payments/webhook/</text>
+  <text x="155" y="233" text-anchor="middle" font-size="11" fill="#92400e">reliable, can arrive late or twice</text>
+
+  <!-- L3 -->
+  <rect x="20" y="270" width="270" height="84" rx="12" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.5"/>
+  <text x="155" y="296" text-anchor="middle" font-size="14" font-weight="600" fill="#3b0764">L3 · the scheduler</text>
+  <text x="155" y="316" text-anchor="middle" font-size="12" fill="#3b0764">reconcile_payments, every 5 min</text>
+  <text x="155" y="335" text-anchor="middle" font-size="11" fill="#6d28d9">asks Razorpay; fixes what L1 and L2 missed</text>
+
+  <!-- the one function -->
+  <rect x="360" y="96" width="250" height="228" rx="14" fill="#f1f5f9" stroke="#64748b" stroke-width="1.5"/>
+  <text x="485" y="122" text-anchor="middle" font-size="14" font-weight="600" fill="#1e293b">mark_payment_captured()</text>
+  <text x="485" y="140" text-anchor="middle" font-size="11" fill="#64748b">payments/services.py · one transaction</text>
+  <rect x="376" y="154" width="218" height="34" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="485" y="176" text-anchor="middle" font-size="12" fill="#1e293b">1. lock Order, then Payment</text>
+  <rect x="376" y="194" width="218" height="34" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="485" y="216" text-anchor="middle" font-size="12" fill="#1e293b">2. already completed? stop</text>
+  <rect x="376" y="234" width="218" height="34" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="485" y="256" text-anchor="middle" font-size="12" fill="#1e293b">3. amount matches? else flag</text>
+  <rect x="376" y="274" width="218" height="34" rx="8" fill="#ffffff" stroke="#94a3b8"/>
+  <text x="485" y="296" text-anchor="middle" font-size="12" fill="#1e293b">4. order cancelled? record, don't reopen</text>
+
+  <!-- results -->
+  <rect x="680" y="66" width="220" height="48" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="790" y="88" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">Order → paid, confirmed</text>
+  <text x="790" y="104" text-anchor="middle" font-size="11" fill="#166534">Payment → completed</text>
+
+  <rect x="680" y="126" width="220" height="48" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="790" y="148" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">Tax invoice issued</text>
+  <text x="790" y="164" text-anchor="middle" font-size="11" fill="#166534">next number in the series</text>
+
+  <rect x="680" y="186" width="220" height="48" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="790" y="208" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">Cart emptied</text>
+  <text x="790" y="224" text-anchor="middle" font-size="11" fill="#166534">kept until now, in case payment failed</text>
+
+  <rect x="680" y="246" width="220" height="48" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="790" y="268" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">PaymentEvent row written</text>
+  <text x="790" y="284" text-anchor="middle" font-size="11" fill="#166534">the audit trail, same transaction</text>
+
+  <rect x="680" y="306" width="220" height="48" rx="10" fill="#ffffff" stroke="#16a34a" stroke-dasharray="5 3"/>
+  <text x="790" y="328" text-anchor="middle" font-size="13" font-weight="600" fill="#14532d">Emails</text>
+  <text x="790" y="344" text-anchor="middle" font-size="11" fill="#166534">only after the transaction commits</text>
+
+  <!-- arrows in -->
+  <line x1="290" y1="108" x2="356" y2="170" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="290" y1="210" x2="356" y2="210" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <line x1="290" y1="312" x2="356" y2="250" stroke="#475569" stroke-width="1.6" marker-end="url(#a)"/>
+  <!-- arrows out -->
+  <line x1="610" y1="170" x2="676" y2="92" stroke="#475569" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="610" y1="190" x2="676" y2="150" stroke="#475569" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="610" y1="210" x2="676" y2="210" stroke="#475569" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="610" y1="230" x2="676" y2="268" stroke="#475569" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="610" y1="250" x2="676" y2="328" stroke="#475569" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a)"/>
+
+  <text x="460" y="392" text-anchor="middle" font-size="12" fill="#475569">Whichever layer arrives first does the work. The others find the payment already completed and change nothing.</text>
+</svg>
