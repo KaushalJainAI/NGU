@@ -110,7 +110,7 @@ const Login: React.FC = () => {
                 <div className="flex justify-center w-full">
                   <GoogleLogin
                     onSuccess={handleGoogleSuccess}
-                    onError={() => toast.error("Google login failed")}
+                    onError={() => toast.error(t('auth.googleFailed'))}
                     useOneTap
                     theme="outline"
                     shape="rectangular"

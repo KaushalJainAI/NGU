@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 
 # ============== SEARCH CORPUS ==============
 
-SEARCH_CORPUS_KEY = get_search_corpus_key()
-
 # How strongly each corpus entry kind counts toward the final score.
 KIND_WEIGHTS = {'name': 1.0, 'token': 0.95, 'category': 0.9, 'synonym': 0.85}
 
@@ -120,7 +118,11 @@ def build_search_corpus() -> List[Dict[str, Any]]:
 
 
 def get_search_corpus() -> List[Dict[str, Any]]:
-    return get_cached_or_set(SEARCH_CORPUS_KEY, build_search_corpus, TTL_LONG)
+    # Per active language (see get_search_corpus_key): the corpus embeds
+    # translated names, so it must be rebuilt — never reused — across languages.
+    # (A module-level constant key here once served the first language's corpus
+    # to everybody until TTL.)
+    return get_cached_or_set(get_search_corpus_key(), build_search_corpus, TTL_LONG)
 
 
 def _score_matches(query: str, entries: List[Dict], threshold: int) -> Dict[int, float]:

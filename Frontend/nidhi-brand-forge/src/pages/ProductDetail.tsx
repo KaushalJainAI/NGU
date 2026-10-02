@@ -141,7 +141,7 @@ const ProductDetail = () => {
         }
       } catch (err: any) {
         console.error("Error fetching product:", err);
-        setError(err.message || "Failed to load product");
+        setError(err.message || t('product.loadFailed'));
         setProduct(null);
       } finally {
         setLoading(false);
@@ -316,9 +316,9 @@ const ProductDetail = () => {
     // Fallback: copy to clipboard
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Link copied to clipboard!");
+      toast.success(t('product.linkCopied'));
     } catch (err) {
-      toast.error("Failed to copy link");
+      toast.error(t('product.linkCopyFailed'));
     }
   };
 
@@ -363,8 +363,8 @@ const ProductDetail = () => {
       <div className="min-h-screen bg-background pb-20 md:pb-0">
         <div className="container mx-auto px-4 py-16 text-center">
           <div className="max-w-md mx-auto">
-            <h2 className="text-2xl font-bold mb-4">Product Not Found</h2>
-            <p className="text-destructive text-lg mb-6">{error || "The product you're looking for doesn't exist."}</p>
+            <h2 className="text-2xl font-bold mb-4">{t('product.notFoundTitle')}</h2>
+            <p className="text-destructive text-lg mb-6">{error || t('product.notFound')}</p>
             <div className="flex gap-4 justify-center">
               <Button onClick={() => navigate(-1)} variant="outline">
                 Go Back

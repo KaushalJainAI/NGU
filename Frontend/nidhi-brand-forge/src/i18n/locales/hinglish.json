@@ -147,7 +147,26 @@
       "sodium": "Sodium",
       "sugars": "Sugars",
       "sugar": "Sugar"
-    }
+    },
+    "alreadyReviewed": "Aap is product ka review de chuke hain.",
+    "loginToReview": "Is product ka review likhne ke liye login karein.",
+    "purchaseToReview": "Sirf wahi customers review de sakte hain jinhone ye product kharida hai.",
+    "reviewComment": "Aapka Review",
+    "reviewCommentPlaceholder": "Is product mein aapko kya pasand aaya ya nahi, share karein",
+    "reviewCommentRequired": "Kripya apna review likhein",
+    "reviewError": "Aapka review submit nahi ho paya. Kripya dobara try karein.",
+    "reviewSelectRating": "Kripya star rating chunein",
+    "reviewSubmitted": "Dhanyavaad! Aapka review submit ho gaya hai.",
+    "reviewTitle": "Title (optional)",
+    "reviewTitlePlaceholder": "Apne experience ko ek line mein batayein",
+    "submitReview": "Review Submit Karein",
+    "writeReview": "Review Likhein",
+    "yourRating": "Aapki Rating",
+    "linkCopied": "Link copy ho gaya!",
+    "linkCopyFailed": "Link copy nahi ho paya",
+    "loadFailed": "Product load nahi ho paya",
+    "notFound": "Aap jo product dhoondh rahe hain wo exist nahi karta.",
+    "notFoundTitle": "Product nahi mila"
   },
   "footer": {
     "tagline": "1995 se Bhartiya masalon ka asli swaad. Aisi quality jo ghar jaisi lage.",
@@ -212,7 +231,21 @@
     },
     "removeUnavailable": "Unavailable items hatayein",
     "fixToContinue": "Aage badhne ke liye highlight kiye gaye items hatayein ya theek karein",
-    "unavailableRemoved": "Unavailable items hata diye gaye"
+    "unavailableRemoved": "Unavailable items hata diye gaye",
+    "shippingGst": "Delivery par GST (18%)",
+    "loadFailed": "Cart load nahi ho paya",
+    "loginToAdd": "Cart mein items daalne ke liye please login karein",
+    "addedToCart": "Item cart mein daal diya gaya",
+    "loginToUpdate": "Cart update karne ke liye please login karein",
+    "loginToRemove": "Items hatane ke liye please login karein",
+    "loginToClear": "Cart clear karne ke liye please login karein",
+    "cartFull": "Aapka cart maximum {{max}} alag items rakh sakta hai.",
+    "cartIsFull": "Cart full hai",
+    "addFailed": "Item cart mein daala nahi ja paya",
+    "maxQuantity": "Per item quantity {{max}} se zyada nahi ho sakti.",
+    "updateFailed": "Quantity update nahi ho payi",
+    "removeFailed": "Item hataya nahi ja paya",
+    "clearFailed": "Cart clear nahi ho paya"
   },
   "auth": {
     "welcomeBack": "Wapsi Par Swagat Hai",
@@ -229,7 +262,12 @@
     "googleFailed": "Google login fail. Kripya dobara try karein.",
     "subtitle": "Apne account tak pahunchne ke liye apni details darj karein",
     "registerHere": "Yahan register karein",
-    "verifyFirst": "Pehle apna email confirm karein. Humne aapko ek code bheja hai."
+    "verifyFirst": "Pehle apna email confirm karein. Humne aapko ek code bheja hai.",
+    "loginSuccess": "Login successful!",
+    "registerSuccess": "Registration successful! Please login karein.",
+    "googleSuccess": "Google se login successful!",
+    "logoutSuccess": "Successfully logout!",
+    "registerFailed": "Registration failed"
   },
   "about": {
     "badge": "Barnagar, Madhya Pradesh",
@@ -355,7 +393,10 @@
     "singleDelivery": "Single Delivery",
     "allInOne": "All items in one package",
     "genuine": "100% genuine products",
-    "productsInCombo": "Products In This Combo"
+    "productsInCombo": "Products In This Combo",
+    "loadFailed": "Combo load nahi ho paya",
+    "notFound": "Aap jo combo dhoondh rahe hain wo exist nahi karta.",
+    "notFoundTitle": "Combo nahi mila"
   },
   "category": {
     "allSpices": "All Spices",
@@ -374,7 +415,8 @@
     "productCount": "{{count}} product",
     "productCount_other": "{{count}} products",
     "noProducts": "No products found.",
-    "loadingProducts": "Loading…"
+    "loadingProducts": "Loading…",
+    "loadError": "Products abhi load nahi ho paye. Kripya dobara try karein."
   },
   "offerZone": {
     "heroTitle": "Exclusive Offers",
@@ -704,7 +746,10 @@
   "favorites": {
     "empty": "Aapki wishlist khaali hai",
     "emptyHint": "Kisi bhi product par heart dabakar use yahan save karein.",
-    "browse": "Products dekhein"
+    "browse": "Products dekhein",
+    "count": "{{count}} saved item",
+    "count_other": "{{count}} saved items",
+    "title": "My Favourites"
   },
   "orderSuccess": {
     "title": "Order Successfully Ho Gaya!",
@@ -852,7 +897,21 @@
     "speak": "Bolein",
     "listening": "Sun rahe hain…",
     "transcribing": "Likha ja raha hai…",
-    "inputPlaceholder": "Masalon, orders ke baare mein poochein…"
+    "inputPlaceholder": "Masalon, orders ke baare mein poochein…",
+    "proposalAdded": "Cart mein joda gaya",
+    "proposalConfirm": "Sab cart mein daalein",
+    "proposalDone": "Ho gaya ✓",
+    "proposalEditConfirm": "Cart update karein",
+    "proposalFailed": "Cart update nahi ho paya — kripya dobara try karein",
+    "proposalLess": "Kam",
+    "proposalMore": "Zyada",
+    "proposalUpdated": "Cart update hua",
+    "readAloudAria": "Jawaab zor se sunein",
+    "readAloudOff": "Read-aloud band",
+    "readAloudOn": "Read-aloud chaalu",
+    "voiceMicDenied": "Microphone blocked hai — voice ke liye mic ki permission dein.",
+    "voiceNothingHeard": "Kuch sunai nahi diya — kripya dobara try karein.",
+    "voiceTranscribeFailed": "Sunai nahi diya — kripya dobara try karein."
   },
   "billing": {
     "paymentNotConfigured": "Payment system configure nahi hai. Kripya support se contact karein.",
@@ -916,7 +975,13 @@
     "paymentDone": "Maine payment complete kar li hai",
     "processing": "Process ho raha hai...",
     "placeOrder": "Order Place karein",
-    "cartChanged": "Aapke cart ke kuch items ab available nahi hain. Kripya apna cart dekhein."
+    "cartChanged": "Aapke cart ke kuch items ab available nahi hain. Kripya apna cart dekhein.",
+    "confirmingPayment": "Aapka payment confirm ho raha hai… order jald update hoga.",
+    "payAmount": "₹{{amount}} ka payment karein",
+    "paymentIncomplete": "Payment poora nahi hua. Aap My Orders se ise complete kar sakte hain.",
+    "placeFreeOrder": "Order place karein",
+    "securePay": "Razorpay se secure payment — UPI, cards, netbanking aur wallets",
+    "orderCancelled": "Ye order cancel ho gaya tha. Agar aapse paise liye gaye the, to wo automatically refund ho jayenge."
   },
   "profile": {
     "loadFailed": "Profile load karne mein fail",
@@ -1067,7 +1132,15 @@
     "statusDelivering": "Out for delivery",
     "shipping": "Shipping",
     "free": "FREE",
-    "alreadyReviewed": "Already review kiya hua"
+    "alreadyReviewed": "Already review kiya hua",
+    "paymentConfirming": "Aapka payment confirm ho raha hai…",
+    "paymentSuccess": "Payment mil gaya!",
+    "processing": "Processing…",
+    "retryFailed": "Payment start nahi ho paya. Kripya dobara try karein.",
+    "retryPayment": "Payment complete karein",
+    "shippedWith": "{{courier}} se bheja gaya",
+    "trackParcel": "Parcel track karein",
+    "noInvoice": "Abhi tak koi invoice issue nahi hua hai."
   },
   "password": {
     "strengthLabel": "Password strength",

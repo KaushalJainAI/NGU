@@ -5,6 +5,7 @@ Works with both Redis (production) and local memory cache (development).
 """
 from django.core.cache import cache
 from django.conf import settings
+from django.utils.translation import get_language
 import hashlib
 import logging
 
@@ -136,17 +137,27 @@ def invalidate_combo_cache():
     invalidate_by_prefix(CACHE_PREFIX_SECTIONS)
 
 
-def get_search_corpus_key() -> str:
-    """Cache key for the assembled fuzzy-search corpus."""
-    return make_cache_key(CACHE_PREFIX_SEARCH, 'corpus', 'v1')
+def get_search_corpus_key(lang=None) -> str:
+    """Cache key for the assembled fuzzy-search corpus, per language.
+
+    The corpus embeds translated product/category names, so one global key
+    serves whichever language happens to warm it first to everybody — Hindi
+    terms to English shoppers and vice versa. v2 keys carry the language.
+    """
+    return make_cache_key(CACHE_PREFIX_SEARCH, 'corpus', 'v2', lang or get_language())
 
 
 def invalidate_search_cache():
     """Invalidate the search corpus and suggest-response caches."""
     invalidate_by_prefix(CACHE_PREFIX_SEARCH)
     # Pattern invalidation is a no-op on the locmem backend (dev/tests);
-    # delete the corpus key directly so it is never stale there.
-    cache.delete(get_search_corpus_key())
+    # delete each language's corpus key directly so none of them goes stale
+    # there. (On Redis the walk above already removed them all.)
+    try:
+        for code, _ in settings.LANGUAGES:
+            cache.delete(get_search_corpus_key(code))
+    except Exception:
+        cache.delete(get_search_corpus_key())
 
 
 def invalidate_all_caches():

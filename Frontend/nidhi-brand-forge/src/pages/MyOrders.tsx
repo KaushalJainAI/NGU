@@ -191,10 +191,13 @@ const MyOrders = () => {
       toast.success(t('myOrders.billDownloaded', { order: order.order_number }));
     } catch (error) {
       console.error("Failed to download bill:", error);
-      // The API explains WHY when no invoice exists yet; a generic failure
-      // message would send the customer to support over a normal state.
-      const reason = error instanceof Error ? error.message : "";
-      toast.error(reason || t('myOrders.billFailed'));
+      // The 409 "no invoice yet" case is a normal state (payment unconfirmed
+      // or COD not dispatched), not a failure — say so in the customer's words.
+      // Anything else keeps the generic failure message.
+      const code = (error as unknown as Record<string, string> | null)?.code;
+      toast.error(code === 'INVOICE_NOT_ISSUED'
+        ? t('myOrders.noInvoice')
+        : t('myOrders.billFailed'));
     }
   };
 

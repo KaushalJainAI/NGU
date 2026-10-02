@@ -177,13 +177,17 @@ export const ordersAPI = {
     if (!res.ok) {
       // 409 = no invoice has been issued for this order yet (payment not
       // confirmed, or a COD parcel not yet dispatched). That is a normal state,
-      // not a failure, so pass the server's explanation through rather than
-      // reporting a generic download error.
+      // not a failure, so the error carries a stable code — the caller shows
+      // the translated message, never this English fallback.
       if (res.status === 409) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.detail || body?.error || "No invoice has been issued yet.");
+        const err = new Error(body?.detail || body?.error || "No invoice has been issued yet.");
+        (err as unknown as Record<string, string>).code = "INVOICE_NOT_ISSUED";
+        throw err;
       }
-      throw new Error("Failed to download invoice");
+      const err = new Error("Failed to download invoice");
+      (err as unknown as Record<string, string>).code = "INVOICE_DOWNLOAD_FAILED";
+      throw err;
     }
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);

@@ -565,6 +565,25 @@ class TestSearchCorpus:
         invalidate_search_cache()
         assert _cache.get(get_search_corpus_key()) is None
 
+    def test_corpus_cache_is_keyed_per_language(self, search_catalog):
+        """The corpus embeds translated names: one global key would serve the
+        first language's terms to everybody until TTL."""
+        from django.utils import translation
+
+        from products.cache import get_search_corpus_key as key_for
+
+        en_key, hi_key = key_for('en'), key_for('hi')
+        assert en_key != hi_key
+        get_search_corpus()  # warms the default-language ('en') corpus
+        with translation.override('hi'):
+            assert key_for() == hi_key
+            get_search_corpus()
+        assert _cache.get(en_key) is not None
+        assert _cache.get(hi_key) is not None
+        invalidate_search_cache()
+        assert _cache.get(en_key) is None
+        assert _cache.get(hi_key) is None
+
 
 @pytest.mark.django_db
 class TestSearchRanking:

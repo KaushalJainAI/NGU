@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { cartAPI } from "@/lib/api";
 import { useAuth } from "./AuthContext";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { trackEvent, track } from "@/lib/api/analytics";
 import { MAX_ITEM_QUANTITY, MAX_CART_ITEMS, clampQuantity, DEFAULT_TAX_RATE } from "@/config/limits";
@@ -101,6 +102,7 @@ const getCartKey = (
 ) => `${itemType}-${id}-${variantId ?? ""}`;
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   const { isLoggedIn } = useAuth();
   const [cart, setCart] = useState<CartItem[]>(() => {
     const savedCart = localStorage.getItem(CART_STORAGE_KEY);
@@ -164,18 +166,18 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(backendCart));
         return backendCart;
       }
-      toast.error("Failed to load cart");
+      toast.error(t('cart.loadFailed'));
       return null;
     } catch (error) {
       console.error("Failed to fetch cart from backend:", error);
-      toast.error("Failed to load cart");
+      toast.error(t('cart.loadFailed'));
       return null;
     }
   }, [isLoggedIn, mapBackendToFrontend]);
 
   const addToCart = async (item: Omit<CartItem, "quantity"> & { quantity?: number }): Promise<AddToCartResult> => {
     if (!isLoggedIn) {
-      toast.error("Please log in to add items to cart");
+      toast.error(t('cart.loginToAdd'));
       return { success: false, requiresLogin: true };
     }
 
@@ -185,8 +187,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cartKey = getCartKey(item.id, item.itemType, item.variantId);
     const isNewLine = !cart.some(i => getCartKey(i.id, i.itemType, i.variantId) === cartKey);
     if (isNewLine && cart.length >= MAX_CART_ITEMS) {
-      toast.error(`Your cart can hold at most ${MAX_CART_ITEMS} different items.`);
-      return { success: false, error: "Cart is full" };
+      toast.error(t('cart.cartFull', { max: MAX_CART_ITEMS }));
+      return { success: false, error: t('cart.cartIsFull') };
     }
 
     setIsLoading(true);
@@ -215,14 +217,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             product_id: item.itemType === "combo" ? undefined : item.id,
           },
         );
-        toast.success("Item added to cart");
+        toast.success(t('cart.addedToCart'));
         return { success: true };
       } else {
-        toast.error(response.error || "Failed to add item");
-        return { success: false, error: response.error || "Failed to add item" };
+        toast.error(response.error || t('cart.addFailed'));
+        return { success: false, error: response.error || t('cart.addFailed') };
       }
     } catch (error) {
-      const errorMsg = errMsg(error, "Failed to add item to cart");
+      const errorMsg = errMsg(error, t('cart.addFailed'));
       toast.error(errorMsg);
       return { success: false, error: errorMsg };
     } finally {
@@ -266,7 +268,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateQuantity = async (id: number, quantity: number, itemType: "product" | "combo", variantId?: number | null) => {
     if (!isLoggedIn) {
-      toast.error("Please log in to update cart");
+      toast.error(t('cart.loginToUpdate'));
       return;
     }
 
@@ -276,7 +278,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     if (quantity > MAX_ITEM_QUANTITY) {
-      toast.error(`Quantity cannot exceed ${MAX_ITEM_QUANTITY} per item.`);
+      toast.error(t('cart.maxQuantity', { max: MAX_ITEM_QUANTITY }));
       return;
     }
 
@@ -284,14 +286,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await mutateCart(
       prev => prev.map(i => (getCartKey(i.id, i.itemType, i.variantId) === cartKey ? { ...i, quantity } : i)),
       () => cartAPI.updateItem({ product_id: id, item_type: itemType, quantity, variant_id: variantId ?? undefined }),
-      "Failed to update quantity",
+      t('cart.updateFailed'),
       response => { if (response.items) setCart(mapBackendToFrontend(response.items as BackendCartItem[])); },
     );
   };
 
   const removeFromCart = async (id: number, itemType: "product" | "combo", variantId?: number | null) => {
     if (!isLoggedIn) {
-      toast.error("Please log in to remove items");
+      toast.error(t('cart.loginToRemove'));
       return;
     }
 
@@ -299,7 +301,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await mutateCart(
       prev => prev.filter(i => getCartKey(i.id, i.itemType, i.variantId) !== cartKey),
       () => cartAPI.removeItem({ product_id: id, item_type: itemType, variant_id: variantId ?? undefined }),
-      "Failed to remove item",
+      t('cart.removeFailed'),
       response => {
         if (response.items) setCart(mapBackendToFrontend(response.items as BackendCartItem[]));
         trackEvent({
@@ -312,14 +314,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = async () => {
     if (!isLoggedIn) {
-      toast.error("Please log in to clear cart");
+      toast.error(t('cart.loginToClear'));
       return;
     }
 
     await mutateCart(
       () => [],
       () => cartAPI.clear(),
-      "Failed to clear cart",
+      t('cart.clearFailed'),
       () => localStorage.removeItem(CART_STORAGE_KEY),
     );
   };

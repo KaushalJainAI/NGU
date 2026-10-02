@@ -79,7 +79,7 @@ const ComboDetail = () => {
         }
       } catch (err: any) {
         console.error("Error fetching combo:", err);
-        setError(err.message || "Failed to load combo");
+        setError(err.message || t('combo.loadFailed'));
         setCombo(null);
       } finally {
         setLoading(false);
@@ -214,9 +214,9 @@ const ComboDetail = () => {
     // Fallback: copy to clipboard
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Link copied to clipboard!");
+      toast.success(t('product.linkCopied'));
     } catch (err) {
-      toast.error("Failed to copy link");
+      toast.error(t('product.linkCopyFailed'));
     }
   };
 
@@ -250,8 +250,8 @@ const ComboDetail = () => {
         <div className="container mx-auto px-4 py-16 text-center">
           <div className="max-w-md mx-auto">
             <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-2xl font-bold mb-4">Combo Not Found</h2>
-            <p className="text-destructive text-lg mb-6">{error || "The combo you're looking for doesn't exist."}</p>
+            <h2 className="text-2xl font-bold mb-4">{t('combo.notFoundTitle')}</h2>
+            <p className="text-destructive text-lg mb-6">{error || t('combo.notFound')}</p>
             <div className="flex gap-4 justify-center">
               <Button onClick={() => navigate(-1)} variant="outline">
                 Go Back

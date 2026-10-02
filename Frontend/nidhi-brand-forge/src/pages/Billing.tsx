@@ -354,7 +354,7 @@ const Billing = () => {
             // success; the charge is refunded automatically.
             if (res && res.success === false) {
               toast.message(res.message
-                || "This order was cancelled. If you were charged, it will be refunded automatically.");
+                || t('billing.orderCancelled'));
               navigate("/my-orders");
               setIsLoading(false);
               return;

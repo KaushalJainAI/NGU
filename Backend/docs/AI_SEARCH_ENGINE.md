@@ -503,16 +503,18 @@ synchronous and sequential by design, so it doesn't stampede the LLM provider.
 
 | Key | Contents | TTL | Invalidated by |
 |---|---|---|---|
-| `ngu:search:corpus:v1` | Whole matchable corpus (all products + combos) | `TTL_LONG` 900 s | product/combo/category/KB save+delete |
+| `ngu:search:corpus:v2:<lang>` | Whole matchable corpus (all products + combos), one per language | `TTL_LONG` 900 s | product/combo/category/KB save+delete |
 | `ngu:search:suggest:<lang>:<q>:<limit>` | Rendered autocomplete payload | `TTL_MEDIUM` 300 s | `delete_pattern('search:*')` — same triggers |
 
 `/api/search/` itself is **not** response-cached: `top_k`/`threshold` are
 caller-controlled, so the key space is wide and the scoring is cheap anyway. The
 expensive part (corpus assembly) is what's cached.
 
-The `v1` in the corpus key is a manual schema version. **If you change the shape
+The `v2` in the corpus key is a manual schema version. **If you change the shape
 of corpus entries, bump it** in `products/cache.py → get_search_corpus_key()` —
 otherwise a rolling deploy will have new code reading old-shaped cached entries.
+The key also carries the active language: the corpus embeds translated names, so
+a single global key would serve the first language's terms to everybody until TTL.
 
 ---
 
@@ -650,7 +652,7 @@ See `docs/ANALYTICS.md`.
 | Synonyms outrank real names | Lower the `synonym` weight in `KIND_WEIGHTS` |
 | Autocomplete feels unstable while typing | It's prefix-first by design; check pass 2's `score_cutoff=75` |
 | Corpus stale after a bulk DB change | `populate_search_kb --force` (signals never fired) |
-| Corpus entry shape changed | Bump `v1` in `get_search_corpus_key()` |
+| Corpus entry shape changed | Bump `v2` in `get_search_corpus_key()` |
 | Autocomplete 429s in normal use | Raise the `search_suggest` throttle in `settings.py` (currently 60/min) |
 | Search slow on a large catalog | Corpus scan is O(n) per query — profile `build_search_corpus`, consider trigram/`pg_trgm` prefiltering |
 

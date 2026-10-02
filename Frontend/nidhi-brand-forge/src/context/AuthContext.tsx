@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { userAPI, publicFetch, API_BASE_URL } from "@/lib/api";
 import { isEmailNotVerified } from "@/lib/api/auth";
 
@@ -54,6 +55,7 @@ const readCachedUser = (): User | null => {
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { t } = useTranslation();
   // Hydrate from cache up-front. `user` and thus `isLoggedIn` are correct on the
   // very first render for returning users, eliminating the logged-out flash.
   const [user, setUser] = useState<User | null>(readCachedUser);
@@ -139,14 +141,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Login succeeded even if the follow-up profile fetch hiccuped; the
         // mount-time revalidation will populate the user on next load.
       }
-      toast.success("Login successful!");
+      toast.success(t('auth.loginSuccess'));
       return true;
     } catch (error: any) {
       // Right password, unconfirmed email: not a failure to report here — the
       // caller sends the customer to the code screen.
       if (isEmailNotVerified(error)) throw error;
       console.error("Login error:", error);
-      toast.error("Login failed. Please check your credentials.");
+      toast.error(t('auth.loginFailed'));
       return false;
     }
   };
@@ -154,11 +156,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signup = async (userData: any): Promise<boolean> => {
     try {
       const response = await userAPI.register(userData);
-      toast.success("Registration successful! Please login.");
+      toast.success(t('auth.registerSuccess'));
       return true;
     } catch (error: any) {
       console.error("Signup error:", error);
-      const errorMessage = error.data?.detail || error.data?.message || "Registration failed";
+      const errorMessage = error.data?.detail || error.data?.message || t('auth.registerFailed');
       toast.error(errorMessage);
       return false;
     }
@@ -169,11 +171,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await userAPI.googleLogin(accessToken);
       const userData = await userAPI.getProfile();
       applyUser(userData);
-      toast.success("Login with Google successful!");
+      toast.success(t('auth.googleSuccess'));
       return true;
     } catch (error: any) {
       console.error("Google login error:", error);
-      const errorMessage = error.data?.detail || error.data?.message || "Google login failed";
+      const errorMessage = error.data?.detail || error.data?.message || t('auth.googleFailed');
       toast.error(errorMessage);
       return false;
     }
@@ -190,7 +192,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (e) {
       console.error(e);
     }
-    toast.success("Logged out successfully!");
+    toast.success(t('auth.logoutSuccess'));
   };
 
   const refreshUser = async () => {

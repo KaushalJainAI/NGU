@@ -166,7 +166,12 @@
       "sodium": "Sodium",
       "sugars": "Sugars",
       "sugar": "Sugar"
-    }
+    },
+    "linkCopied": "Link copied to clipboard!",
+    "linkCopyFailed": "Failed to copy link",
+    "loadFailed": "Failed to load product",
+    "notFound": "The product you're looking for doesn't exist.",
+    "notFoundTitle": "Product Not Found"
   },
   "ourStory": {
     "eyebrow": "Nidhi kitchen story",
@@ -238,7 +243,10 @@
     "singleDelivery": "Single Delivery",
     "allInOne": "All items in one package",
     "genuine": "100% genuine products",
-    "productsInCombo": "Products In This Combo"
+    "productsInCombo": "Products In This Combo",
+    "loadFailed": "Failed to load combo",
+    "notFound": "The combo you're looking for doesn't exist.",
+    "notFoundTitle": "Combo Not Found"
   },
   "footer": {
     "tagline": "Pioneering the authentic taste of Indian spices since 1995. Quality that feels like home.",
@@ -304,7 +312,20 @@
     },
     "removeUnavailable": "Remove unavailable items",
     "fixToContinue": "Remove or fix the highlighted items to continue",
-    "unavailableRemoved": "Unavailable items removed"
+    "unavailableRemoved": "Unavailable items removed",
+    "loadFailed": "Failed to load cart",
+    "loginToAdd": "Please log in to add items to cart",
+    "addedToCart": "Item added to cart",
+    "loginToUpdate": "Please log in to update cart",
+    "loginToRemove": "Please log in to remove items",
+    "loginToClear": "Please log in to clear cart",
+    "cartFull": "Your cart can hold at most {{max}} different items.",
+    "cartIsFull": "Cart is full",
+    "addFailed": "Failed to add item to cart",
+    "maxQuantity": "Quantity cannot exceed {{max}} per item.",
+    "updateFailed": "Failed to update quantity",
+    "removeFailed": "Failed to remove item",
+    "clearFailed": "Failed to clear cart"
   },
   "category": {
     "allSpices": "All Spices",
@@ -369,7 +390,12 @@
     "googleFailed": "Google login failed. Please try again.",
     "subtitle": "Enter your credentials to access your account",
     "registerHere": "Register here",
-    "verifyFirst": "Please confirm your email first. We sent you a code."
+    "verifyFirst": "Please confirm your email first. We sent you a code.",
+    "loginSuccess": "Login successful!",
+    "registerSuccess": "Registration successful! Please login.",
+    "googleSuccess": "Login with Google successful!",
+    "logoutSuccess": "Logged out successfully!",
+    "registerFailed": "Registration failed"
   },
   "about": {
     "badge": "Barnagar, Madhya Pradesh",
@@ -954,7 +980,8 @@
     "securePay": "Secure payment via Razorpay — UPI, cards, netbanking & wallets",
     "confirmingPayment": "Confirming your payment… we'll update your order shortly.",
     "paymentIncomplete": "Payment not completed. You can finish it from My Orders.",
-    "cartChanged": "Some items in your cart are no longer available. Please review your cart."
+    "cartChanged": "Some items in your cart are no longer available. Please review your cart.",
+    "orderCancelled": "This order was cancelled. If you were charged, it will be refunded automatically."
   },
   "profile": {
     "loadFailed": "Failed to load profile",
@@ -1112,7 +1139,8 @@
     "statusDelivering": "Out for delivery",
     "shipping": "Shipping",
     "free": "FREE",
-    "alreadyReviewed": "Already reviewed"
+    "alreadyReviewed": "Already reviewed",
+    "noInvoice": "No invoice has been issued yet."
   },
   "password": {
     "strengthLabel": "Password strength",
