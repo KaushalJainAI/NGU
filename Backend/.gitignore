@@ -1,0 +1,105 @@
+65605# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env/
+.envrc
+.venv/
+
+# Django specific files
+*.sqlite3
+db.sqlite3
+
+# Media files (uploaded media)
+/media/
+/private_media/
+# If media is stored outside project folder, add its path explicitly
+
+# Static files
+/static/
+/staticfiles/
+# If static files are collected into a specific folder, ignore that as well
+
+# Django migrations - DO NOT IGNORE, migrations must be committed
+# *.py files in /migrations/ are tracked for deployment
+!*/migrations/__init__.py
+
+# OS and system files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs and editors
+.vscode/
+.idea/
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Python cache and egg files
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+
+# Logs and runtime files
+*.log
+*.pid
+*.local
+
+# Environment variable files
+.env
+.env.local
+.env.production
+.env.staging
+.env.*
+.envrc
+# Keep .env.example - it's safe to commit
+!.env.example
+
+# Sensitive credentials
+*.pem
+*.csv
+*.key
+
+
+# Coverage reports
+htmlcov/
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Editor temporary files
+*~
+# Vim swap files
+.swp
+.swo
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Local feature-demo scaffolding (generated DB, slides, video, server logs)
+/demo/
+
+# Docker-related files - commented out to track Dockerfiles in version control
+# Dockerfile
+# docker-compose.yml
+
+.env.prod.bak
+
+# Session logs and temporary workspace notes
+*this-session-is-being-continued*.txt
+
+# SQL patches/dumps
+*.sql
+

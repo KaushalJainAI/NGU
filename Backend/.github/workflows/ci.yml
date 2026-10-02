@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    # Real Postgres + Redis so CI matches local/prod and avoids the SQLite
+    # ":memory:" "database is locked" flakiness on the Product-update path.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ngu_local
+          POSTGRES_USER: ngu
+          POSTGRES_PASSWORD: ngu_local_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ngu -d ngu_local"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+
+    env:
+      SECRET_KEY: ci-test-secret-key-not-used-in-prod
+      TEST_DB: postgres
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ngu_local
+      DB_USER: ngu
+      DB_PASSWORD: ngu_local_pw
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      REDIS_URL: redis://127.0.0.1:6379/0
+      USE_CLOUDINARY: "False"
+      USE_S3: "False"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check .
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run --settings=spices_backend.test_settings
+
+      - name: Django deploy checks
+        run: python manage.py check --settings=spices_backend.test_settings
+
+      - name: Tests
+        run: pytest --ds=spices_backend.test_settings
+
+      # Advisory only for now — type errors won't fail the build until the
+      # codebase is annotated. Flip `continue-on-error` to false to enforce.
+      - name: Type check (mypy, advisory)
+        continue-on-error: true
+        run: mypy . || true

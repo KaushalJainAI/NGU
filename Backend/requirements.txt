@@ -1,0 +1,66 @@
+# Runtime dependencies (pinned). Dev/type-checking deps live in requirements-dev.txt.
+# Regenerate pins after upgrades:  pip install -U <pkg> && pip freeze | grep -i <pkg>
+
+# --- Core framework ---
+django==5.2.8
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+django-filter==25.2
+drf-spectacular==0.29.0
+django-admin-sortable2==2.3.1
+
+# --- Database & cache ---
+psycopg2-binary==2.9.11
+django_redis==6.0.0
+
+# --- Auth & social login ---
+django-allauth==65.16.0
+dj-rest-auth==7.2.0
+google-auth==2.49.2
+
+# --- Payments ---
+razorpay==2.0.0
+
+# --- Background scheduler (manage.py run_scheduler) ---
+apscheduler==3.10.4
+
+# --- Media / storage ---
+pillow==12.0.0
+cloudinary==1.41.0
+django-cloudinary-storage==0.3.0
+# django-storages + boto3 retained for the one-time S3->Cloudinary migration command;
+# remove in a follow-up cleanup once the migration is verified.
+django-storages==1.14.6
+boto3==1.42.17
+# Serves collected static files (e.g. Django admin CSS/JS) directly from gunicorn
+# in production when USE_S3 is off. Compresses + far-future caches via manifest.
+whitenoise==6.9.0
+olefile==0.47
+qrcode==8.2
+
+# --- Analytics: coarse IP -> region for anonymous-traffic insights ---
+# Optional at runtime: analytics degrades gracefully (omits geo) if the
+# GeoLite2 .mmdb is absent. See Backend/docs/ANALYTICS.md.
+geoip2==4.8.0
+
+# --- PDF invoices / bills ---
+reportlab==4.5.1
+
+# --- Search / fuzzy matching ---
+rapidfuzz==3.14.3
+
+# --- AI assistant (LLM) ---
+langchain==1.2.0
+langchain-core==1.2.16
+langchain-openai==1.1.10
+langchain-perplexity==1.1.0
+langgraph==1.0.5
+
+# --- HTTP client (self-hosted whisper transcription) ---
+requests==2.32.5
+
+# --- Config ---
+python-decouple==3.8
+python-dotenv==1.2.1
+django-modeltranslation>=0.18

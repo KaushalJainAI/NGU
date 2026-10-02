@@ -1,0 +1,61 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+.venv/
+venv/
+# Environment files
+.env
+.env.*
+.env.local
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.vscode/
+.idea/
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# Database
+*.sqlite3
+
+# Logs
+*.log
+
+# Docker
+Dockerfile
+docker-compose*.yml
+
+# Documentation
+*.md
+!README.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Sensitive credentials
+*.pem
+*.csv
+*.key
+

@@ -1,0 +1,49 @@
+# Local development services: Postgres + Redis.
+#
+# This runs only the STATEFUL backing services in containers; you run Django
+# itself from your host venv (fast autoreload, your existing tooling). This also
+# gives the test suite a real Postgres to target, which avoids the SQLite
+# ":memory:" "database is locked" failures seen under full-suite load.
+#
+# Usage:
+#   docker compose up -d            # start db + redis
+#   docker compose ps               # check health
+#   docker compose down             # stop (keeps data)
+#   docker compose down -v          # stop AND wipe local data
+#
+# Credentials here are LOCAL-ONLY throwaways — never reuse production secrets.
+
+services:
+  db:
+    image: postgres:16
+    container_name: ngu_db
+    environment:
+      POSTGRES_DB: ngu_local
+      POSTGRES_USER: ngu
+      POSTGRES_PASSWORD: ngu_local_pw
+    ports:
+      - "5432:5432"
+    volumes:
+      - ngu_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngu -d ngu_local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    container_name: ngu_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ngu_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  ngu_pgdata:
+  ngu_redisdata:
