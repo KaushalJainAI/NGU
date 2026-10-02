@@ -13,7 +13,6 @@ const UspRibbon = () => {
     t("ribbon.freeShipping"),
     t("ribbon.pure"),
     t("ribbon.handPacked"),
-    t("ribbon.trusted"),
   ];
 
   return (
