@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nidhi Grah Udyog - Premium Indian Spices & Masalas</title>
+  <meta name="description"
+    content="Shop authentic Indian spices and masalas from Nidhi Grah Udyog. 100% pure, natural ingredients for traditional Indian flavors." />
+  <meta name="author" content="Nidhi Grah Udyog" />
+  <link rel="canonical" href="https://nidhimasala.com/" />
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <meta property="og:title" content="Nidhi Grah Udyog - Premium Indian Spices & Masalas" />
+  <meta property="og:description"
+    content="Shop authentic Indian spices and masalas from Nidhi Grah Udyog. 100% pure, natural ingredients." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://nidhimasala.com/" />
+  <meta property="og:image" content="https://nidhimasala.com/logo.png" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@nidhigrahudyog" />
+  <meta name="twitter:image" content="/logo.png" />
+</head>
+
+<body>
+  <!-- Inline boot shell. The app is a single large bundle, so between first
+       paint and React mounting the page was plain white ("pages flash blank on
+       load"). This renders instantly from HTML and React replaces it on mount.
+       Keep it dependency-free: no external CSS/JS has loaded at this point. -->
+  <div id="root">
+    <div id="boot-shell" role="status" aria-label="Loading"
+      style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;background:#fffdf8;font-family:Inter,system-ui,sans-serif;">
+      <img src="/logo.png" alt="" width="64" height="64" style="object-fit:contain;" />
+      <div
+        style="width:28px;height:28px;border:3px solid #e8e0d0;border-top-color:#c1440e;border-radius:50%;animation:boot-spin .7s linear infinite;">
+      </div>
+      <p style="margin:0;color:#8a8175;font-size:14px;">Loading Nidhi Masala…</p>
+    </div>
+  </div>
+  <style>
+    @keyframes boot-spin { to { transform: rotate(360deg); } }
+  </style>
+  <!-- Translation is handled in-app by react-i18next (src/i18n). Google Translate
+       was removed: it produced poor, uncontrolled translations and crashed React
+       by mutating the DOM. -->
+  <!-- Runtime config (window.APP_CONFIG), generated per container start from env
+       vars. A classic script runs before the deferred module bundle below, so
+       APP_CONFIG is set before the app reads it. -->
+  <script src="/config.js"></script>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

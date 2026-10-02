@@ -1,0 +1,1106 @@
+{
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "combos": "Combos",
+    "offers": "Offers",
+    "more": "Aur",
+    "aboutUs": "Hamare Baare Mein",
+    "contact": "Sampark",
+    "trackOrder": "Order Track Karein",
+    "myOrders": "Mere Orders",
+    "search": "Search...",
+    "searchMobile": "Masale search karein...",
+    "wishlist": "Wishlist",
+    "account": "Account",
+    "cart": "Cart",
+    "language": "Bhasha"
+  },
+  "common": {
+    "viewAll": "Sabhi Dekhein",
+    "loading": "Load ho raha hai...",
+    "shopNow": "Abhi Khareedein",
+    "currency": "₹"
+  },
+  "hero": {
+    "badge": "Asli Indian Masale",
+    "headlineStart": "Har Masale Mein ",
+    "headlineHighlight": "Parampara",
+    "headlineEnd": " Ka Swaad",
+    "description": "Hamare premium masalon ke saath India ke asli swaad ka anubhav karein. Pyaar se bane, care ke saath pahunchaye.",
+    "learnMore": "Aur Jaanein",
+    "statsProducts": "Products",
+    "statsPure": "Shudh aur Natural",
+    "statsCustomers": "Khush Customers",
+    "handPackedFresh": "Hand-packed fresh",
+    "since": "Since 1995"
+  },
+  "home": {
+    "features": {
+      "freeShippingTitle": "₹499+ par free shipping",
+      "freeShippingDesc": "₹499 aur usse upar ke sabhi orders par",
+      "authenticTitle": "FSSAI licensed",
+      "authenticDesc": "Lic. No. 11414730000288",
+      "deliveryTitle": "COD available",
+      "deliveryDesc": "Poore India mein Cash on Delivery",
+      "qualityTitle": "Tracked delivery",
+      "qualityDesc": "3–10 business days, ghar baithe"
+    },
+    "recommended": {
+      "title": "Aapke Liye Suggestions",
+      "subtitle": "Aapki pasand ke hisaab se chuna gaya"
+    },
+    "new": {
+      "title": "Naye Products",
+      "subtitle": "Taaza pack, aapki rasoi ke liye taiyaar"
+    },
+    "specials": {
+      "title": "Hamare Specials",
+      "subtitle": "Hamare haath se bane masale jo ghar par asli swaad laate hain."
+    },
+    "bestsellers": {
+      "title": "Best Selling Products",
+      "subtitle": "Poore India mein customers ke favorite"
+    },
+    "trending": {
+      "title": "Trending",
+      "subtitle": "Is season sabhi yeh try kar rahe hain"
+    },
+    "categories": {
+      "title": "Category se Khareedein",
+      "subtitle": "Apni rasoi ke liye jo chahiye woh dhoondein"
+    },
+    "combos": {
+      "title": "Combo Offers",
+      "subtitle": "Hamare chuninda masala bundles ke saath zyada bachayein"
+    },
+    "testimonials": {
+      "title": "Customers Ki Raay",
+      "subtitle": "Hamare khush customers kya kehte hain",
+      "verified": "Verified Buyer"
+    },
+    "cta": {
+      "title": "Barnagar ke apne masalon ke saath pakayein",
+      "subtitle": "FSSAI-licensed facility. Fresh packed, poore India mein delivery — online ya COD se payment karein.",
+      "handPacked": "Hand-packed in Barnagar",
+      "viewOffers": "View Offers"
+    }
+  },
+  "product": {
+    "addToCart": "Cart Mein Daalein",
+    "outOfStock": "Stock Mein Nahi",
+    "inStock": "Stock Mein Hai",
+    "off": "OFF",
+    "viewDetails": "Details Dekhein",
+    "selectSize": "Select Size",
+    "from": "from",
+    "sizes": "sizes",
+    "youSave": "You save ₹{{amount}}",
+    "loginRequired": "You need to log in to add items to your cart.",
+    "addedToFavorites": "Added to favorites",
+    "removedFromFavorites": "Removed from favorites",
+    "addedToCart": "Added to cart!",
+    "featured": "Featured",
+    "prevSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "organicCertified": "100% Organic Certified",
+    "naturalIngredients": "Made from natural ingredients",
+    "aboutProduct": "About This Product",
+    "ingredientsLabel": "Ingredients:",
+    "customersAlsoBought": "Customers Also Bought",
+    "customerReviews": "Customer Reviews",
+    "showingReviews": "Showing {{count}} of {{total}} reviews",
+    "defaultReviewTitle": "Great Product!",
+    "verifiedPurchase": "Verified Purchase",
+    "reviewBy": "By {{name}}",
+    "loadMoreReviews": "Load More Reviews",
+    "noReviews": "No reviews yet. Be the first to review this product!",
+    "copyLink": "Copy link",
+    "inclusiveTaxes": "Inclusive of all taxes",
+    "sizeLabel": "Size:",
+    "weightLabel": "Weight:",
+    "formLabel": "Form:",
+    "originLabel": "Origin:",
+    "shelfLifeLabel": "Shelf Life:",
+    "months": "{{count}} months",
+    "months_other": "{{count}} months",
+    "available": "({{count}} available)",
+    "quantityLabel": "Quantity:",
+    "inCart": "in cart",
+    "noRatings": "No ratings",
+    "reviewsCount": "{{count}} review",
+    "reviewsCount_other": "{{count}} reviews",
+    "buyNow": "Buy Now",
+    "recipeTitle": "Recipe aur Upyog",
+    "nutritionTitle": "Nutritional Information",
+    "nutritionNote": "Diye gaye serving size ke liye approximate values.",
+    "fssai": "FSSAI Lic. No.",
+    "nutritionKeys": {
+      "serving_size": "Serving Size",
+      "total_fat": "Total Fat",
+      "saturated_fat": "Saturated Fat",
+      "total_carbohydrates": "Total Carbohydrates",
+      "protein": "Protein",
+      "energy": "Energy",
+      "calcium": "Calcium",
+      "iron": "Iron",
+      "sodium": "Sodium",
+      "sugars": "Sugars",
+      "sugar": "Sugar"
+    }
+  },
+  "footer": {
+    "tagline": "1995 se Bhartiya masalon ka asli swaad. Aisi quality jo ghar jaisi lage.",
+    "quickLinks": "Quick Links",
+    "contactUs": "Contact Karein",
+    "customerService": "Customer Service",
+    "shippingPolicy": "Shipping Policy",
+    "returnPolicy": "Return Policy",
+    "faqs": "FAQs",
+    "contactDetail": "Contact Details",
+    "rights": "Sarvadhikar surakshit.",
+    "privacyPolicy": "Privacy Policy",
+    "whatsapp": "Chat with us on WhatsApp",
+    "terms": "Terms & Conditions"
+  },
+  "cart": {
+    "title": "Shopping Cart",
+    "empty": "Aapka cart khali hai",
+    "continueShopping": "Shopping Jaari Rakhein",
+    "orderSummary": "Order Summary",
+    "total": "Total",
+    "clearCart": "Cart Khali Karein",
+    "checkout": "Checkout Karein",
+    "peopleAlsoBuy": "Log Yeh Bhi Khareedte Hain",
+    "loading": "Cart load ho raha hai...",
+    "quantity": "Quantity",
+    "remove": "Hatayein",
+    "removed": "Item cart se hata diya gaya",
+    "cleared": "Cart khali kar diya gaya",
+    "emptyToast": "Aapka cart khali hai",
+    "noStock": "Checkout ke liye koi stock wala item nahi",
+    "subtotal": "Subtotal",
+    "tax": "Tax (GST)",
+    "taxIncluded": "GST included: {{amount}}",
+    "discount": "Discount",
+    "taxableValue": "Taxable value",
+    "gst": "GST",
+    "gstAtRate": "GST {{rate}}%",
+    "freeShippingNudge": "₹{{amount}} aur add karein, delivery free",
+    "processing": "Process ho raha hai...",
+    "noItems": "Koi item nahi",
+    "item": "item",
+    "items": "items",
+    "viewCart": "View Cart",
+    "freeShippingUnlocked": "🎉 You've unlocked FREE shipping!",
+    "addMoreForShipping": "Add ₹{{amount}} more for FREE shipping",
+    "shipping": "Shipping",
+    "free": "FREE"
+  },
+  "auth": {
+    "welcomeBack": "Wapsi Par Swagat Hai",
+    "email": "Email",
+    "password": "Password",
+    "orContinueWith": "Ya iske saath jaari rakhein",
+    "login": "Login",
+    "loggingIn": "Login ho raha hai...",
+    "forgotPassword": "Password Bhool Gaye?",
+    "noAccount": "Account nahi hai?",
+    "signUp": "Sign Up",
+    "loginFailed": "Login fail. Kripya apni details check karein.",
+    "networkError": "Network error. Kripya dobara try karein.",
+    "googleFailed": "Google login fail. Kripya dobara try karein.",
+    "subtitle": "Apne account tak pahunchne ke liye apni details darj karein",
+    "registerHere": "Yahan register karein",
+    "verifyFirst": "Pehle apna email confirm karein. Humne aapko ek code bheja hai."
+  },
+  "about": {
+    "badge": "Barnagar, Madhya Pradesh",
+    "heroPre": "Har chutki kehti hai ek ",
+    "heroHighlight": "kahani",
+    "heroPost": "",
+    "heroSubtitle": "Barnagar ki family kitchen se — fresh ground, fresh packed, poore India mein delivery.",
+    "heroCta": "Hamari kahani chakhein",
+    "beginEyebrow": "Jahan se shuruaat hui",
+    "beginTitle": "Peedhi-dar-peedhi chali recipe, kabhi likhi nahi gayi",
+    "beginP1": "Shuruaat Barnagar, Madhya Pradesh ki ek family kitchen se hui — parivaar aur padosiyon ke liye fresh pise masalon ke saath.",
+    "beginP2": "Aaj har pack hamari FSSAI-licensed facility (Lic. No. 11414730000288) se aata hai aur poore India mein ship hota hai — online ya COD se payment karein.",
+    "valuesEyebrow": "Hum kiske liye khade hain",
+    "valuesTitle": "Hamare values",
+    "values": [
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      }
+    ],
+    "ctaTitle": "Barnagar ke apne masalon ke saath pakayein",
+    "ctaSubtitle": "FSSAI-licensed facility. Fresh packed, poore India mein delivery — online ya COD se payment karein.",
+    "ctaButton": "Masale Khareedein",
+    "facts": [
+      {
+        "value": "FSSAI",
+        "label": "Lic. No. 11414730000288"
+      },
+      {
+        "value": "Barnagar",
+        "label": "Madhya Pradesh, India"
+      },
+      {
+        "value": "COD",
+        "label": "Poore India mein Cash on Delivery"
+      }
+    ]
+  },
+  "ribbon": {
+    "freeShipping": "FREE shipping on orders above ₹499",
+    "pure": "100% pure & natural — no fillers",
+    "handPacked": "Hand-packed in Barnagar",
+    "trusted": "FSSAI Lic. No. 11414730000288"
+  },
+  "ourStory": {
+    "eyebrow": "Nidhi kitchen story",
+    "label": "Our Story",
+    "heading": "Authentic Indian Flavours",
+    "body": "Experience the rich heritage of traditional Indian spices, carefully sourced and blended to perfection. Each product tells a story of generations of expertise and passion for authentic flavours.",
+    "feature1Title": "Pure ingredients",
+    "feature1Desc": "No fillers, clean blends",
+    "feature2Title": "Fresh batches",
+    "feature2Desc": "Packed close to order",
+    "cta": "Explore the Collection"
+  },
+  "flashSale": {
+    "endsIn": "Ends in",
+    "saleEndsIn": "Sale ends in",
+    "endsOn": "{{date}} ko khatam"
+  },
+  "trust": {
+    "freeShipping": "Free shipping ₹499+",
+    "happyKitchens": "FSSAI Lic. No. 11414730000288"
+  },
+  "trustBand": {
+    "pureBlends": "Pure blends",
+    "noFillers": "No fillers",
+    "qualityChecked": "Quality checked",
+    "batchTested": "Batch tested",
+    "fastDelivery": "Fast delivery",
+    "packedFresh": "Packed fresh",
+    "easySupport": "Easy support",
+    "simpleHelp": "Simple help"
+  },
+  "mobileNav": {
+    "home": "Home",
+    "shop": "Shop",
+    "chat": "Chat",
+    "offers": "Offers",
+    "orders": "Orders"
+  },
+  "combo": {
+    "items": "items",
+    "more": "more",
+    "pieceKit": "{{count}}-piece kit",
+    "addBundle": "Add bundle",
+    "details": "Details",
+    "defaultStory": "A ready-made kit of {{count}} kitchen essentials.",
+    "defaultStorySavings": "A ready-made kit of {{count}} kitchen essentials, bundled to save you ₹{{amount}} versus buying them one by one.",
+    "comboOffer": "Combo Offers",
+    "comboSubtitle": "Save more with our value bundles",
+    "comboDeal": "COMBO DEAL",
+    "productBundle": "{{count}} products bundle",
+    "savePercent": "Save {{percent}}%",
+    "addedToCart": "{{count}} combo added to cart!",
+    "addedToCart_other": "{{count}} combos added to cart!",
+    "saveWithCombo": "You save ₹{{amount}} with this combo!",
+    "whatsIncluded": "What's Included ({{count}} items)",
+    "totalWeight": "Total Weight:",
+    "freeDelivery": "Free Delivery",
+    "ordersMin": "Orders ₹499+",
+    "secure": "Secure",
+    "payment": "Payment",
+    "greatValue": "Great Value!",
+    "saveSeparately": "Save ₹{{amount}} compared to buying separately",
+    "aboutCombo": "About This Combo",
+    "whyChoose": "Why Choose This Combo?",
+    "betterValue": "Better Value",
+    "saveTogether": "Save more when you buy together",
+    "curatedSelection": "Curated Selection",
+    "expertlyPaired": "Expertly paired products",
+    "singleDelivery": "Single Delivery",
+    "allInOne": "All items in one package",
+    "genuine": "100% genuine products",
+    "productsInCombo": "Products In This Combo"
+  },
+  "category": {
+    "allSpices": "All Spices",
+    "categories": "Categories"
+  },
+  "products": {
+    "filterAll": "All",
+    "filterOffers": "⚡ Offers",
+    "filterRating": "⭐ Rating 4.0+",
+    "sortPriceLow": "💰 Price: Low → High",
+    "sortBy": "Sort by",
+    "sortFeatured": "Featured",
+    "sortPriceLowToHigh": "Price: Low to High",
+    "sortPriceHighToLow": "Price: High to Low",
+    "sortName": "Name: A to Z",
+    "productCount": "{{count}} product",
+    "productCount_other": "{{count}} products",
+    "noProducts": "No products found.",
+    "loadingProducts": "Loading…"
+  },
+  "offerZone": {
+    "heroTitle": "Exclusive Offers",
+    "heroSubtitle": "Amazing deals and discounts on premium spices and masalas",
+    "heroBadge": "🔥 Up to 30% OFF - Limited Time!",
+    "comboOffersTitle": "Combo Offers",
+    "comboOffersSubtitle": "Save more with our value bundles",
+    "hotDealsTitle": "🔥 Hot Deals",
+    "hotDealsSubtitle": "Grab these before they're gone!",
+    "viewDetails": "View Details",
+    "noOffers": "No offers available at the moment.",
+    "checkBack": "Check back soon for amazing deals!"
+  },
+  "search": {
+    "clear": "Search clear karein",
+    "searching": "Searching for products...",
+    "noResults": "No products found matching your search",
+    "tryDifferent": "Try searching with different keywords",
+    "sortRelevance": "Relevance",
+    "pages": "Pages",
+    "products": "Products",
+    "searchFor": "\"{{query}}\" search karein",
+    "resultsFor": "\"{{query}}\" ke results",
+    "resultsCount_one": "{{count}} result mila",
+    "resultsCount_other": "{{count}} results mile",
+    "emptyTitle": "Aap kya dhundh rahe hain?",
+    "emptyBody": "Shuru karne ke liye upar search bar mein koi masala, blend ya combo type karein.",
+    "browseAll": "Saare products dekhein"
+  },
+  "pages": {
+    "shipping": {
+      "areas": {
+        "title": "Shipping Areas",
+        "body": "Hum abhi India ke sabhi locations par shipping karte hain. Afsos, filhaal hum international shipping nahi karte."
+      },
+      "timeline": {
+        "title": "Delivery Timeline",
+        "metro": "<b>Metro Cities:</b> 3-5 business days",
+        "cities": "<b>Doosre Sheher:</b> 5-7 business days",
+        "remote": "<b>Door-daraaz Areas:</b> 7-10 business days"
+      },
+      "charges": {
+        "title": "Shipping Charges",
+        "intro": "Shipping charge aapke order ke weight aur delivery location ke hisaab se calculate hota hai:",
+        "free": "₹499 ya usse upar ke orders: <b>Free Shipping</b>",
+        "upto": "₹499 se kam ke orders: ₹69.62 shipping charge lagta hai (₹59 + 18% GST)"
+      },
+      "tracking": {
+        "title": "Order Tracking",
+        "body": "Aapka order ship hote hi aapko email aur SMS par tracking number milega. Is number se aap courier partner ki website par apna order track kar sakte hain, ya 'My Orders' page par uska status dekh sakte hain."
+      },
+      "processing": {
+        "title": "Order Processing",
+        "body": "Payment confirm hone ke 24-48 ghante mein orders process kiye jaate hain. Weekend ya holidays par diye gaye orders agle business day process honge."
+      },
+      "attempts": {
+        "title": "Delivery Attempts",
+        "body": "Hamara courier partner 3 baar delivery ki koshish karega. Agar sabhi attempts fail ho jaate hain, to order humein wapas bhej diya jayega. Kripya sunishchit karein ki diye gaye address par order lene ke liye koi maujood ho."
+      },
+      "address": {
+        "title": "Shipping Address",
+        "body1": "Order dete waqt poora aur sahi shipping address dena customer ki zimmedari hai. Galat ya adhoore address ki wajah se khoye, delay hue ya wapas aaye orders ke liye hum zimmedar nahi hain, aur aise cases mein koi refund nahi diya jayega.",
+        "body2": "Agar aapko apna address badalna hai, to order dene ke <b>1 ghante</b> ke andar WhatsApp par <a>+91 93000 05040</a> par humse contact karein. Is window ke baad address change ki guarantee nahi di ja sakti, kyunki order pehle hi dispatch ke liye process ho chuka ho sakta hai."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "body": "Shipping se judi kisi bhi query ke liye, kripya hamare customer support +91 93000 05040 par contact karein ya hamare contact page se email karein."
+      }
+    },
+    "returns": {
+      "eligibility": {
+        "title": "Return aur Replacement Eligibility",
+        "intro": "Hum sirf in kaaranon ke liye delivery ke 7 din ke andar return ya replacement request accept karte hain:",
+        "items": [
+          "Mila hua product damaged ya defective hai",
+          "Galat product deliver hua",
+          "Product ki packaging se chhedchhaad hui hai ya tooti hui hai",
+          "Aapke order se kuch items missing hain"
+        ]
+      },
+      "video": {
+        "title": "Unboxing Video Zaroori Hai",
+        "intro": "Har return ya replacement request ke liye unboxing video zaroori hai. Iske bina, hum aapka claim accept nahi kar payenge.",
+        "items": [
+          "Sealed package kholne se pehle shuru karte hue ek hi, continuous video record karein",
+          "Shipping label aur packaging ki condition saaf dikhni chahiye",
+          "Sabhi items nikaalte hue dikhayein, jismein damaged, galat ya missing item ki problem shaamil ho",
+          "Kate hue, edit kiye gaye ya package khulne ke baad shuru hone wale videos accept nahi kiye jayenge"
+        ]
+      },
+      "nonReturnable": {
+        "title": "Return Na Hone Wale Items",
+        "intro": "Hygiene aur quality ke kaaranon se, ye return nahi kiye ja sakte:",
+        "items": [
+          "Tooti seal ya khuli packaging wale products (jab tak wo aate hi damaged na hon)",
+          "Use kiye gaye ya khaaye gaye products",
+          "Mann badalna — food products deliver hone ke baad return nahi ho sakte"
+        ]
+      },
+      "process": {
+        "title": "Return Process",
+        "items": [
+          "Delivery ke 7 din ke andar hamare customer support se contact karein",
+          "Apna order number, return ka reason aur apna unboxing video dein",
+          "Hamari team 24-48 ghante mein aapki request verify karegi",
+          "Approve hone par, hum aapke address se pickup arrange karenge",
+          "Product original packaging mein hi wapas karna hoga"
+        ]
+      },
+      "refund": {
+        "title": "Refund Process",
+        "intro": "Once we receive and inspect the returned product:",
+        "items": [
+          "Refunds are processed within 5-7 business days",
+          "For prepaid orders, the amount is credited back to the original payment method",
+          "For Cash on Delivery (COD) orders, there is no original payment method to credit — our team will call you to arrange the refund via UPI or bank transfer. All COD refund matters are resolved over the phone.",
+          "You will receive a confirmation once the refund is processed"
+        ]
+      },
+      "replacement": {
+        "title": "Replacement Policy",
+        "body": "Hum damaged ya defective items ke liye replacement dete hain, jo upar di gayi unboxing video ki shart ke adheen hai. Wapas aaya item milne ke baad replacement product bina kisi extra charge ke bheja jayega."
+      },
+      "cancellation": {
+        "title": "Cancellation",
+        "body": "You may cancel your order free of charge at any time before it has been shipped — just contact us and we will refund you in full. Once an order has been shipped, it can no longer be cancelled for a refund; you may still refuse delivery or use our returns process, but the shipping charge will not be refunded."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "body": "Return ya refund se judi kisi bhi query ke liye, kripya hamare customer support +91 93000 05040 par contact karein ya hamare contact page se email karein. Hamari team Monday se Saturday, subah 9 baje se shaam 6 baje (IST) tak available hai."
+      }
+    },
+    "terms": {
+      "title": "Terms & Conditions",
+      "lastUpdated": "Last updated: {{date}}",
+      "intro": "Ye Terms & Conditions (\"Terms\") is website tak aapki pahunch, iske use aur <brand>Nidhi Grah Udyog</brand> (\"hum\", \"humein\", \"hamara\") se products ki khareed ko control karti hain. Website browse karke, account banakar ya order dekar, aap in Terms se bandhe rehne ke liye sehmat hote hain. Agar aap sehmat nahi hain, to kripya website ka use na karein.",
+      "s1": {
+        "title": "1. Eligibility",
+        "body": "Hamare yahan order dene ke liye aapki umra kam se kam 18 saal honi chahiye, ya aap parent ya legal guardian ki dekhrekh mein website use kar rahe hon, aur applicable Indian law ke tehat binding contract karne mein legally saksham hon."
+      },
+      "s2": {
+        "title": "2. Account & Registration",
+        "items": [
+          "Registration aur checkout ke dauraan accurate, current aur poori information dena aapki zimmedari hai.",
+          "Apne login credentials ki confidentiality banaye rakhna aur apne account ke tehat sabhi activity ki zimmedari aapki hai.",
+          "Agar humein reasonable roop se lage ki kisi account ka use fraud se ya in Terms ke violation mein ho raha hai, to hum use suspend ya terminate kar sakte hain."
+        ]
+      },
+      "s3": {
+        "title": "3. Products & Food Information",
+        "items": [
+          "Hum masale, masala blends aur papad jaise packaged food products bechte hain. Product images sirf representation ke liye hain; actual colour, texture aur packaging thoda alag ho sakti hai.",
+          "Kripya consume karne se pehle physical packaging par label, ingredients, allergen information aur \"best before\" date padhein.",
+          "Agar aapko food allergies ya dietary restrictions hain, to apne vivek se hamare products consume karein. Jahan label ke instructions follow nahi kiye gaye, wahan hone wali reactions ke liye hum zimmedar nahi hain."
+        ]
+      },
+      "s4": {
+        "title": "4. Pricing & Payment",
+        "items": [
+          "Sabhi prices Indian Rupees (₹) mein listed hain aur jab tak anyatha na kaha jaye, applicable taxes ke saath hain. GST applicable rates ke hisaab se charge hota hai.",
+          "Shipping charges, jahan applicable hon, aapke order confirm karne se pehle checkout par dikhaye jaate hain.",
+          "Pricing error ki rare situation mein, hum order cancel karne aur pehle se pay ki gayi koi bhi amount refund karne ka adhikaar rakhte hain.",
+          "Payments checkout par dikhaye gaye methods se accept kiye jaate hain. Payment ki successful receipt verify hone ke baad hi aapka order confirm hota hai."
+        ]
+      },
+      "s5": {
+        "title": "5. Orders & Acceptance",
+        "body": "Aapka order khareedne ka ek offer hai. Hum apne vivek se kisi bhi order ko accept ya decline karne ka adhikaar rakhte hain, jismein product out of stock hona, delivery address hamare serviceable area se bahar hona, ya fraud ka shak shaamil hai. Payment ke baad order decline hone par amount refund kar di jayegi."
+      },
+      "s6": {
+        "title": "6. Shipping, Returns & Cancellations",
+        "body": "Delivery timelines, shipping charges, returns, refunds aur cancellations hamari <shipping>Shipping Policy</shipping> aur <returns>Return & Refund Policy</returns> dwara control hote hain, jo in Terms ka hissa hain."
+      },
+      "s7": {
+        "title": "7. Intellectual Property",
+        "body": "Is website ka saara content — logos, brand names, text, graphics, images aur design sameit — <brand>Nidhi Grah Udyog</brand> ya uske licensors ki property hai aur applicable intellectual property laws dwara protected hai. Hamari purv likhit permission ke bina aap ise copy, reproduce ya use nahi kar sakte."
+      },
+      "s8": {
+        "title": "8. Acceptable Use",
+        "body": "Aap sehmat hain ki website ka use kisi bhi unlawful purpose ke liye nahi karenge, hamare systems tak unauthorised access ki koshish nahi karenge, malicious code upload nahi karenge, bade paimane par data scrape nahi karenge, ya website ke normal operation mein interfere nahi karenge."
+      },
+      "s9": {
+        "title": "9. Limitation of Liability",
+        "body": "Law dwara permitted maximum limit tak, kisi order se paida hone wale kisi bhi claim ke liye hamari total liability us order ke liye aapke dwara pay ki gayi amount se zyada nahi hogi. Hum indirect ya consequential losses ke liye zimmedar nahi hain. In Terms mein kuch bhi Consumer Protection Act, 2019 ke tehat aapke rights ko limit nahi karta."
+      },
+      "s10": {
+        "title": "10. Governing Law & Jurisdiction",
+        "body": "Ye Terms India ke laws dwara governed hain. Koi bhi dispute Ujjain, Madhya Pradesh ki courts ke exclusive jurisdiction ke adheen hoga."
+      },
+      "s11": {
+        "title": "11. In Terms mein Badlaav",
+        "body": "Hum samay-samay par in Terms ko update kar sakte hain. Revised version updated \"Last updated\" date ke saath isi page par post kiya jayega. Badlaav ke baad website ka continuous use revised Terms ki acceptance maana jayega."
+      },
+      "s12": {
+        "title": "12. Contact Us",
+        "body": "In Terms ke baare mein kisi bhi sawaal ke liye, humse <phone>+91 93000 05040</phone> par ya hamare <contact>Contact page</contact> se contact karein."
+      }
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated: {{date}}",
+      "intro": "Ye Privacy Policy batati hai ki <brand>Nidhi Grah Udyog</brand> (Proprietor: Lalit Kumar Jain) (\"hum\", \"humein\", \"hamara\") is website ke use ke dauraan aapke personal data ko kaise collect, use, share aur protect karta hai. Hum Digital Personal Data Protection Act, 2023 (DPDP Act) aur applicable Indian law ke hisaab se aapka data handle karne ke liye committed hain. Website ka use karke, aap is Policy se sehmat hote hain.",
+      "s1": {
+        "title": "1. Hum Kaunsa Data Collect Karte Hain",
+        "item1": "<b>Account & order details:</b> naam, email, phone number, shipping address aur order history.",
+        "item2": "<b>Payment information:</b> hum aapke poore payment credentials store nahi karte; UPI/payments payment provider dwara handle kiye jaate hain.",
+        "item3": "<b>Usage & device data:</b> dekhe gaye pages, browse kiye gaye products aur approximate (coarse) location, jo site aur recommendations behtar banane ke liye use hoti hai."
+      },
+      "s2": {
+        "title": "2. Purpose & Legal Basis",
+        "body": "Hum aapke personal data ko specified, lawful purposes ke liye process karte hain: aapke orders process aur deliver karne, customer support dene, recommendations personalise karne, anonymous aggregate analytics chalane, order updates bhejne aur (aapki consent se) promotional communication ke liye. Hum aapki consent par aur aapke dwara request ki gayi services poori karne ke liye zaroori processing par nirbhar karte hain."
+      },
+      "s3": {
+        "title": "3. Consent",
+        "body": "Aap humse contact karke kisi bhi samay apni consent wapas le sakte hain. Consent wapas lene se usse pehle ki gayi processing ki lawfulness par asar nahi hoga, aur isse kuch services dene ki hamari capability limit ho sakti hai."
+      },
+      "s4": {
+        "title": "4. Sharing of Data",
+        "body": "Hum aapka data sirf trusted service providers (courier/logistics partners, payment processors, hosting/analytics providers) ke saath, service operate karne ke liye zaroori had tak hi share karte hain. Hum aapka personal data nahi bechte. Law dwara zaroori hone par hum data disclose kar sakte hain."
+      },
+      "s5": {
+        "title": "5. Cookies & Analytics",
+        "body": "Hum aapko logged in rakhne, aapki cart yaad rakhne aur anonymous, aggregate analytics ke through website ka use samajhne ke liye cookies aur similar technologies use karte hain. Aap apni browser settings aur on-site cookie notice ke through cookies control kar sakte hain."
+      },
+      "s6": {
+        "title": "6. Data Security & Retention",
+        "body": "Hum aapke data ki protection ke liye reasonable technical aur organisational safeguards use karte hain. Hum personal data sirf utni der tak retain karte hain jitna hamari services dene aur legal, accounting aur tax obligations poori karne ke liye zaroori ho."
+      },
+      "s7": {
+        "title": "7. Aapke Rights (DPDP Act, 2023)",
+        "body": "Aapko apna personal data access, correct, update aur erase karne, nominate karne aur grievance redressal ka adhikaar hai. Kisi bhi right ka use karne ke liye, neeche diye details se humse contact karein."
+      },
+      "s8": {
+        "title": "8. Grievance Officer",
+        "body": "<name>Ankur Jain</name> &bull; <phone>+91 93000 05040</phone><br />Hum 48 ghante mein grievances acknowledge karte hain aur 30 din mein unhe resolve karne ka lakshya rakhte hain."
+      },
+      "s9": {
+        "title": "9. Contact Us",
+        "body": "<brand>Nidhi Grah Udyog</brand>, 7, Industrial Area, Runija Road, Barnagar, Ujjain, Madhya Pradesh 456771. Email <email>nidhispicesandfood@gmail.com</email> ya call <phone>+91 93000 05040</phone>, ya hamare <contact>Contact page</contact> ka use karein."
+      }
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Ordering, delivery aur returns ke baare mein wo sab kuch jo aapko jaanna chahiye.",
+      "still": "Abhi bhi koi sawaal hai? <a>Hamari team se contact karein</a>.",
+      "items": [
+        {
+          "q": "Aap kin areas mein delivery karte hain?",
+          "a": "Hum abhi poore India mein sabhi locations par shipping karte hain. Filhaal hum international shipping nahi dete."
+        },
+        {
+          "q": "Delivery mein kitna time lagta hai?",
+          "a": "Payment confirmation ke 24–48 ghante mein orders process kiye jaate hain. Delivery mein aam taur par metro cities mein 3–5 business days, doosre sheheron mein 5–7 din aur door-daraaz areas mein 7–10 din lagte hain."
+        },
+        {
+          "q": "Shipping charges kya hain?",
+          "a": "₹499 se upar ke orders par shipping free hai. ₹499 se kam ke orders ke liye nominal shipping charge lagta hai, jo payment se pehle checkout par dikhaya jaata hai."
+        },
+        {
+          "q": "Main apna order kaise track karun?",
+          "a": "Aapka order ship hote hi aapko email/SMS par tracking number milega. Aap 'My Orders' ke andar kisi bhi samay order status bhi dekh sakte hain."
+        },
+        {
+          "q": "Main apna bill / invoice kaise download karun?",
+          "a": "'My Orders' par jaayein, relevant order kholein aur GST tax invoice ko PDF ke roop mein download karne ke liye 'Bill' par click karein."
+        },
+        {
+          "q": "Aap kaunse payment methods accept karte hain?",
+          "a": "Hum UPI payments accept karte hain. Accepted methods checkout par dikhaye jaate hain. Payment ki successful receipt verify hone par aapka order confirm ho jaata hai."
+        },
+        {
+          "q": "Kya main apna order cancel kar sakta hoon?",
+          "a": "Haan. Order dene ke 24 ghante ke andar unhe free of charge cancel kiya ja sakta hai, bashart ki wo abhi tak ship na hue hon. Details ke liye hamari Return & Refund Policy dekhein."
+        },
+        {
+          "q": "Aapki return aur refund policy kya hai?",
+          "a": "Damaged, defective, galat ya missing items ke liye hum delivery ke 7 din ke andar returns accept karte hain. Approved refunds 5–7 business days mein aapke original payment method mein process kiye jaate hain. Hygiene ke kaaranon se, khule ya khaaye gaye food products return nahi kiye ja sakte, jab tak wo damaged na pahunche hon."
+        },
+        {
+          "q": "Kya aapke products fresh hain aur main unhe kaise store karun?",
+          "a": "Haan — hamare masale aur papad fresh pack kiye jaate hain. Kripya packaging par 'best before' date check karein aur seedhi dhoop aur nami se door, thandi aur sookhi jagah par store karein."
+        },
+        {
+          "q": "Main customer support se kaise contact karun?",
+          "a": "Aap humein +91 93000 05040 par (Monday–Saturday, subah 9–shaam 6 IST) ya hamare Contact page se contact kar sakte hain. Aap website par assistant ke through humse chat bhi kar sakte hain."
+        }
+      ]
+    },
+    "contact": {
+      "toastSuccess": "Dhanyavaad! Hum jald hi aapse contact karenge.",
+      "toastError": "Message bhejne mein fail. Kripya dobara try karein.",
+      "defaultSubject": "General Inquiry",
+      "badge": "Humein aapse sunna achha lagega",
+      "heroTitleLead": "Get in",
+      "heroTitleAccent": "Touch",
+      "heroSubtitle": "Sawaal, bulk orders ya feedback — hamari team madad ke liye yahan hai.",
+      "formTitle": "Humein Message Bhejein",
+      "labelName": "Aapka Naam",
+      "phName": "Apna naam enter karein",
+      "labelEmail": "Email Address",
+      "phEmail": "Apni email enter karein",
+      "labelPhone": "Phone Number (Optional)",
+      "phPhone": "Apna phone number enter karein",
+      "labelSubject": "Subject",
+      "phSubject": "Ye kis baare mein hai?",
+      "labelMessage": "Message",
+      "phMessage": "Hum aapki kaise madad kar sakte hain?",
+      "sending": "Bheja ja raha hai...",
+      "send": "Message Bhejein",
+      "addressTitle": "Address",
+      "addressLine1": "7, Industrial Area, Runija Road, Barnagar.",
+      "addressLine2": "PIN-456771 · Ujjain, MP, India",
+      "phoneTitle": "Phone",
+      "emailTitle": "Email",
+      "hoursTitle": "Business Hours",
+      "hoursLine1": "Monday – Saturday: 9:00 AM – 6:00 PM",
+      "hoursLine2": "Sunday: Closed",
+      "grievanceTitle": "Grievance Officer",
+      "grievanceBody": "Hum 48 ghante mein grievances acknowledge karte hain aur 30 din mein unhe resolve karne ka lakshya rakhte hain.",
+      "mapTitle": "Map par hamara store"
+    }
+  },
+  "notFound": {
+    "message": "Oops! Page nahi mila",
+    "returnHome": "Home par wapas jaayein"
+  },
+  "favorites": {
+    "empty": "Aapki wishlist khaali hai",
+    "emptyHint": "Kisi bhi product par heart dabakar use yahan save karein.",
+    "browse": "Products dekhein"
+  },
+  "orderSuccess": {
+    "title": "Order Successfully Ho Gaya!",
+    "subtitle": "Aapke order ke liye dhanyavaad. Hum aapko jald hi confirmation email bhejenge.",
+    "continueShopping": "Shopping jaari rakhein",
+    "viewOrders": "Mere Orders dekhein",
+    "redirecting": "5 second mein products page par le jaaya ja raha hai..."
+  },
+  "interestSuccess": {
+    "title": "Hamare products mein interest dikhane ke liye dhanyavaad!",
+    "soon": "Hum jald hi ye service shuru karenge.",
+    "noted": "Humne aapki requirements note kar li hain aur hum jitni jald ho sake aapko online serve karne ki koshish karenge.",
+    "refund": "Agar aapne kuch pay kiya hai, to kripya poora refund paane ke liye humse contact karein.",
+    "continueShopping": "Shopping jaari rakhein",
+    "contactSupport": "Support ke liye contact karein: +91 93000 05040",
+    "tagline": "Nidhi Grah Udyog - Quality You Can Trust"
+  },
+  "forgotPassword": {
+    "enterEmail": "Kripya apna email address enter karein",
+    "otpSent": "OTP bhej diya! Kripya apni email check karein.",
+    "otpFailed": "OTP bhejne mein fail. Kripya dobara try karein.",
+    "networkError": "Network error. Kripya dobara try karein.",
+    "title": "Password Reset karein",
+    "description": "Apna email address enter karein aur hum aapko password reset karne ke liye OTP bhejenge.",
+    "email": "Email",
+    "sending": "OTP bheja ja raha hai...",
+    "sendOtp": "OTP bhejein",
+    "backToLogin": "Login par wapas jaayein"
+  },
+  "resetPassword": {
+    "invalidOtp": "Kripya ek valid email aur 6-digit OTP enter karein.",
+    "otpVerified": "OTP verify ho gaya!",
+    "otpExpired": "Invalid ya expired OTP.",
+    "networkError": "Network error. Kripya dobara try karein.",
+    "passwordMismatch": "Passwords match nahi karte.",
+    "passwordTooShort": "Password kam se kam 8 characters ka hona chahiye.",
+    "resetSuccess": "Password successfully reset ho gaya! Ab aap login kar sakte hain.",
+    "resetFailed": "Password reset karne mein fail. Kripya requirements check karein.",
+    "verifyTitle": "OTP Verify karein",
+    "createTitle": "Naya Password banaayein",
+    "verifyDesc": "Apni email par bheja gaya 6-digit code enter karein.",
+    "createDesc": "Apne account ko secure karne ke liye ek strong password enter karein.",
+    "email": "Email",
+    "otpLabel": "6-Digit OTP",
+    "verifying": "Verify ho raha hai...",
+    "verifyButton": "OTP Verify karein",
+    "notReceived": "Nahi mila?",
+    "requestAgain": "Dobara request karein",
+    "newPassword": "Naya Password",
+    "confirmPassword": "Password confirm karein",
+    "resetting": "Reset ho raha hai...",
+    "resetButton": "Password Reset karein"
+  },
+  "trackOrder": {
+    "step1": "Order Placed",
+    "step1Desc": "Confirmed",
+    "step2": "Packed",
+    "step2Desc": "Hand-packed",
+    "step3": "In Transit",
+    "step3Desc": "Raaste mein",
+    "step4": "Delivered",
+    "step4Desc": "Aapke ghar par",
+    "badge": "Real-time order updates",
+    "titleLead": "Apna Order",
+    "titleAccent": "Track karein",
+    "subtitle": "Apna order ID enter karein aur dekhein ki aapke masale kahan hain.",
+    "orderIdLabel": "Order ID",
+    "orderIdPlaceholder": "Apna order ID enter karein",
+    "orderIdHint": "Aap apna order ID confirmation email mein pa sakte hain",
+    "trackButton": "Order Track karein",
+    "needHelp": "Madad chahiye?",
+    "needHelpBody": "Apna order track karne mein pareshaani ho rahi hai? Hamari team madad karne mein khush hai.",
+    "contactSupport": "Support se contact karein",
+    "journeyTitle": "Aapka order aap tak kaise pahunchta hai"
+  },
+  "register": {
+    "passwordMismatch": "Passwords match nahi karte",
+    "passwordTooShort": "Password kam se kam 8 characters ka hona chahiye",
+    "passwordComplexity": "Password mein kam se kam ek uppercase letter, ek lowercase letter aur ek number hona chahiye",
+    "agreePrivacyError": "Jaari rakhne ke liye kripya Privacy Policy se agree karein",
+    "success": "Registration successful!",
+    "failed": "Registration fail. Kripya dobara try karein.",
+    "title": "Account banaayein",
+    "description": "Apna account banane ke liye apni information enter karein",
+    "fullName": "Full Name",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "username": "Username",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "state": "State",
+    "pincode": "Pincode",
+    "password": "Password",
+    "confirmPassword": "Password confirm karein",
+    "agreePrivacy": "Main <a>Privacy Policy</a> se agree karta hoon, jismein ye bhi shaamil hai ki meri activity ka use recommendations aur anonymous, aggregate analytics ke liye kaise hota hai.",
+    "creating": "Account banaya ja raha hai...",
+    "create": "Account banaayein",
+    "haveAccount": "Pehle se account hai?",
+    "login": "Login",
+    "checkEmail": "Bas ek step aur. Apne email mein 6-digit code dekhein."
+  },
+  "combosPage": {
+    "loadError": "Combos load karne mein fail",
+    "benefitCurated": "Hand-curated bundles",
+    "benefitValue": "Alag-alag khareedne se behtar value",
+    "benefitShipping": "₹{{amount}} se upar free shipping",
+    "eyebrow": "Value Bundles",
+    "title": "Combo Offers",
+    "subtitle": "Soch-samajh kar jode gaye spice bundles — zyada flavour, kam kharch.",
+    "saveUpTo": "{{percent}}% tak bachaayein",
+    "emptyTitle": "Abhi koi combo available nahi hai",
+    "emptyBody": "Naye bundles regular aate hain — is beech, hamare masalon ki poori range dekhein.",
+    "browseAll": "Sabhi products dekhein",
+    "moreBundles": "Aur bundles"
+  },
+  "assistant": {
+    "langAuto": "Auto",
+    "greeting": "Hi! Main Nidhi Assistant hoon. Hamare masalon, apne orders ke baare mein poochein, ya bas bataayein ki aap kya paka rahe hain! 🌶️",
+    "justNow": "abhi",
+    "minutesAgo": "{{count}}m pehle",
+    "hoursAgo": "{{count}}h pehle",
+    "daysAgo": "{{count}}d pehle",
+    "error": "Sorry, kuch galat ho gaya. Kripya dobara try karein.",
+    "escalated": "Hamari team ko notify kar diya gaya hai aur wo jald hi join karegi.",
+    "voiceUnsupported": "Is browser mein voice input support nahi karta.",
+    "openAria": "Nidhi Assistant kholein",
+    "threadListAria": "Thread list",
+    "yourConversations": "Aapki Conversations",
+    "title": "Nidhi Assistant",
+    "replyLanguageAria": "Reply language",
+    "newConversation": "Nayi conversation",
+    "newChat": "Nayi chat",
+    "humanHandoff": "Hamari team ka ek member is chat mein aapki madad kar raha hai.",
+    "humanHandoffNamed": "Hamari team se {{name}} is chat mein aapki madad kar rahe hain.",
+    "humanHandoffWait": "Jawab aane mein kuch minute lag sakte hain.",
+    "contextFull": "Ye chat kaafi lambi ho gayi hai, isliye shuruaati messages mujhe yaad nahi rahenge. Behtar jawab ke liye nayi chat shuru karein.",
+    "contextFullCta": "Nayi chat shuru karein",
+    "close": "Band karein",
+    "noConversations": "Abhi tak koi conversation nahi. Ek shuru karein!",
+    "needsAttention": "Dhyaan ki zaroorat",
+    "teamMember": "{{name}} — Nidhi Team",
+    "stopListening": "Sunna band karein",
+    "speak": "Bolein",
+    "listening": "Sun rahe hain…",
+    "transcribing": "Likha ja raha hai…",
+    "inputPlaceholder": "Masalon, orders ke baare mein poochein…"
+  },
+  "billing": {
+    "paymentNotConfigured": "Payment system configure nahi hai. Kripya support se contact karein.",
+    "cartEmpty": "Aapki cart khaali hai",
+    "loadError": "Billing data load karne mein fail",
+    "qrError": "Payment QR banane mein fail",
+    "enterCoupon": "Kripya ek coupon code enter karein",
+    "paymentNotInitialized": "Payment system initialize nahi hua",
+    "invalidCoupon": "Invalid coupon code",
+    "couponApplied": "Coupon apply ho gaya! ₹{{amount}} bachaaye",
+    "couponFailed": "Coupon apply nahi kiya ja saka",
+    "couponRemoved": "Coupon hata diya",
+    "locationDenied": "Aapki location access nahi kar sake.",
+    "addressFilled": "Aapki location se address bhar diya gaya. Kripya ise review karein.",
+    "addressFailed": "Aapka address determine nahi kar sake. Kripya ise manually enter karein.",
+    "errNameRequired": "Naam zaroori hai",
+    "errEmailRequired": "Email zaroori hai",
+    "errEmailInvalid": "Invalid email format",
+    "errPhoneRequired": "Phone zaroori hai",
+    "errPhoneInvalid": "Invalid phone number",
+    "errAddressRequired": "Address zaroori hai",
+    "errCityRequired": "City zaroori hai",
+    "errStateRequired": "State zaroori hai",
+    "errZipRequired": "Zip code zaroori hai",
+    "errPaymentRequired": "Order dene se pehle kripya UPI QR se payment confirm karein",
+    "fillAllFields": "Kripya sabhi required fields sahi se bharein",
+    "orderPlaced": "Order successfully place ho gaya!",
+    "orderFailed": "Order place karne mein fail",
+    "loadingCheckout": "Checkout load ho raha hai...",
+    "checkout": "Checkout",
+    "shippingInfo": "Shipping Information",
+    "useLocation": "Meri location use karein",
+    "noSavedAddress": "Abhi koi saved address nahi — ise automatically detect karein, phir neeche ke fields review karein.",
+    "fullName": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "state": "State",
+    "zipCode": "Zip Code",
+    "orderSummary": "Order Summary",
+    "qty": "Qty: {{count}}",
+    "perUnit": "₹{{price}}/unit",
+    "haveCoupon": "Coupon hai?",
+    "enterCode": "Code enter karein",
+    "apply": "Apply karein",
+    "couponAppliedTag": "{{code}} applied ✓",
+    "remove": "Hataayein",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "shipping": "Shipping",
+    "free": "FREE",
+    "tax": "Tax (GST)",
+    "taxIncluded": "GST included: {{amount}}",
+    "total": "Total",
+    "scanToPay": "₹{{amount}} pay karne ke liye Scan karein",
+    "qrAlt": "UPI Payment QR Code",
+    "loadingQr": "QR load ho raha hai...",
+    "payViaApp": "UPI App se Pay karein",
+    "scanHint": "QR scan karein ya upar button click karein, phir neeche payment confirm karein",
+    "paymentDone": "Maine payment complete kar li hai",
+    "processing": "Process ho raha hai...",
+    "placeOrder": "Order Place karein"
+  },
+  "profile": {
+    "loadFailed": "Profile load karne mein fail",
+    "paymentsLoadFailed": "Payment methods load karne mein fail",
+    "updateSuccess": "Profile successfully update ho gayi!",
+    "updateFailed": "Profile update karne mein fail",
+    "locationDenied": "Aapki location access nahi kar sake.",
+    "addressFilled": "Aapki location se address bhar diya gaya. Ise review karein, phir Save karein.",
+    "addressFailed": "Aapka address determine nahi kar sake. Kripya ise manually enter karein.",
+    "allFieldsRequired": "Sabhi fields zaroori hain",
+    "passwordMismatch": "Passwords match nahi karte",
+    "passwordChanged": "Password successfully change ho gaya!",
+    "passwordChangeFailed": "Password change karne mein fail",
+    "errUpiRequired": "UPI ID zaroori hai",
+    "errCardBrand": "Card brand zaroori hai",
+    "errLastFour": "Last 4 digits zaroori hain",
+    "errMonth": "Valid month zaroori hai",
+    "errYear": "Year zaroori hai",
+    "errBankName": "Bank name zaroori hai",
+    "errWalletProvider": "Wallet provider zaroori hai",
+    "fillAllFields": "Kripya sabhi required fields sahi se bharein",
+    "paymentAdded": "Payment method add ho gaya!",
+    "paymentAddFailed": "Payment method add karne mein fail",
+    "paymentRemoved": "Payment method hata diya.",
+    "paymentRemoveFailed": "Payment method hataane mein fail",
+    "defaultUpdated": "Default payment method update ho gaya!",
+    "defaultFailed": "Default payment method set karne mein fail",
+    "loading": "Aapki profile load ho rahi hai...",
+    "tabProfile": "Profile",
+    "tabSecurity": "Security",
+    "tabPayment": "Payment",
+    "infoTitle": "Profile Information",
+    "infoDesc": "Apne account ki information update karein",
+    "username": "Username",
+    "fullName": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "useLocation": "Meri location use karein",
+    "city": "City",
+    "state": "State",
+    "pincode": "Pincode",
+    "updating": "Update ho raha hai...",
+    "updateButton": "Profile Update karein",
+    "logout": "Logout",
+    "securityTitle": "Security Settings",
+    "securityDesc": "Apna password change karein",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "New Password confirm karein",
+    "changing": "Change ho raha hai...",
+    "changePassword": "Password Change karein",
+    "paymentTitle": "Payment Methods",
+    "paymentDesc": "Apne saved payment methods manage karein",
+    "loadingPayments": "Payment methods load ho rahe hain...",
+    "noPayments": "Abhi tak koi payment method add nahi kiya",
+    "default": "Default",
+    "setDefault": "Default Set karein",
+    "upiIdLabel": "UPI ID: {{id}}",
+    "cardEnding": "{{brand}} jo {{last}} par khatam hota hai",
+    "cardExpires": ", Expires {{month}}/{{year}}",
+    "bankLabel": "Bank: {{bank}}",
+    "providerLabel": "Provider: {{provider}}",
+    "addPayment": "Naya Payment Method add karein",
+    "addPaymentTitle": "Payment Method add karein",
+    "addPaymentDesc": "Apne account mein naya payment method add karein",
+    "paymentType": "Payment Type",
+    "typeUpi": "UPI",
+    "typeCard": "Card",
+    "typeNetbanking": "Net Banking",
+    "typeWallet": "Wallet",
+    "upiId": "UPI ID",
+    "cardBrand": "Card Brand",
+    "selectCardBrand": "Card brand chunein",
+    "lastFour": "Last 4 Digits",
+    "expiryMonth": "Expiry Month",
+    "expiryYear": "Expiry Year",
+    "bankName": "Bank Name",
+    "walletProvider": "Wallet Provider",
+    "selectWallet": "Wallet chunein",
+    "setAsDefault": "Default payment method ke roop mein set karein",
+    "adding": "Add ho raha hai..."
+  },
+  "myOrders": {
+    "statusPending": "Pending",
+    "statusInTransit": "In Transit",
+    "statusDelivered": "Delivered",
+    "statusCancelled": "Cancelled",
+    "loginRequired": "Apne orders dekhne ke liye kripya login karein",
+    "loadFailed": "Orders load karne mein fail.",
+    "noItemsReorder": "Reorder karne ke liye koi item nahi",
+    "reorderAdded": "Is order ke items cart mein add ho gaye",
+    "reorderFailed": "Items reorder karne mein fail",
+    "billDownloaded": "{{order}} ke liye bill download kiya",
+    "billFailed": "Bill download karne mein fail. Kripya dobara try karein.",
+    "supportSeed": "Mujhe apne order {{order}} mein madad chahiye.",
+    "selectRating": "Kripya ek rating chunein",
+    "noItemSelected": "Review ke liye koi item select nahi kiya",
+    "reviewSubmitted": "{{name}} ke liye review submit ho gaya!",
+    "reviewFailed": "Review submit karne mein fail. Kripya dobara try karein.",
+    "feedbackThanks": "Aapke feedback ke liye dhanyavaad!",
+    "cancelSuccess": "Order successfully cancel ho gaya",
+    "cancelFailed": "Order cancel karne mein fail. Kripya dobara try karein.",
+    "titleLead": "My",
+    "titleAccent": "Orders",
+    "fetching": "Aapke orders laaye ja rahe hain…",
+    "placedCount": "Aapne hamare saath {{count}} order place kiya hai",
+    "placedCount_other": "Aapne hamare saath {{count}} orders place kiye hain",
+    "trackSubtitle": "Aapke order kiye har cheez ko track aur manage karein",
+    "loadingOrders": "Orders load ho rahe hain...",
+    "orderLabel": "Order {{number}}",
+    "placedOn": "{{date}} ko place kiya",
+    "showLess": "Kam dikhaayein",
+    "showMore": "Aur dikhaayein",
+    "total": "Total",
+    "qtyPrice": "Qty: {{qty}} × ₹{{price}}",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "tax": "Tax",
+    "taxIncluded": "GST included: {{amount}}",
+    "shippingTo": "Shipping to: {{address}}",
+    "reorder": "Reorder",
+    "support": "Support",
+    "bill": "Bill",
+    "cancel": "Cancel",
+    "cancelTitle": "Ye order cancel karein?",
+    "cancelConfirm": "Kya aap sach mein order <b>{{number}}</b> cancel karna chahte hain? Ye action wapas nahi kiya ja sakta.",
+    "keepOrder": "Nahi, order rakhein",
+    "cancelling": "Cancel ho raha hai...",
+    "confirmCancel": "Haan, cancel karein",
+    "review": "Review",
+    "reviewTitle": "{{name}} ka Review karein",
+    "reviewDesc": "Is {{itemType}} ke saath apna experience share karein",
+    "typeProduct": "product",
+    "typeCombo": "combo",
+    "selectItem": "Review ke liye Item chunein",
+    "rating": "Rating",
+    "yourReview": "Aapka Review (optional)",
+    "reviewPlaceholder": "Humein bataayein ki aap is product ke baare mein kya sochte hain...",
+    "submitting": "Submit ho raha hai...",
+    "submitReview": "Review Submit karein",
+    "emptyTitle": "Abhi tak koi order nahi",
+    "emptyBody": "Lagta hai aapne abhi tak koi order place nahi kiya. Hamara amazing collection dekhein aur shopping shuru karein!",
+    "continueShopping": "Shopping jaari rakhein",
+    "statusConfirmed": "Confirmed",
+    "statusProcessing": "Processing",
+    "statusShipped": "Shipped",
+    "statusDelivering": "Out for delivery",
+    "shipping": "Shipping",
+    "free": "FREE",
+    "alreadyReviewed": "Already review kiya hua"
+  },
+  "password": {
+    "strengthLabel": "Password strength",
+    "veryWeak": "Bahut weak",
+    "weak": "Weak",
+    "fair": "Theek",
+    "good": "Achha",
+    "strong": "Strong"
+  },
+  "errorBoundary": {
+    "title": "Humari taraf se kuch gadbad ho gayi",
+    "message": "Is page ko load karte waqt ek technical issue aa gaya. Isme aapki koi galti nahi hai. Please page reload karein — aur agar problem baar-baar aaye to humse contact karein, hum ise theek kar denge.",
+    "reload": "Page reload karein",
+    "home": "Home par wapas jaayein",
+    "contactTitle": "Ab bhi dikkat hai? Humse contact karein",
+    "contactHint": "Neeche diya gaya reference bataayein, taaki hum pata laga sakein ki kya hua.",
+    "whatsapp": "WhatsApp",
+    "copy": "Details copy karein",
+    "copied": "Copy ho gaya"
+  },
+  "verifyEmail": {
+    "title": "Apna email confirm karein",
+    "description": "Humne {{email}} par 6-digit code bheja hai. Account poora karne ke liye use yahan daalein.",
+    "code": "Verification code",
+    "hint": "Code 10 minute tak valid hai. Na mile to spam folder dekhein.",
+    "enterCode": "Please 6-digit code daalein.",
+    "verify": "Email confirm karein",
+    "verifying": "Confirm ho raha hai...",
+    "failed": "Yeh code kaam nahi kiya. Phir se try karein.",
+    "resend": "Code phir bhejein",
+    "resendIn": "{{seconds}}s mein code phir bhejein",
+    "resent": "Naya code bheja ja raha hai.",
+    "resendFailed": "Naya code nahi bheja ja saka. Thodi der baad try karein.",
+    "wrongEmail": "Email address galat hai?",
+    "registerAgain": "Phir se register karein"
+  },
+  "changeEmail": {
+    "change": "Badlein",
+    "title": "Login email badlein",
+    "description": "Aapka login email {{email}} hai. Naye address ko confirm karne ke liye hum us par code bhejenge.",
+    "codeDescription": "{{email}} par bheja gaya 6-digit code daalein.",
+    "newEmail": "Naya email",
+    "currentPassword": "Current password",
+    "googleHint": "Google se sign up kiya tha aur password nahi banaya? Pehle login page par \"Forgot password\" se password banayein.",
+    "code": "Verification code",
+    "sendCode": "Code bhejein",
+    "confirm": "Email badlein",
+    "back": "Wapas",
+    "codeSent": "{{email}} par code bhej diya gaya.",
+    "success": "Login email badal gaya.",
+    "failed": "Email nahi badla ja saka. Phir se try karein."
+  }
+}

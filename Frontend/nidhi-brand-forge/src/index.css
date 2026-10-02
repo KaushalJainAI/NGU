@@ -1,0 +1,469 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 35 25% 97%;
+    --foreground: 25 40% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 25 40% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 25 40% 15%;
+
+    --primary: 18 75% 55%;
+    --primary-foreground: 0 0% 100%;
+    
+    --primary-glow: 18 85% 65%;
+
+    --secondary: 145 45% 45%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 35 20% 92%;
+    --muted-foreground: 25 15% 45%;
+
+    --accent: 40 95% 55%;
+    --accent-foreground: 25 40% 15%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 20% 88%;
+    --input: 35 20% 88%;
+    --ring: 18 75% 55%;
+
+    --radius: 0.75rem;
+    
+    --gradient-hero: linear-gradient(135deg, hsl(18 75% 55%) 0%, hsl(40 95% 55%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(35 25% 98%) 100%);
+    /* Swiggy-energy redesign tokens */
+    --gradient-offer: linear-gradient(135deg, hsl(8 75% 50%) 0%, hsl(18 80% 55%) 55%, hsl(40 95% 55%) 100%);
+    --backdrop-spice: radial-gradient(circle at 50% 38%, hsl(40 70% 93%) 0%, hsl(35 45% 96%) 72%);
+    --shadow-elegant: 0 10px 30px -10px hsl(18 75% 55% / 0.2);
+    --shadow-card: 0 4px 20px hsl(25 40% 15% / 0.08);
+    --shadow-lift: 0 16px 34px -14px hsl(18 75% 45% / 0.35);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 0 0% 98%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 25 30% 8%;
+    --foreground: 35 25% 95%;
+
+    --card: 25 25% 12%;
+    --card-foreground: 35 25% 95%;
+
+    --popover: 25 25% 12%;
+    --popover-foreground: 35 25% 95%;
+
+    --primary: 18 75% 55%;
+    --primary-foreground: 0 0% 100%;
+    
+    --primary-glow: 18 85% 65%;
+
+    --secondary: 145 45% 45%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 25 20% 18%;
+    --muted-foreground: 35 15% 60%;
+
+    --accent: 40 95% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 25 20% 20%;
+    --input: 25 20% 20%;
+    --ring: 18 75% 55%;
+    
+    --gradient-hero: linear-gradient(135deg, hsl(18 75% 45%) 0%, hsl(40 95% 45%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(25 25% 12%) 0%, hsl(25 20% 15%) 100%);
+    --gradient-offer: linear-gradient(135deg, hsl(8 70% 42%) 0%, hsl(18 75% 45%) 55%, hsl(40 85% 48%) 100%);
+    --backdrop-spice: radial-gradient(circle at 50% 38%, hsl(25 25% 18%) 0%, hsl(25 22% 14%) 72%);
+    --shadow-lift: 0 16px 34px -14px hsl(0 0% 0% / 0.45);
+    --shadow-elegant: 0 10px 30px -10px hsl(18 75% 35% / 0.3);
+    --shadow-card: 0 4px 20px hsl(0 0% 0% / 0.2);
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Responsiveness safety net.
+     `overflow-x: clip` stops a single too-wide element from making the WHOLE
+     page scroll sideways on phones (the classic "site doesn't fit" symptom),
+     while — unlike `overflow-x: hidden` — it does NOT break the sticky navbar.
+     The media rule keeps images/videos from ever forcing horizontal overflow. */
+  html,
+  body {
+    overflow-x: clip;
+    max-width: 100%;
+  }
+
+  img,
+  video {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* Custom Animations */
+@layer utilities {
+  /* Pulse animation for floating buttons */
+  .animate-pulse-subtle {
+    animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-subtle {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.9;
+      transform: scale(1.02);
+    }
+  }
+
+  /* Bounce in animation */
+  .animate-bounce-in {
+    animation: bounce-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  @keyframes bounce-in {
+    0% {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+    50% {
+      transform: scale(1.05);
+    }
+    70% {
+      transform: scale(0.9);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Fade in up animation */
+  .animate-fade-in-up {
+    animation: fade-in-up 0.4s ease-out;
+  }
+
+  @keyframes fade-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Slide in from right */
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+  }
+
+  @keyframes slide-in-right {
+    0% {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Wiggle animation for attention */
+  .animate-wiggle {
+    animation: wiggle 0.5s ease-in-out;
+  }
+
+  @keyframes wiggle {
+    0%, 100% {
+      transform: rotate(0deg);
+    }
+    25% {
+      transform: rotate(-3deg);
+    }
+    75% {
+      transform: rotate(3deg);
+    }
+  }
+
+  /* Shimmer effect for loading */
+  .animate-shimmer {
+    animation: shimmer 1.5s infinite;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--background)) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .transition-fast {
+    transition: all 0.15s ease-out;
+  }
+
+  .transition-medium {
+    transition: all 0.25s ease-in-out;
+  }
+
+  /* Hover lift effect */
+  .hover-lift {
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px -5px hsl(var(--primary) / 0.15);
+  }
+
+  /* Active press effect */
+  .active-press:active {
+    transform: scale(0.97);
+  }
+
+  /* Glow effect on hover */
+  .hover-glow:hover {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.3);
+  }
+
+  /* Page transition animation */
+  .animate-page-enter {
+    animation: page-enter 0.3s ease-out;
+  }
+
+  @keyframes page-enter {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Page exit animation (for future use) */
+  .animate-page-exit {
+    animation: page-exit 0.2s ease-in forwards;
+  }
+
+  @keyframes page-exit {
+    0% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+  }
+
+  /* Smooth content reveal */
+  .animate-content-reveal {
+    animation: content-reveal 0.4s ease-out 0.1s both;
+  }
+
+  @keyframes content-reveal {
+    0% {
+      opacity: 0;
+      transform: translateY(15px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Stagger children animation helper */
+  .stagger-children > * {
+    animation: stagger-fade-in 0.4s ease-out both;
+  }
+
+  .stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
+  .stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
+  .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
+  .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
+  .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+  .stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
+
+  @keyframes stagger-fade-in {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ===== Swiggy-energy redesign utilities ===== */
+
+  /* Soft warm circular/rounded frame behind product photos so jars, pouches
+     and boxes of varying shapes all align on the grid. */
+  .spice-backdrop {
+    background: var(--backdrop-spice);
+  }
+
+  /* Auto-scrolling USP ribbon under the navbar */
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    animation: marquee 28s linear infinite;
+  }
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+  }
+
+  /* Floating cart bar slide-up entrance */
+  .animate-cart-slide-up {
+    animation: cart-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes cart-slide-up {
+    0%   { transform: translateY(140%); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  /* Stronger lift used by product/deal cards */
+  .hover-lift-lg {
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .hover-lift-lg:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--shadow-lift);
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* ===== Storytelling / scroll-reveal toolkit ===== */
+
+  /* Elements start hidden and animate in when <Reveal> toggles .is-visible. */
+  .reveal {
+    opacity: 0;
+    transform: translateY(32px);
+    transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+  }
+  .reveal-left  { transform: translateX(-44px); }
+  .reveal-right { transform: translateX(44px); }
+  .reveal-scale { transform: scale(0.88); }
+  .reveal.is-visible { opacity: 1; transform: none; }
+
+  /* Gentle endless bobbing for floating spice accents. */
+  .animate-float {
+    animation: float-bob 6s ease-in-out infinite;
+  }
+  @keyframes float-bob {
+    0%, 100% { transform: translateY(0) rotate(var(--rot, 0deg)); }
+    50%      { transform: translateY(-16px) rotate(var(--rot, 0deg)); }
+  }
+
+  /* Slow drifting gradient for immersive hero backdrops. */
+  .animate-gradient-pan {
+    background-size: 220% 220%;
+    animation: gradient-pan 16s ease infinite;
+  }
+  @keyframes gradient-pan {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Vertical line that "draws" itself (used by the journey timeline). */
+  .draw-line {
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: transform 1.1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .draw-line.is-visible { transform: scaleY(1); }
+
+  /* Slow spin for decorative rings. */
+  .animate-spin-slow { animation: spin 22s linear infinite; }
+
+  /* Respect users who prefer reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    .reveal,
+    .reveal-left,
+    .reveal-right,
+    .reveal-scale,
+    .draw-line {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+    .animate-float,
+    .animate-gradient-pan,
+    .animate-spin-slow,
+    .animate-pulse-subtle {
+      animation: none !important;
+    }
+  }
+}
+
+

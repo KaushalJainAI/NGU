@@ -1,0 +1,1151 @@
+{
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "combos": "Combos",
+    "offers": "Offers",
+    "more": "More",
+    "aboutUs": "About Us",
+    "contact": "Contact",
+    "trackOrder": "Track Order",
+    "myOrders": "My Orders",
+    "search": "Search...",
+    "searchMobile": "Search spices, masalas...",
+    "wishlist": "Wishlist",
+    "account": "Account",
+    "cart": "Cart",
+    "language": "Language"
+  },
+  "common": {
+    "viewAll": "View All",
+    "loading": "Loading...",
+    "shopNow": "Shop Now",
+    "currency": "₹"
+  },
+  "ribbon": {
+    "freeShipping": "FREE shipping on orders above ₹499",
+    "pure": "100% pure & natural — no fillers",
+    "handPacked": "Hand-packed in Barnagar",
+    "trusted": "FSSAI Lic. No. 11414730000288"
+  },
+  "hero": {
+    "badge": "Authentic Indian Spices",
+    "headlineStart": "Taste of ",
+    "headlineHighlight": "Tradition",
+    "headlineEnd": " in Every Spice",
+    "description": "Experience the authentic flavours of India with our premium quality spices and masalas. Made with love, delivered with care.",
+    "learnMore": "Learn More",
+    "statsProducts": "Products",
+    "statsPure": "Pure & Natural",
+    "statsCustomers": "Happy Customers",
+    "handPackedFresh": "Hand-packed fresh",
+    "since": "Since 1995"
+  },
+  "home": {
+    "features": {
+      "freeShippingTitle": "Free shipping ₹499+",
+      "freeShippingDesc": "On all orders of ₹499 and above",
+      "authenticTitle": "FSSAI licensed",
+      "authenticDesc": "Lic. No. 11414730000288",
+      "deliveryTitle": "COD available",
+      "deliveryDesc": "Cash on Delivery across India",
+      "qualityTitle": "Tracked delivery",
+      "qualityDesc": "3–10 business days, door to door"
+    },
+    "recommended": {
+      "title": "Recommended For You",
+      "subtitle": "Picked from what you browse and buy"
+    },
+    "new": {
+      "title": "Newly Launched",
+      "subtitle": "Freshly packed and ready for your kitchen"
+    },
+    "specials": {
+      "title": "Our Specials",
+      "subtitle": "Discover our handcrafted spice blends that bring authentic flavours to your home."
+    },
+    "bestsellers": {
+      "title": "Best Selling Products",
+      "subtitle": "Customer favorites across India"
+    },
+    "trending": {
+      "title": "Trending Now",
+      "subtitle": "Spices everyone is trying this season"
+    },
+    "categories": {
+      "title": "Shop by Category",
+      "subtitle": "Find exactly what you need for your cooking"
+    },
+    "combos": {
+      "title": "Combo Offers",
+      "subtitle": "Save more with our curated spice bundles"
+    },
+    "testimonials": {
+      "title": "Customer Testimonials",
+      "subtitle": "What our happy customers say",
+      "verified": "Verified Buyer"
+    },
+    "cta": {
+      "title": "Cook with Barnagar's own masalas",
+      "subtitle": "FSSAI-licensed facility. Packed fresh, shipped across India — pay online or Cash on Delivery.",
+      "handPacked": "Hand-packed in Barnagar",
+      "viewOffers": "View Offers"
+    }
+  },
+  "product": {
+    "addToCart": "Add to Cart",
+    "outOfStock": "Out of Stock",
+    "inStock": "In Stock",
+    "off": "% OFF",
+    "viewDetails": "View Details",
+    "selectSize": "Select Size",
+    "from": "from",
+    "sizes": "sizes",
+    "youSave": "You save ₹{{amount}}",
+    "loginRequired": "You need to log in to add items to your cart.",
+    "addedToFavorites": "Added to favorites",
+    "removedFromFavorites": "Removed from favorites",
+    "addedToCart": "Added to cart!",
+    "featured": "Featured",
+    "prevSlide": "Previous slide",
+    "nextSlide": "Next slide",
+    "organicCertified": "100% Organic Certified",
+    "naturalIngredients": "Made from natural ingredients",
+    "aboutProduct": "About This Product",
+    "ingredientsLabel": "Ingredients:",
+    "customersAlsoBought": "Customers Also Bought",
+    "customerReviews": "Customer Reviews",
+    "showingReviews": "Showing {{count}} of {{total}} reviews",
+    "defaultReviewTitle": "Great Product!",
+    "verifiedPurchase": "Verified Purchase",
+    "reviewBy": "By {{name}}",
+    "loadMoreReviews": "Load More Reviews",
+    "noReviews": "No reviews yet. Be the first to review this product!",
+    "copyLink": "Copy link",
+    "inclusiveTaxes": "Inclusive of all taxes",
+    "sizeLabel": "Size:",
+    "weightLabel": "Weight:",
+    "formLabel": "Form:",
+    "originLabel": "Origin:",
+    "shelfLifeLabel": "Shelf Life:",
+    "months": "{{count}} months",
+    "months_other": "{{count}} months",
+    "available": "({{count}} available)",
+    "quantityLabel": "Quantity:",
+    "inCart": "in cart",
+    "noRatings": "No ratings",
+    "reviewsCount": "{{count}} review",
+    "reviewsCount_other": "{{count}} reviews",
+    "buyNow": "Buy Now",
+    "writeReview": "Write a Review",
+    "yourRating": "Your Rating",
+    "reviewTitle": "Title (optional)",
+    "reviewTitlePlaceholder": "Sum up your experience",
+    "reviewComment": "Your Review",
+    "reviewCommentPlaceholder": "Share what you liked or disliked about this product",
+    "submitReview": "Submit Review",
+    "loginToReview": "Log in to write a review for this product.",
+    "purchaseToReview": "Only customers who have purchased this product can review it.",
+    "alreadyReviewed": "You have already reviewed this product.",
+    "reviewSelectRating": "Please select a star rating",
+    "reviewCommentRequired": "Please write your review",
+    "reviewSubmitted": "Thank you! Your review has been submitted.",
+    "reviewError": "Could not submit your review. Please try again.",
+    "recipeTitle": "Recipe & Usage",
+    "nutritionTitle": "Nutritional Information",
+    "nutritionNote": "Approximate values for the serving size shown.",
+    "fssai": "FSSAI Lic. No.",
+    "nutritionKeys": {
+      "serving_size": "Serving Size",
+      "total_fat": "Total Fat",
+      "saturated_fat": "Saturated Fat",
+      "total_carbohydrates": "Total Carbohydrates",
+      "protein": "Protein",
+      "energy": "Energy",
+      "calcium": "Calcium",
+      "iron": "Iron",
+      "sodium": "Sodium",
+      "sugars": "Sugars",
+      "sugar": "Sugar"
+    }
+  },
+  "ourStory": {
+    "eyebrow": "Nidhi kitchen story",
+    "label": "Our Story",
+    "heading": "Authentic Indian Flavours",
+    "body": "Experience the rich heritage of traditional Indian spices, carefully sourced and blended to perfection. Each product tells a story of generations of expertise and passion for authentic flavours.",
+    "feature1Title": "Pure ingredients",
+    "feature1Desc": "No fillers, clean blends",
+    "feature2Title": "Fresh batches",
+    "feature2Desc": "Packed close to order",
+    "cta": "Explore the Collection"
+  },
+  "flashSale": {
+    "endsIn": "Ends in",
+    "saleEndsIn": "Sale ends in",
+    "endsOn": "Ends {{date}}"
+  },
+  "trust": {
+    "freeShipping": "Free shipping ₹499+",
+    "happyKitchens": "FSSAI Lic. No. 11414730000288"
+  },
+  "trustBand": {
+    "pureBlends": "Pure blends",
+    "noFillers": "No fillers",
+    "qualityChecked": "Quality checked",
+    "batchTested": "Batch tested",
+    "fastDelivery": "Fast delivery",
+    "packedFresh": "Packed fresh",
+    "easySupport": "Easy support",
+    "simpleHelp": "Simple help"
+  },
+  "mobileNav": {
+    "home": "Home",
+    "shop": "Shop",
+    "chat": "Chat",
+    "offers": "Offers",
+    "orders": "Orders"
+  },
+  "combo": {
+    "items": "items",
+    "more": "more",
+    "pieceKit": "{{count}}-piece kit",
+    "addBundle": "Add bundle",
+    "details": "Details",
+    "defaultStory": "A ready-made kit of {{count}} kitchen essentials.",
+    "defaultStorySavings": "A ready-made kit of {{count}} kitchen essentials, bundled to save you ₹{{amount}} versus buying them one by one.",
+    "comboOffer": "Combo Offers",
+    "comboSubtitle": "Save more with our value bundles",
+    "comboDeal": "COMBO DEAL",
+    "productBundle": "{{count}} products bundle",
+    "savePercent": "Save {{percent}}%",
+    "addedToCart": "{{count}} combo added to cart!",
+    "addedToCart_other": "{{count}} combos added to cart!",
+    "saveWithCombo": "You save ₹{{amount}} with this combo!",
+    "whatsIncluded": "What's Included ({{count}} items)",
+    "totalWeight": "Total Weight:",
+    "freeDelivery": "Free Delivery",
+    "ordersMin": "Orders ₹499+",
+    "secure": "Secure",
+    "payment": "Payment",
+    "greatValue": "Great Value!",
+    "saveSeparately": "Save ₹{{amount}} compared to buying separately",
+    "aboutCombo": "About This Combo",
+    "whyChoose": "Why Choose This Combo?",
+    "betterValue": "Better Value",
+    "saveTogether": "Save more when you buy together",
+    "curatedSelection": "Curated Selection",
+    "expertlyPaired": "Expertly paired products",
+    "singleDelivery": "Single Delivery",
+    "allInOne": "All items in one package",
+    "genuine": "100% genuine products",
+    "productsInCombo": "Products In This Combo"
+  },
+  "footer": {
+    "tagline": "Pioneering the authentic taste of Indian spices since 1995. Quality that feels like home.",
+    "quickLinks": "Quick Links",
+    "contactUs": "Contact Us",
+    "customerService": "Customer Service",
+    "shippingPolicy": "Shipping Policy",
+    "returnPolicy": "Return Policy",
+    "privacyPolicy": "Privacy Policy",
+    "terms": "Terms & Conditions",
+    "faqs": "FAQs",
+    "contactDetail": "Contact Details",
+    "rights": "All rights reserved.",
+    "whatsapp": "Chat with us on WhatsApp"
+  },
+  "cart": {
+    "title": "Shopping Cart",
+    "empty": "Your cart is empty",
+    "continueShopping": "Continue Shopping",
+    "orderSummary": "Order Summary",
+    "total": "Total",
+    "clearCart": "Clear Cart",
+    "checkout": "Proceed to Checkout",
+    "peopleAlsoBuy": "People Also Buy",
+    "loading": "Loading cart...",
+    "quantity": "Quantity",
+    "remove": "Remove",
+    "removed": "Item removed from cart",
+    "cleared": "Cart cleared",
+    "emptyToast": "Your cart is empty",
+    "noStock": "No in-stock items to checkout",
+    "subtotal": "Subtotal",
+    "tax": "Tax (GST)",
+    "taxIncluded": "Incl. GST {{amount}}",
+    "discount": "Discount",
+    "taxableValue": "Taxable value",
+    "gst": "GST",
+    "gstAtRate": "GST {{rate}}%",
+    "freeShippingNudge": "Add ₹{{amount}} more for free delivery",
+    "processing": "Processing...",
+    "noItems": "No Items",
+    "item": "item",
+    "items": "items",
+    "viewCart": "View Cart",
+    "freeShippingUnlocked": "🎉 You've unlocked FREE shipping!",
+    "addMoreForShipping": "Add ₹{{amount}} more for FREE shipping",
+    "shipping": "Shipping",
+    "shippingGst": "GST on delivery (18%)",
+    "free": "FREE"
+  },
+  "category": {
+    "allSpices": "All Spices",
+    "categories": "Categories"
+  },
+  "products": {
+    "filterAll": "All",
+    "filterOffers": "⚡ Offers",
+    "filterRating": "⭐ Rating 4.0+",
+    "sortPriceLow": "💰 Price: Low → High",
+    "sortBy": "Sort by",
+    "sortFeatured": "Featured",
+    "sortPriceLowToHigh": "Price: Low to High",
+    "sortPriceHighToLow": "Price: High to Low",
+    "sortName": "Name: A to Z",
+    "productCount": "{{count}} product",
+    "productCount_other": "{{count}} products",
+    "noProducts": "No products found.",
+    "loadingProducts": "Loading…",
+    "loadError": "We couldn't load products right now. Please try again."
+  },
+  "offerZone": {
+    "heroTitle": "Exclusive Offers",
+    "heroSubtitle": "Amazing deals and discounts on premium spices and masalas",
+    "heroBadge": "🔥 Up to 30% OFF - Limited Time!",
+    "comboOffersTitle": "Combo Offers",
+    "comboOffersSubtitle": "Save more with our value bundles",
+    "hotDealsTitle": "🔥 Hot Deals",
+    "hotDealsSubtitle": "Grab these before they're gone!",
+    "viewDetails": "View Details",
+    "noOffers": "No offers available at the moment.",
+    "checkBack": "Check back soon for amazing deals!"
+  },
+  "search": {
+    "clear": "Clear search",
+    "searching": "Searching for products...",
+    "noResults": "No products found matching your search",
+    "tryDifferent": "Try searching with different keywords",
+    "sortRelevance": "Relevance",
+    "pages": "Pages",
+    "products": "Products",
+    "searchFor": "Search for \"{{query}}\"",
+    "resultsFor": "Results for \"{{query}}\"",
+    "resultsCount_one": "{{count}} result found",
+    "resultsCount_other": "{{count}} results found",
+    "emptyTitle": "What are you looking for?",
+    "emptyBody": "Type a spice, blend or combo in the search bar above to get started.",
+    "browseAll": "Browse all products"
+  },
+  "auth": {
+    "welcomeBack": "Welcome Back",
+    "email": "Email",
+    "password": "Password",
+    "orContinueWith": "Or continue with",
+    "login": "Login",
+    "loggingIn": "Logging in...",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account?",
+    "signUp": "Sign Up",
+    "loginFailed": "Login failed. Please check your credentials.",
+    "networkError": "Network error. Please try again.",
+    "googleFailed": "Google login failed. Please try again.",
+    "subtitle": "Enter your credentials to access your account",
+    "registerHere": "Register here",
+    "verifyFirst": "Please confirm your email first. We sent you a code."
+  },
+  "about": {
+    "badge": "Barnagar, Madhya Pradesh",
+    "heroPre": "Every pinch tells a ",
+    "heroHighlight": "story",
+    "heroPost": "",
+    "heroSubtitle": "From a family kitchen in Barnagar — ground fresh, packed fresh, shipped across India.",
+    "heroCta": "Taste our story",
+    "beginEyebrow": "Where it began",
+    "beginTitle": "A recipe passed down, never written down",
+    "beginP1": "It started in a family kitchen in Barnagar, Madhya Pradesh, grinding fresh masalas for family and neighbours.",
+    "beginP2": "Today every pack comes from our FSSAI-licensed facility (Lic. No. 11414730000288) and ships across India — pay online or Cash on Delivery.",
+    "valuesEyebrow": "What we stand for",
+    "valuesTitle": "Our Values",
+    "values": [
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      },
+      {
+        "title": "title",
+        "description": "description"
+      }
+    ],
+    "ctaTitle": "Cook with Barnagar's own masalas",
+    "ctaSubtitle": "FSSAI-licensed facility. Packed fresh, shipped across India — pay online or Cash on Delivery.",
+    "ctaButton": "Shop Spices",
+    "facts": [
+      {
+        "value": "FSSAI",
+        "label": "Lic. No. 11414730000288"
+      },
+      {
+        "value": "Barnagar",
+        "label": "Madhya Pradesh, India"
+      },
+      {
+        "value": "COD",
+        "label": "Cash on Delivery across India"
+      }
+    ]
+  },
+  "pages": {
+    "shipping": {
+      "areas": {
+        "title": "Shipping Areas",
+        "body": "We currently ship to all locations within India. Unfortunately, we do not ship internationally at this time."
+      },
+      "timeline": {
+        "title": "Delivery Timeline",
+        "metro": "<b>Metro Cities:</b> 3-5 business days",
+        "cities": "<b>Other Cities:</b> 5-7 business days",
+        "remote": "<b>Remote Areas:</b> 7-10 business days"
+      },
+      "charges": {
+        "title": "Shipping Charges",
+        "intro": "Shipping charges are calculated based on the weight of your order and delivery location:",
+        "free": "Orders of ₹499 and above: <b>Free Shipping</b>",
+        "upto": "Orders below ₹499: ₹69.62 shipping charge applies (₹59 + 18% GST)"
+      },
+      "tracking": {
+        "title": "Order Tracking",
+        "body": "Once your order is shipped, you will receive a tracking number via email and SMS. You can track your order using this number on the courier partner's website, or check its status on the My Orders page."
+      },
+      "processing": {
+        "title": "Order Processing",
+        "body": "Orders are processed within 24-48 hours of receiving payment confirmation. Orders placed on weekends or holidays will be processed on the next business day."
+      },
+      "attempts": {
+        "title": "Delivery Attempts",
+        "body": "Our courier partner will make 3 delivery attempts. If all attempts fail, the order will be returned to us. Please ensure someone is available to receive the order at the provided address."
+      },
+      "address": {
+        "title": "Shipping Address",
+        "body1": "The customer is responsible for providing a complete and correct shipping address at the time of placing the order. We are not liable for orders lost, delayed or returned due to a wrong or incomplete address, and no refund will be issued in such cases.",
+        "body2": "If you need to change your address, contact us on WhatsApp at <a>+91 93000 05040</a> within <b>1 hour</b> of placing the order. Address changes requested after this window cannot be guaranteed, as the order may already be processed for dispatch."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "body": "For any shipping-related queries, please contact our customer support at +91 93000 05040 or email us through our contact page."
+      }
+    },
+    "returns": {
+      "eligibility": {
+        "title": "Return & Replacement Eligibility",
+        "intro": "We accept return or replacement requests within 7 days of delivery for the following reasons only:",
+        "items": [
+          "Product received is damaged or defective",
+          "Wrong product delivered",
+          "Product packaging is tampered or broken",
+          "Missing items from your order"
+        ]
+      },
+      "video": {
+        "title": "Unboxing Video Required",
+        "intro": "An unboxing video is mandatory for every return or replacement request. Without it, we will not be able to accept your claim.",
+        "items": [
+          "Record a single, continuous video starting before the sealed package is opened",
+          "The shipping label and packaging condition must be clearly visible",
+          "Show all items as they are taken out, including the damaged, wrong or missing item issue",
+          "Videos that are cut, edited or start after the package is already open will not be accepted"
+        ]
+      },
+      "nonReturnable": {
+        "title": "Non-Returnable Items",
+        "intro": "Due to hygiene and quality reasons, the following cannot be returned:",
+        "items": [
+          "Products with broken seals or opened packaging (unless damaged on arrival)",
+          "Products that have been used or consumed",
+          "Change of mind — food products cannot be returned once delivered"
+        ]
+      },
+      "process": {
+        "title": "Return Process",
+        "items": [
+          "Contact our customer support within 7 days of delivery",
+          "Provide your order number, the reason for return and your unboxing video",
+          "Our team will verify your request within 24-48 hours",
+          "Once approved, we'll arrange a pickup from your address",
+          "Product must be returned in original packaging"
+        ]
+      },
+      "refund": {
+        "title": "Refund Process",
+        "intro": "Once we receive and inspect the returned product:",
+        "items": [
+          "Refunds are processed within 5-7 business days",
+          "For prepaid orders, the amount is credited back to the original payment method",
+          "For Cash on Delivery (COD) orders, there is no original payment method to credit — our team will call you to arrange the refund via UPI or bank transfer. All COD refund matters are resolved over the phone.",
+          "You will receive a confirmation once the refund is processed"
+        ]
+      },
+      "replacement": {
+        "title": "Replacement Policy",
+        "body": "We offer replacements for damaged or defective items, subject to the unboxing video requirement above. The replacement product will be shipped at no additional cost once we receive the returned item."
+      },
+      "cancellation": {
+        "title": "Cancellation",
+        "body": "You may cancel your order free of charge at any time before it has been shipped — just contact us and we will refund you in full. Once an order has been shipped, it can no longer be cancelled for a refund; you may still refuse delivery or use our returns process, but the shipping charge will not be refunded."
+      },
+      "contact": {
+        "title": "Contact Us",
+        "body": "For any return or refund queries, please contact our customer support at +91 93000 05040 or email us through our contact page. Our team is available Monday to Saturday, 9 AM to 6 PM IST."
+      }
+    },
+    "terms": {
+      "title": "Terms & Conditions",
+      "lastUpdated": "Last updated: {{date}}",
+      "intro": "These Terms & Conditions (\"Terms\") govern your access to and use of this website and the purchase of products from <brand>Nidhi Grah Udyog</brand> (\"we\", \"us\", \"our\"). By browsing the website, creating an account, or placing an order, you agree to be bound by these Terms. If you do not agree, please do not use the website.",
+      "s1": {
+        "title": "1. Eligibility",
+        "body": "You must be at least 18 years of age, or accessing the website under the supervision of a parent or legal guardian, and legally capable of entering into a binding contract under applicable Indian law to place an order with us."
+      },
+      "s2": {
+        "title": "2. Account & Registration",
+        "items": [
+          "You are responsible for providing accurate, current and complete information during registration and checkout.",
+          "You are responsible for maintaining the confidentiality of your login credentials and for all activity under your account.",
+          "We may suspend or terminate accounts that we reasonably believe are being used fraudulently or in breach of these Terms."
+        ]
+      },
+      "s3": {
+        "title": "3. Products & Food Information",
+        "items": [
+          "We sell packaged food products such as spices, masala blends and papad. Product images are for representation; actual colour, texture and packaging may vary slightly.",
+          "Please read the label, ingredients, allergen information and \"best before\" date on the physical packaging before consumption.",
+          "If you have food allergies or dietary restrictions, consume our products at your discretion. We are not liable for reactions where label instructions were not followed."
+        ]
+      },
+      "s4": {
+        "title": "4. Pricing & Payment",
+        "items": [
+          "All prices are listed in Indian Rupees (₹) and are inclusive of applicable taxes unless stated otherwise. GST is charged as per applicable rates.",
+          "Shipping charges, where applicable, are shown at checkout before you confirm your order.",
+          "In the rare event of a pricing error, we reserve the right to cancel the order and refund any amount already paid.",
+          "Payments are accepted via the methods displayed at checkout. Your order is confirmed only after we verify successful receipt of payment."
+        ]
+      },
+      "s5": {
+        "title": "5. Orders & Acceptance",
+        "body": "Your order is an offer to purchase. We reserve the right to accept or decline any order at our discretion, including where the product is out of stock, the delivery address is outside our serviceable area, or we suspect fraud. Where an order is declined after payment, the amount will be refunded."
+      },
+      "s6": {
+        "title": "6. Shipping, Returns & Cancellations",
+        "body": "Delivery timelines, shipping charges, returns, refunds and cancellations are governed by our <shipping>Shipping Policy</shipping> and <returns>Return & Refund Policy</returns>, which form part of these Terms."
+      },
+      "s7": {
+        "title": "7. Intellectual Property",
+        "body": "All content on this website — including logos, brand names, text, graphics, images and design — is the property of <brand>Nidhi Grah Udyog</brand> or its licensors and is protected by applicable intellectual property laws. You may not copy, reproduce or use it without our prior written permission."
+      },
+      "s8": {
+        "title": "8. Acceptable Use",
+        "body": "You agree not to use the website for any unlawful purpose, attempt to gain unauthorised access to our systems, upload malicious code, scrape data at scale, or interfere with the normal operation of the website."
+      },
+      "s9": {
+        "title": "9. Limitation of Liability",
+        "body": "To the maximum extent permitted by law, our total liability for any claim arising out of an order shall not exceed the amount paid by you for that order. We are not liable for indirect or consequential losses. Nothing in these Terms limits any rights you have under the Consumer Protection Act, 2019."
+      },
+      "s10": {
+        "title": "10. Governing Law & Jurisdiction",
+        "body": "These Terms are governed by the laws of India. Any dispute shall be subject to the exclusive jurisdiction of the courts at Ujjain, Madhya Pradesh."
+      },
+      "s11": {
+        "title": "11. Changes to These Terms",
+        "body": "We may update these Terms from time to time. The revised version will be posted on this page with an updated \"Last updated\" date. Continued use of the website after changes constitutes acceptance of the revised Terms."
+      },
+      "s12": {
+        "title": "12. Contact Us",
+        "body": "For any questions about these Terms, contact us at <phone>+91 93000 05040</phone> or through our <contact>Contact page</contact>."
+      }
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated: {{date}}",
+      "intro": "This Privacy Policy explains how <brand>Nidhi Grah Udyog</brand> (Proprietor: Lalit Kumar Jain) (\"we\", \"us\", \"our\") collects, uses, shares and protects your personal data when you use this website. We are committed to handling your data in accordance with the Digital Personal Data Protection Act, 2023 (DPDP Act) and applicable Indian law. By using the website, you agree to this Policy.",
+      "s1": {
+        "title": "1. Data We Collect",
+        "item1": "<b>Account & order details:</b> name, email, phone number, shipping address and order history.",
+        "item2": "<b>Payment information:</b> we do not store your full payment credentials; UPI/payments are handled by the payment provider.",
+        "item3": "<b>Usage & device data:</b> pages viewed, products browsed and approximate (coarse) location, used to improve the site and recommendations."
+      },
+      "s2": {
+        "title": "2. Purpose & Legal Basis",
+        "body": "We process your personal data for specified, lawful purposes: to process and deliver your orders, provide customer support, personalise recommendations, run anonymous aggregate analytics, send order updates, and (with your consent) promotional communication. We rely on your consent and on the necessity of processing to fulfil the services you request."
+      },
+      "s3": {
+        "title": "3. Consent",
+        "body": "You may withdraw your consent at any time by contacting us. Withdrawing consent will not affect the lawfulness of processing carried out before withdrawal, and may limit our ability to provide certain services."
+      },
+      "s4": {
+        "title": "4. Sharing of Data",
+        "body": "We share your data only with trusted service providers (courier/logistics partners, payment processors, hosting/analytics providers) to the extent necessary to operate the service. We do not sell your personal data. We may disclose data where required by law."
+      },
+      "s5": {
+        "title": "5. Cookies & Analytics",
+        "body": "We use cookies and similar technologies to keep you logged in, remember your cart, and understand how the website is used through anonymous, aggregate analytics. You can control cookies through your browser settings and the on-site cookie notice."
+      },
+      "s6": {
+        "title": "6. Data Security & Retention",
+        "body": "We use reasonable technical and organisational safeguards to protect your data. We retain personal data only as long as necessary to provide our services and to meet legal, accounting and tax obligations."
+      },
+      "s7": {
+        "title": "7. Your Rights (DPDP Act, 2023)",
+        "body": "You have the right to access, correct, update and erase your personal data, to nominate, and to grievance redressal. To exercise any right, contact us using the details below."
+      },
+      "s8": {
+        "title": "8. Grievance Officer",
+        "body": "<name>Ankur Jain</name> &bull; <phone>+91 93000 05040</phone><br />We acknowledge grievances within 48 hours and aim to resolve them within 30 days."
+      },
+      "s9": {
+        "title": "9. Contact Us",
+        "body": "<brand>Nidhi Grah Udyog</brand>, 7, Industrial Area, Runija Road, Barnagar, Ujjain, Madhya Pradesh 456771. Email <email>nidhispicesandfood@gmail.com</email> or call <phone>+91 93000 05040</phone>, or use our <contact>Contact page</contact>."
+      }
+    },
+    "faq": {
+      "title": "Frequently Asked Questions",
+      "subtitle": "Everything you need to know about ordering, delivery and returns.",
+      "still": "Still have a question? <a>Contact our team</a>.",
+      "items": [
+        {
+          "q": "Which areas do you deliver to?",
+          "a": "We currently ship to all locations across India. We do not offer international shipping at this time."
+        },
+        {
+          "q": "How long does delivery take?",
+          "a": "Orders are processed within 24–48 hours of payment confirmation. Delivery usually takes 3–5 business days in metro cities, 5–7 days in other cities, and 7–10 days for remote areas."
+        },
+        {
+          "q": "What are the shipping charges?",
+          "a": "Shipping is free on orders above ₹499. For orders below ₹499, a nominal shipping charge is applied and shown at checkout before you pay."
+        },
+        {
+          "q": "How do I track my order?",
+          "a": "Once your order ships, you will receive a tracking number by email/SMS. You can also view order status any time under 'My Orders'."
+        },
+        {
+          "q": "How do I download my bill / invoice?",
+          "a": "Go to 'My Orders', open the relevant order and click 'Bill' to download a GST tax invoice as a PDF."
+        },
+        {
+          "q": "What payment methods do you accept?",
+          "a": "We accept UPI payments. The accepted methods are shown at checkout. Your order is confirmed once we verify successful receipt of payment."
+        },
+        {
+          "q": "Can I cancel my order?",
+          "a": "Yes. Orders can be cancelled free of charge within 24 hours of placing them, provided they have not yet been shipped. See our Return & Refund Policy for details."
+        },
+        {
+          "q": "What is your return and refund policy?",
+          "a": "We accept returns within 7 days of delivery for damaged, defective, wrong or missing items. Approved refunds are processed to your original payment method within 5–7 business days. For hygiene reasons, opened or consumed food products cannot be returned unless they arrived damaged."
+        },
+        {
+          "q": "Are your products fresh and how should I store them?",
+          "a": "Yes — our spices and papad are packed fresh. Please check the 'best before' date on the packaging and store in a cool, dry place away from direct sunlight and moisture."
+        },
+        {
+          "q": "How can I contact customer support?",
+          "a": "You can reach us at +91 93000 05040 (Monday–Saturday, 9 AM–6 PM IST) or through our Contact page. You can also chat with us via the assistant on the website."
+        }
+      ]
+    },
+    "contact": {
+      "toastSuccess": "Thank you! We'll get back to you soon.",
+      "toastError": "Failed to send message. Please try again.",
+      "defaultSubject": "General Inquiry",
+      "badge": "We'd love to hear from you",
+      "heroTitleLead": "Get in",
+      "heroTitleAccent": "Touch",
+      "heroSubtitle": "Questions, bulk orders or feedback — our team is here to help.",
+      "formTitle": "Send us a Message",
+      "labelName": "Your Name",
+      "phName": "Enter your name",
+      "labelEmail": "Email Address",
+      "phEmail": "Enter your email",
+      "labelPhone": "Phone Number (Optional)",
+      "phPhone": "Enter your phone number",
+      "labelSubject": "Subject",
+      "phSubject": "What's this about?",
+      "labelMessage": "Message",
+      "phMessage": "How can we help you?",
+      "sending": "Sending...",
+      "send": "Send Message",
+      "addressTitle": "Address",
+      "addressLine1": "7, Industrial Area, Runija Road, Barnagar.",
+      "addressLine2": "PIN-456771 · Ujjain, MP, India",
+      "phoneTitle": "Phone",
+      "emailTitle": "Email",
+      "hoursTitle": "Business Hours",
+      "hoursLine1": "Monday – Saturday: 9:00 AM – 6:00 PM",
+      "hoursLine2": "Sunday: Closed",
+      "grievanceTitle": "Grievance Officer",
+      "grievanceBody": "We acknowledge grievances within 48 hours and aim to resolve them within 30 days.",
+      "mapTitle": "Our store location on the map"
+    }
+  },
+  "notFound": {
+    "message": "Oops! Page not found",
+    "returnHome": "Return to Home"
+  },
+  "favorites": {
+    "empty": "Your wishlist is empty",
+    "emptyHint": "Tap the heart on any product to save it here.",
+    "browse": "Browse Products",
+    "title": "My Favourites",
+    "count": "{{count}} saved item",
+    "count_other": "{{count}} saved items"
+  },
+  "orderSuccess": {
+    "title": "Order Successfully Placed!",
+    "subtitle": "Thank you for your order. We'll send you a confirmation email shortly.",
+    "continueShopping": "Continue Shopping",
+    "viewOrders": "View My Orders",
+    "redirecting": "Redirecting to products page in 5 seconds..."
+  },
+  "interestSuccess": {
+    "title": "Thank you for showing interest in our products!",
+    "soon": "We will soon start this service.",
+    "noted": "We have noted your requirements and we will try to serve you online as soon as possible.",
+    "refund": "In case you have paid anything, please contact us to get a full refund.",
+    "continueShopping": "Continue Shopping",
+    "contactSupport": "Contact Support: +91 93000 05040",
+    "tagline": "Nidhi Grah Udyog - Quality You Can Trust"
+  },
+  "forgotPassword": {
+    "enterEmail": "Please enter your email address",
+    "otpSent": "OTP sent! Please check your email.",
+    "otpFailed": "Failed to send OTP. Please try again.",
+    "networkError": "Network error. Please try again.",
+    "title": "Reset Password",
+    "description": "Enter your email address and we'll send you an OTP to reset your password.",
+    "email": "Email",
+    "sending": "Sending OTP...",
+    "sendOtp": "Send OTP",
+    "backToLogin": "Back to Login"
+  },
+  "resetPassword": {
+    "invalidOtp": "Please enter a valid email and 6-digit OTP.",
+    "otpVerified": "OTP verified!",
+    "otpExpired": "Invalid or expired OTP.",
+    "networkError": "Network error. Please try again.",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordTooShort": "Password must be at least 8 characters long.",
+    "resetSuccess": "Password reset successfully! You can now login.",
+    "resetFailed": "Failed to reset password. Please check requirements.",
+    "verifyTitle": "Verify OTP",
+    "createTitle": "Create New Password",
+    "verifyDesc": "Enter the 6-digit code sent to your email.",
+    "createDesc": "Enter a strong password to secure your account.",
+    "email": "Email",
+    "otpLabel": "6-Digit OTP",
+    "verifying": "Verifying...",
+    "verifyButton": "Verify OTP",
+    "notReceived": "Didn't receive it?",
+    "requestAgain": "Request again",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "resetting": "Resetting...",
+    "resetButton": "Reset Password"
+  },
+  "trackOrder": {
+    "step1": "Order Placed",
+    "step1Desc": "Confirmed",
+    "step2": "Packed",
+    "step2Desc": "Hand-packed",
+    "step3": "In Transit",
+    "step3Desc": "On the way",
+    "step4": "Delivered",
+    "step4Desc": "At your door",
+    "badge": "Real-time order updates",
+    "titleLead": "Track Your",
+    "titleAccent": "Order",
+    "subtitle": "Enter your order ID to see exactly where your spices are.",
+    "orderIdLabel": "Order ID",
+    "orderIdPlaceholder": "Enter your order ID",
+    "orderIdHint": "You can find your order ID in the confirmation email",
+    "trackButton": "Track Order",
+    "needHelp": "Need Help?",
+    "needHelpBody": "Having trouble tracking your order? Our team is happy to help.",
+    "contactSupport": "Contact Support",
+    "journeyTitle": "How your order travels to you"
+  },
+  "register": {
+    "passwordMismatch": "Passwords don't match",
+    "passwordTooShort": "Password must be at least 8 characters long",
+    "passwordComplexity": "Password must contain at least one uppercase letter, one lowercase letter, and one number",
+    "agreePrivacyError": "Please agree to the Privacy Policy to continue",
+    "success": "Registration successful!",
+    "failed": "Registration failed. Please try again.",
+    "title": "Create an account",
+    "description": "Enter your information to create your account",
+    "fullName": "Full Name",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "username": "Username",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "state": "State",
+    "pincode": "Pincode",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "agreePrivacy": "I agree to the <a>Privacy Policy</a>, including how my activity is used for recommendations and anonymous, aggregate analytics.",
+    "creating": "Creating account...",
+    "create": "Create account",
+    "haveAccount": "Already have an account?",
+    "login": "Login",
+    "checkEmail": "Almost done. Check your email for a 6-digit code."
+  },
+  "combosPage": {
+    "loadError": "Failed to load combos",
+    "benefitCurated": "Hand-curated bundles",
+    "benefitValue": "Better value than buying separately",
+    "benefitShipping": "Free shipping over ₹{{amount}}",
+    "eyebrow": "Value Bundles",
+    "title": "Combo Offers",
+    "subtitle": "Thoughtfully paired spice bundles — more flavour, less spend.",
+    "saveUpTo": "Save up to {{percent}}%",
+    "emptyTitle": "No combos available right now",
+    "emptyBody": "New bundles drop regularly — meanwhile, explore our full range of spices.",
+    "browseAll": "Browse all products",
+    "moreBundles": "More bundles"
+  },
+  "assistant": {
+    "langAuto": "Auto",
+    "greeting": "Hi! I'm the Nidhi Assistant. Ask me about our spices, your orders, or just say what you're cooking! 🌶️",
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago",
+    "error": "Sorry, something went wrong. Please try again.",
+    "escalated": "Flagged for our team — they usually reply within a day.",
+    "proposalConfirm": "Add all to cart",
+    "proposalEditConfirm": "Update cart",
+    "proposalAdded": "Added to cart",
+    "proposalUpdated": "Cart updated",
+    "proposalFailed": "Could not update the cart — please try again",
+    "proposalDone": "Done ✓",
+    "proposalLess": "Less",
+    "proposalMore": "More",
+    "voiceMicDenied": "Microphone blocked — allow mic access to use voice.",
+    "voiceTranscribeFailed": "Could not transcribe that — please try again.",
+    "voiceNothingHeard": "Didn't catch that — please try again.",
+    "readAloudAria": "Read replies aloud",
+    "readAloudOn": "Read-aloud on",
+    "readAloudOff": "Read-aloud off",
+    "voiceUnsupported": "Voice input isn't supported in this browser.",
+    "openAria": "Open Nidhi Assistant",
+    "threadListAria": "Thread list",
+    "yourConversations": "Your Conversations",
+    "title": "Nidhi Assistant",
+    "replyLanguageAria": "Reply language",
+    "newConversation": "New conversation",
+    "newChat": "New chat",
+    "humanHandoff": "A team member is helping you with this chat.",
+    "humanHandoffNamed": "{{name}} from our team is helping you with this chat.",
+    "humanHandoffWait": "Replies may take a few minutes.",
+    "contextFull": "This chat has grown long, so I may not remember the earliest messages. Start a new chat for best results.",
+    "contextFullCta": "Start a new chat",
+    "close": "Close",
+    "noConversations": "No conversations yet. Start one!",
+    "needsAttention": "Needs attention",
+    "teamMember": "{{name}} — Nidhi Team",
+    "stopListening": "Stop listening",
+    "speak": "Speak",
+    "listening": "Listening…",
+    "transcribing": "Transcribing…",
+    "inputPlaceholder": "Ask about spices, orders…"
+  },
+  "billing": {
+    "paymentNotConfigured": "Payment system not configured. Please contact support.",
+    "cartEmpty": "Your cart is empty",
+    "loadError": "Failed to load billing data",
+    "qrError": "Failed to generate payment QR",
+    "enterCoupon": "Please enter a coupon code",
+    "paymentNotInitialized": "Payment system not initialized",
+    "invalidCoupon": "Invalid coupon code",
+    "couponApplied": "Coupon applied! ₹{{amount}} saved",
+    "couponFailed": "Could not apply coupon",
+    "couponRemoved": "Coupon removed",
+    "locationDenied": "Couldn't access your location.",
+    "addressFilled": "Address filled from your location. Please review it.",
+    "addressFailed": "Couldn't determine your address. Please enter it manually.",
+    "errNameRequired": "Name is required",
+    "errEmailRequired": "Email is required",
+    "errEmailInvalid": "Invalid email format",
+    "errPhoneRequired": "Phone is required",
+    "errPhoneInvalid": "Invalid phone number",
+    "errAddressRequired": "Address is required",
+    "errCityRequired": "City is required",
+    "errStateRequired": "State is required",
+    "errZipRequired": "Zip code is required",
+    "errPaymentRequired": "Please confirm payment via UPI QR before placing order",
+    "fillAllFields": "Please fill all required fields correctly",
+    "orderPlaced": "Order placed successfully!",
+    "orderFailed": "Failed to place order",
+    "loadingCheckout": "Loading checkout...",
+    "checkout": "Checkout",
+    "shippingInfo": "Shipping Information",
+    "useLocation": "Use my location",
+    "noSavedAddress": "No saved address yet — detect it automatically, then review the fields below.",
+    "fullName": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "state": "State",
+    "zipCode": "Zip Code",
+    "orderSummary": "Order Summary",
+    "qty": "Qty: {{count}}",
+    "perUnit": "₹{{price}}/unit",
+    "haveCoupon": "Have a coupon?",
+    "enterCode": "Enter code",
+    "apply": "Apply",
+    "couponAppliedTag": "{{code}} applied ✓",
+    "remove": "Remove",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "shipping": "Shipping",
+    "free": "FREE",
+    "tax": "Tax (GST)",
+    "taxIncluded": "Incl. GST {{amount}}",
+    "total": "Total",
+    "scanToPay": "Scan to Pay ₹{{amount}}",
+    "qrAlt": "UPI Payment QR Code",
+    "loadingQr": "Loading QR...",
+    "payViaApp": "Pay via UPI App",
+    "scanHint": "Scan QR or click button above, then confirm payment below",
+    "paymentDone": "I have completed the payment",
+    "processing": "Processing...",
+    "placeOrder": "Place Order",
+    "placeFreeOrder": "Place order",
+    "payAmount": "Pay ₹{{amount}}",
+    "securePay": "Secure payment via Razorpay — UPI, cards, netbanking & wallets",
+    "confirmingPayment": "Confirming your payment… we'll update your order shortly.",
+    "paymentIncomplete": "Payment not completed. You can finish it from My Orders."
+  },
+  "profile": {
+    "loadFailed": "Failed to load profile",
+    "paymentsLoadFailed": "Failed to load payment methods",
+    "updateSuccess": "Profile updated successfully!",
+    "updateFailed": "Failed to update profile",
+    "locationDenied": "Couldn't access your location.",
+    "addressFilled": "Address filled from your location. Review it, then Save.",
+    "addressFailed": "Couldn't determine your address. Please enter it manually.",
+    "allFieldsRequired": "All fields required",
+    "passwordMismatch": "Passwords do not match",
+    "passwordChanged": "Password changed successfully!",
+    "passwordChangeFailed": "Failed to change password",
+    "errUpiRequired": "UPI ID is required",
+    "errCardBrand": "Card brand required",
+    "errLastFour": "Last 4 digits required",
+    "errMonth": "Valid month required",
+    "errYear": "Year required",
+    "errBankName": "Bank name required",
+    "errWalletProvider": "Wallet provider required",
+    "fillAllFields": "Please fill in all required fields correctly",
+    "paymentAdded": "Payment method added!",
+    "paymentAddFailed": "Failed to add payment method",
+    "paymentRemoved": "Payment method removed.",
+    "paymentRemoveFailed": "Failed to remove payment method",
+    "defaultUpdated": "Default payment method updated!",
+    "defaultFailed": "Failed to set default payment method",
+    "loading": "Loading your profile...",
+    "tabProfile": "Profile",
+    "tabSecurity": "Security",
+    "tabPayment": "Payment",
+    "infoTitle": "Profile Information",
+    "infoDesc": "Update your account information",
+    "username": "Username",
+    "fullName": "Full Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "useLocation": "Use my location",
+    "city": "City",
+    "state": "State",
+    "pincode": "Pincode",
+    "updating": "Updating...",
+    "updateButton": "Update Profile",
+    "logout": "Logout",
+    "securityTitle": "Security Settings",
+    "securityDesc": "Change your password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "changing": "Changing...",
+    "changePassword": "Change Password",
+    "paymentTitle": "Payment Methods",
+    "paymentDesc": "Manage your saved payment methods",
+    "loadingPayments": "Loading payment methods...",
+    "noPayments": "No payment methods added yet",
+    "default": "Default",
+    "setDefault": "Set Default",
+    "upiIdLabel": "UPI ID: {{id}}",
+    "cardEnding": "{{brand}} ending in {{last}}",
+    "cardExpires": ", Expires {{month}}/{{year}}",
+    "bankLabel": "Bank: {{bank}}",
+    "providerLabel": "Provider: {{provider}}",
+    "addPayment": "Add New Payment Method",
+    "addPaymentTitle": "Add Payment Method",
+    "addPaymentDesc": "Add a new payment method to your account",
+    "paymentType": "Payment Type",
+    "typeUpi": "UPI",
+    "typeCard": "Card",
+    "typeNetbanking": "Net Banking",
+    "typeWallet": "Wallet",
+    "upiId": "UPI ID",
+    "cardBrand": "Card Brand",
+    "selectCardBrand": "Select card brand",
+    "lastFour": "Last 4 Digits",
+    "expiryMonth": "Expiry Month",
+    "expiryYear": "Expiry Year",
+    "bankName": "Bank Name",
+    "walletProvider": "Wallet Provider",
+    "selectWallet": "Select wallet",
+    "setAsDefault": "Set as default payment method",
+    "adding": "Adding..."
+  },
+  "myOrders": {
+    "statusPending": "Pending",
+    "statusInTransit": "In Transit",
+    "statusDelivered": "Delivered",
+    "statusCancelled": "Cancelled",
+    "loginRequired": "Please login to view your orders",
+    "loadFailed": "Failed to load orders.",
+    "noItemsReorder": "No items to reorder",
+    "reorderAdded": "Items from this order added to cart",
+    "reorderFailed": "Failed to reorder items",
+    "billDownloaded": "Downloaded bill for {{order}}",
+    "billFailed": "Failed to download bill. Please try again.",
+    "supportSeed": "I need help with my order {{order}}.",
+    "selectRating": "Please select a rating",
+    "noItemSelected": "No item selected for review",
+    "reviewSubmitted": "Review submitted for {{name}}!",
+    "reviewFailed": "Failed to submit review. Please try again.",
+    "feedbackThanks": "Thank you for your feedback!",
+    "cancelSuccess": "Order cancelled successfully",
+    "cancelFailed": "Failed to cancel order. Please try again.",
+    "titleLead": "My",
+    "titleAccent": "Orders",
+    "fetching": "Fetching your orders…",
+    "placedCount": "You've placed {{count}} order with us",
+    "placedCount_other": "You've placed {{count}} orders with us",
+    "trackSubtitle": "Track and manage everything you order",
+    "loadingOrders": "Loading orders...",
+    "orderLabel": "Order {{number}}",
+    "placedOn": "Placed on {{date}}",
+    "showLess": "Show less",
+    "showMore": "Show more",
+    "total": "Total",
+    "qtyPrice": "Qty: {{qty}} × ₹{{price}}",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "tax": "Tax",
+    "taxIncluded": "Incl. GST {{amount}}",
+    "shippingTo": "Shipping to: {{address}}",
+    "shippedWith": "Shipped with {{courier}}",
+    "trackParcel": "Track parcel",
+    "reorder": "Reorder",
+    "support": "Support",
+    "bill": "Bill",
+    "retryPayment": "Complete payment",
+    "processing": "Processing…",
+    "paymentSuccess": "Payment received!",
+    "paymentConfirming": "Confirming your payment…",
+    "retryFailed": "Could not start payment. Please try again.",
+    "cancel": "Cancel",
+    "cancelTitle": "Cancel this order?",
+    "cancelConfirm": "Are you sure you want to cancel order <b>{{number}}</b>? This action cannot be undone.",
+    "keepOrder": "No, keep order",
+    "cancelling": "Cancelling...",
+    "confirmCancel": "Yes, cancel",
+    "review": "Review",
+    "reviewTitle": "Review {{name}}",
+    "reviewDesc": "Share your experience with this {{itemType}}",
+    "typeProduct": "product",
+    "typeCombo": "combo",
+    "selectItem": "Select Item to Review",
+    "rating": "Rating",
+    "yourReview": "Your Review (optional)",
+    "reviewPlaceholder": "Tell us what you think about this product...",
+    "submitting": "Submitting...",
+    "submitReview": "Submit Review",
+    "emptyTitle": "No orders yet",
+    "emptyBody": "Looks like you haven't placed any orders yet. Explore our amazing collection and start shopping!",
+    "continueShopping": "Continue Shopping",
+    "statusConfirmed": "Confirmed",
+    "statusProcessing": "Processing",
+    "statusShipped": "Shipped",
+    "statusDelivering": "Out for delivery",
+    "shipping": "Shipping",
+    "free": "FREE",
+    "alreadyReviewed": "Already reviewed"
+  },
+  "password": {
+    "strengthLabel": "Password strength",
+    "veryWeak": "Very weak",
+    "weak": "Weak",
+    "fair": "Fair",
+    "good": "Good",
+    "strong": "Strong"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong on our end",
+    "message": "We hit a technical issue while loading this page. It is not something you did. Please try reloading — and if it keeps happening, contact us and we will sort it out for you.",
+    "reload": "Reload page",
+    "home": "Back to home",
+    "contactTitle": "Still stuck? Contact us",
+    "contactHint": "Quote the reference below and we can trace exactly what happened.",
+    "whatsapp": "WhatsApp",
+    "copy": "Copy details",
+    "copied": "Copied"
+  },
+  "verifyEmail": {
+    "title": "Confirm your email",
+    "description": "We sent a 6-digit code to {{email}}. Enter it to finish setting up your account.",
+    "code": "Verification code",
+    "hint": "The code is valid for 10 minutes. Check your spam folder if you cannot find it.",
+    "enterCode": "Please enter the 6-digit code.",
+    "verify": "Confirm email",
+    "verifying": "Confirming...",
+    "failed": "That code did not work. Please try again.",
+    "resend": "Resend code",
+    "resendIn": "Resend code in {{seconds}}s",
+    "resent": "If a new code was due, it is on its way.",
+    "resendFailed": "Could not send a new code. Please try again in a while.",
+    "wrongEmail": "Wrong email address?",
+    "registerAgain": "Register again"
+  },
+  "changeEmail": {
+    "change": "Change",
+    "title": "Change login email",
+    "description": "Your login email is {{email}}. We will send a code to the new address to confirm it.",
+    "codeDescription": "Enter the 6-digit code we sent to {{email}}.",
+    "newEmail": "New email",
+    "currentPassword": "Current password",
+    "googleHint": "Signed up with Google and never set a password? Use \"Forgot password\" on the login page to set one first.",
+    "code": "Verification code",
+    "sendCode": "Send code",
+    "confirm": "Change email",
+    "back": "Back",
+    "codeSent": "Code sent to {{email}}.",
+    "success": "Login email changed.",
+    "failed": "Could not change your email. Please try again."
+  }
+}
