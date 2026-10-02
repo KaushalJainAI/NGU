@@ -16,6 +16,8 @@ export interface CarouselProductItem {
   weight?: string;
   badge?: string;
   itemType?: "product" | "combo";
+  /** False = nothing can be bought now; the card shows "Out of stock". */
+  inStock?: boolean;
 }
 
 interface ProductCarouselProps {

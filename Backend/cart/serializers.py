@@ -5,9 +5,20 @@ from orders.pricing import (
     allocate_combo_components, blended_rate, combo_line_tax, extract_tax,
     group_tax_by_rate, shipping_tax_for, tax_rate_for,
 )
+from products.availability import (
+    INSUFFICIENT_STOCK, line_max_quantity, line_problem, product_has_stock,
+)
 from spices_backend.limits import (
     SHIPPING_CHARGE, SHIPPING_TAX_RATE, FREE_SHIPPING_THRESHOLD, DEFAULT_TAX_RATE,
 )
+
+
+def problem_of(cart_item):
+    """Why this line cannot be bought (products.availability.line_problem),
+    worked out once per line however many fields ask."""
+    if not hasattr(cart_item, '_line_problem'):
+        cart_item._line_problem = line_problem(cart_item)
+    return cart_item._line_problem
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +43,8 @@ class CartItemResponseSerializer(serializers.Serializer):
     subtotal = serializers.SerializerMethodField()
     stock = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    available = serializers.SerializerMethodField()
+    unavailable_reason = serializers.SerializerMethodField()
     variant_id = serializers.SerializerMethodField()
     variant_slug = serializers.SerializerMethodField()
     weight = serializers.SerializerMethodField()
@@ -129,29 +142,28 @@ class CartItemResponseSerializer(serializers.Serializer):
     def get_subtotal(self, obj):
         return float(getattr(obj, 'subtotal', 0))
 
+    def _problem(self, obj):
+        return problem_of(obj)
+
     def get_stock(self, obj):
-        item_type = getattr(obj, 'item_type', 'product') or 'product'
-        variant = getattr(obj, 'variant', None)
-        if item_type == 'product' and variant:
-            return variant.stock
-        item = self._get_item(obj)
-        if not item:
-            return 0
-        if item_type == 'product':
-            return getattr(item, 'stock', 0)
-        return getattr(item, 'stock', 999)  # combos default to 999
+        # A combo's figure is how many can be BUILT from its components' stock
+        # (it used to be a hard-coded 999).
+        return line_max_quantity(obj)
 
     def get_in_stock(self, obj):
-        item_type = getattr(obj, 'item_type', 'product') or 'product'
-        variant = getattr(obj, 'variant', None)
-        if item_type == 'product' and variant:
-            return variant.stock > 0
-        item = self._get_item(obj)
-        if not item:
-            return False
-        if item_type == 'product' and hasattr(item, 'stock'):
-            return item.stock > 0
-        return True
+        # False for a switched-off product, a retired size, an unbuildable combo
+        # or a sold-out line — the storefront greys those out and leaves them out
+        # of the totals. A line that is only SHORT (customer wants 5, 3 left) is
+        # still in stock: the stepper must stay so they can lower it.
+        return self._problem(obj) in (None, INSUFFICIENT_STOCK)
+
+    def get_available(self, obj):
+        """True only when the line can be bought exactly as it stands."""
+        return self._problem(obj) is None
+
+    def get_unavailable_reason(self, obj):
+        """A code from products.availability, or None when the line is fine."""
+        return self._problem(obj)
 
 
 # ---------------------------------------------------------------------------
@@ -167,26 +179,48 @@ class CartResponseSerializer(serializers.Serializer):
     items = serializers.SerializerMethodField()
     summary = serializers.SerializerMethodField()
 
+    def _cart_lines(self, cart):
+        """The cart's lines, loaded once and shared by `items` and `summary` so
+        the availability check costs no query per line."""
+        if not hasattr(self, '_lines_cache'):
+            self._lines_cache = list(cart.items.select_related(
+                'product', 'product__category', 'combo', 'variant', 'variant__product'
+            ).prefetch_related(
+                'combo__productcomboitem_set__variant',
+                'combo__productcomboitem_set__product',
+            ))
+        return self._lines_cache
+
     def get_items(self, obj):
-        cart = obj['cart']
-        cart_items = cart.items.select_related(
-            'product', 'product__category', 'combo', 'variant', 'variant__product'
-        ).all()
         return CartItemResponseSerializer(
-            cart_items,
+            self._cart_lines(obj['cart']),
             many=True,
             context=self.context,
         ).data
 
     def get_summary(self, obj):
         cart = obj['cart']
-        subtotal = float(cart.total_price)
+        cart_lines = cart_lines_all = self._cart_lines(cart)
+        # Lines the customer cannot buy (switched off, retired size, unbuildable
+        # combo, sold out) are not priced: the storefront leaves them out of its
+        # totals, so the server's summary must too or Billing quotes a different
+        # figure. Only WHICH lines are fed in changes — no formula does.
+        unpriced = [
+            ci for ci in cart_lines
+            if problem_of(ci) not in (None, INSUFFICIENT_STOCK)
+        ]
+        if unpriced:
+            skip = {ci.pk for ci in unpriced}
+            cart_lines = [ci for ci in cart_lines if ci.pk not in skip]
+            subtotal = float(sum((ci.subtotal for ci in cart_lines), Decimal('0')))
+        else:
+            subtotal = float(cart.total_price)
         # Prices are GST-INCLUSIVE, so this is the tax already contained in the
         # subtotal — reported for disclosure, never added to the total. Papad
         # lines (tax_rate=0) contribute nothing; everything else defaults to 5%.
         tax = Decimal('0.00')
         lines = []
-        for ci in cart.items.select_related('product', 'combo', 'variant').all():
+        for ci in cart_lines:
             if ci.item_type == 'combo' and ci.combo:
                 # A combo is a mixed supply — each component is taxed at its own
                 # product's rate, so it contributes one breakdown line PER
@@ -235,6 +269,10 @@ class CartResponseSerializer(serializers.Serializer):
             'free_shipping_threshold': float(FREE_SHIPPING_THRESHOLD),
             'discount': discount,
             'total': total,
+            # Lines checkout would refuse as they stand — including one that is
+            # only short of stock. Billing sends the customer back to the cart
+            # when this is above zero.
+            'unavailable_count': sum(1 for ci in cart_lines_all if problem_of(ci)),
         }
 
 
@@ -256,6 +294,12 @@ class FavoriteItemSerializer(serializers.Serializer):
     weight = serializers.SerializerMethodField()
     badge = serializers.SerializerMethodField()
     added_at = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
+
+    def get_in_stock(self, obj):
+        # Any active size with stock (boolean only — AP8/S12).
+        product = getattr(obj, 'product', None)
+        return product_has_stock(product) if product else False
 
     def get_id(self, obj):
         product = getattr(obj, 'product', None)

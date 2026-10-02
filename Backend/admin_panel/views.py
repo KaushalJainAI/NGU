@@ -373,13 +373,18 @@ class DashboardViewSet(viewsets.ViewSet):
         to_ship = Order.objects.filter(
             is_deleted=False, status__in=['confirmed', 'processing'])
 
-        low_stock_qs = Product.objects.filter(
-            is_active=True, stock__lte=F('low_stock_threshold'),
-        ).order_by('stock')
+        # Per SIZE (products.availability): a 500 g pack running out is low stock
+        # even while the default size is healthy. The headline counts PRODUCTS so
+        # it matches the Products page filter the dashboard links to; the list
+        # names the five lowest sizes.
+        from products.availability import low_stock_sizes
+        low_sizes = low_stock_sizes()
         low_stock_items = [
-            {'id': p.id, 'name': p.name, 'stock': p.stock}
-            for p in low_stock_qs[:5]
+            {'id': v.product_id, 'variant_id': v.id, 'name': v.product.name,
+             'size': v.formatted_weight, 'stock': v.stock}
+            for v in low_sizes[:5]
         ]
+        low_stock_count = low_sizes.order_by().values('product_id').distinct().count()
 
         chats_waiting = AssistantConversation.objects.filter(
             needs_human=True, status='active').count()
@@ -524,7 +529,9 @@ class DashboardViewSet(viewsets.ViewSet):
             is_deleted=False, status__in=['confirmed', 'processing'],
             created_at__lt=now - timedelta(hours=48),
         ).filter(Q(payment_method='COD') | Q(payment_status='paid')).count()
-        out_of_stock_count = Product.objects.filter(is_active=True, stock__lte=0).count()
+        from products.availability import out_of_stock_sizes
+        out_of_stock_count = (
+            out_of_stock_sizes().order_by().values('product_id').distinct().count())
         invoices_missing = Order.objects.filter(
             is_deleted=False, invoice__isnull=True,
         ).exclude(status='cancelled').filter(
@@ -559,7 +566,7 @@ class DashboardViewSet(viewsets.ViewSet):
         data = {
             'orders_to_confirm': confirmable.count(),
             'orders_to_ship': to_ship.count(),
-            'low_stock_count': low_stock_qs.count(),
+            'low_stock_count': low_stock_count,
             'low_stock_items': low_stock_items,
             'chats_waiting': chats_waiting,
             'unread_chats': unread_chats,

@@ -19,6 +19,10 @@ interface CartItem {
   quantity: number;
   stock?: number;
   inStock?: boolean;
+  /** Why the server says this line cannot be bought as it stands (a code from
+   *  products/availability.py: product_off, size_retired, combo_off,
+   *  combo_unavailable, out_of_stock, insufficient_stock), or null when it can. */
+  unavailableReason?: string | null;
   /** GST rate (%) for this line, sourced from the product's tax_rate column.
    *  Falls back to 0 when absent — the backend column is authoritative. */
   taxRate?: number;
@@ -50,6 +54,7 @@ interface BackendCartItem {
   badge?: string;
   stock?: number;
   in_stock?: boolean;
+  unavailable_reason?: string | null;
   tax_rate?: number;
 }
 
@@ -71,7 +76,8 @@ interface CartContextType {
   updateQuantity: (id: number, quantity: number, itemType: "product" | "combo", variantId?: number | null) => Promise<void>;
   removeFromCart: (id: number, itemType: "product" | "combo", variantId?: number | null) => Promise<void>;
   clearCart: () => Promise<void>;
-  fetchCartFromBackend: () => Promise<void>;
+  /** Resolves to the fresh cart, or `null` when it could not be loaded. */
+  fetchCartFromBackend: () => Promise<CartItem[] | null>;
   isLoading: boolean;
 }
 
@@ -138,6 +144,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       badge: item.badge,
       stock: item.stock ?? 999,
       inStock: item.in_stock ?? true,
+      unavailableReason: item.unavailable_reason ?? null,
       // An explicit 0 (papad/papad katran) stays 0; only an ABSENT rate falls
       // back to the backend default, so we never under-quote GST in the cart.
       taxRate: item.tax_rate ?? DEFAULT_TAX_RATE,
@@ -145,7 +152,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const fetchCartFromBackend = useCallback(async () => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn) return null;
 
     try {
       const response = await cartAPI.get();
@@ -155,10 +162,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setCart(backendCart);
         localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(backendCart));
+        return backendCart;
       }
+      toast.error("Failed to load cart");
+      return null;
     } catch (error) {
       console.error("Failed to fetch cart from backend:", error);
       toast.error("Failed to load cart");
+      return null;
     }
   }, [isLoggedIn, mapBackendToFrontend]);
 

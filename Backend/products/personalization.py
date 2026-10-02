@@ -15,10 +15,11 @@ from collections import defaultdict
 from datetime import timedelta
 import logging
 
-from django.db.models import Count
+from django.db.models import Count, prefetch_related_objects
 from django.utils import timezone
 from django.utils.translation import get_language
 
+from .availability import in_stock_products
 from .models import Product
 from .serializers import SearchProductSerializer
 from .cache import make_cache_key, TTL_SHORT, TTL_MEDIUM
@@ -155,7 +156,7 @@ class RecommendationEngine:
         max_copurchase = max(copurchase.values()) if copurchase else 1
 
         candidates = list(
-            Product.objects.filter(is_active=True, stock__gt=0).select_related('category')
+            in_stock_products(Product.objects.filter(is_active=True)).select_related('category')
         )
 
         scored = []
@@ -192,15 +193,15 @@ class RecommendationEngine:
 
     def _fallback_queryset(self, limit):
         """Featured-first, then any active in-stock product."""
-        featured = list(Product.objects.filter(
-            is_active=True, stock__gt=0, is_featured=True
-        ).select_related('category')[:limit])
+        featured = list(in_stock_products(Product.objects.filter(
+            is_active=True, is_featured=True
+        )).select_related('category')[:limit])
         if len(featured) >= limit:
             return featured
         seen = {p.id for p in featured}
-        extra = Product.objects.filter(
-            is_active=True, stock__gt=0
-        ).exclude(id__in=seen).select_related('category')[:limit - len(featured)]
+        extra = in_stock_products(Product.objects.filter(
+            is_active=True
+        )).exclude(id__in=seen).select_related('category')[:limit - len(featured)]
         return featured + list(extra)
 
     def _fallback(self, limit):
@@ -208,6 +209,9 @@ class RecommendationEngine:
         return self._serialize(products, [0.0] * len(products), score_type='popular')
 
     def _serialize(self, products, scores, score_type='personalized'):
+        # `in_stock` reads every size; load them for all products in one query.
+        products = list(products)
+        prefetch_related_objects(products, 'variants')
         data = SearchProductSerializer(products, many=True).data
         for item, score in zip(data, scores):
             item['score'] = round(float(score), 3)

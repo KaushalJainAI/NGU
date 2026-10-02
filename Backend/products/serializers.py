@@ -4,6 +4,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from django.db import transaction
 from django.db.models import Avg
+from .availability import combo_can_be_built, product_has_stock
 from .models import (
     Category, Product, ProductImage, ProductCombo, ProductComboItem,
     ProductSection, ProductVariant,
@@ -142,6 +143,12 @@ class SectionProductSerializer(serializers.Serializer):
     # showed as unrated on the front page.
     average_rating = serializers.SerializerMethodField()
     reviews_count = serializers.SerializerMethodField()
+    # Boolean only (AP8/S12). Any active size with stock, so a card does not
+    # offer "Add to cart" for a product nothing of which can be bought.
+    in_stock = serializers.SerializerMethodField()
+
+    def get_in_stock(self, obj):
+        return product_has_stock(obj)
 
     def get_average_rating(self, obj):
         return visible_review_average(obj)
@@ -201,6 +208,11 @@ class SectionComboSerializer(serializers.Serializer):
     discount = serializers.SerializerMethodField()
     badge = serializers.SerializerMethodField()
     is_featured = serializers.BooleanField()
+    # Boolean only (AP8/S12) — can every component cover one more combo?
+    in_stock = serializers.SerializerMethodField()
+
+    def get_in_stock(self, obj):
+        return combo_can_be_built(obj)
 
     def get_name(self, obj):
         return getattr(obj, 'display_title', None) or getattr(obj, 'name', '')
@@ -269,6 +281,7 @@ class HomepageSectionSerializer(serializers.Serializer):
         all_products = list(
             Product.objects.filter(is_active=True)
             .select_related('category')
+            .prefetch_related('variants')
             .order_by('-is_featured', 'id')
         )
         if not all_products:
@@ -351,7 +364,8 @@ class SearchProductSerializer(serializers.Serializer):
     def get_in_stock(self, obj):
         # AP8/S12: boolean only — the exact count must not be pollable. Staff
         # who need counts use the product endpoints (staff see `stock` there).
-        return bool(getattr(obj, 'stock', 0) or 0)
+        # Any ACTIVE size with stock counts, not just the default one.
+        return product_has_stock(obj)
 
 
 class SearchComboSerializer(serializers.Serializer):
@@ -367,9 +381,14 @@ class SearchComboSerializer(serializers.Serializer):
     image = serializers.SerializerMethodField()
     thumbnail = serializers.SerializerMethodField()
     products = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
 
     def get_type(self, obj):
         return 'combo'
+
+    def get_in_stock(self, obj):
+        # Boolean only (AP8/S12).
+        return combo_can_be_built(obj)
 
     def get_name(self, obj):
         return getattr(obj, 'display_title', None) or getattr(obj, 'name', '')
@@ -690,10 +709,15 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
     total_original_price = serializers.ReadOnlyField()
     total_weight = serializers.ReadOnlyField()
     available_stock = serializers.ReadOnlyField()
+    # The public's version of `available_stock`: a boolean, never the count.
+    in_stock = serializers.SerializerMethodField(read_only=True)
     # Combos accept reviews (My Orders offers a review dialog for them) but had
     # no rating fields, so those reviews were written and never displayed.
     average_rating = serializers.SerializerMethodField(read_only=True)
     reviews_count = serializers.SerializerMethodField(read_only=True)
+
+    def get_in_stock(self, obj):
+        return combo_can_be_built(obj)
 
     def get_average_rating(self, obj):
         return visible_review_average(obj)
@@ -707,7 +731,7 @@ class ProductComboSerializer(StaffOnlyFieldsMixin, serializers.ModelSerializer):
             'id', 'name', 'slug', 'description', 'title', 'subtitle',
             'display_title', 'price', 'discount_price', 'final_price',
             'discount_percentage', 'total_original_price', 'total_weight',
-            'low_stock_threshold', 'available_stock',
+            'low_stock_threshold', 'available_stock', 'in_stock',
             'weight', 'unit', 'image', 'thumbnail', 'is_active', 'is_featured', 'badge', 'created_at',
             'deactivated_at', 'missing_products',
             'average_rating', 'reviews_count',

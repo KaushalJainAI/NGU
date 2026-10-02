@@ -90,12 +90,17 @@ const ProductDetail = () => {
         
         setProduct(productData);
 
-        // Choose the active variant: the one named by a variant-slug URL, else
-        // the default, else the first available size.
+        // Choose the active variant: the one named by a variant-slug URL; else the
+        // default size IF it is in stock; else the first size that is; else the
+        // default. (Opening on a sold-out size while another is available would
+        // show a disabled page for a product that can be bought.)
         const vs: ProductVariant[] = (productData.variants || []).filter((v: ProductVariant) => v.is_active);
+        const defaultSize = vs.find((v) => v.is_default);
         const chosen =
           vs.find((v) => v.id === productData.selected_variant_id) ||
-          vs.find((v) => v.is_default) ||
+          (defaultSize?.in_stock ? defaultSize : undefined) ||
+          vs.find((v) => v.in_stock) ||
+          defaultSize ||
           vs[0] ||
           null;
         setSelectedVariant(chosen);
@@ -336,6 +341,7 @@ const ProductDetail = () => {
     weight: `${p.weight || ''}${p.unit || ''}` || "100g",
     itemType: "product" as const,
     variantCount: p.variant_count ?? 1,
+    inStock: p.in_stock !== false,
   });
 
   if (loading) {
@@ -1009,14 +1015,14 @@ const ProductDetail = () => {
                 <span className="text-sm text-muted-foreground line-through">₹{originalPrice.toFixed(0)}</span>
               )}
             </div>
-            <p className={`text-xs ${product.in_stock ? "text-green-600" : "text-red-600"}`}>
-              {product.in_stock ? t('product.inStock') : t('product.outOfStock')}
+            <p className={`text-xs ${effectiveInStock ? "text-green-600" : "text-red-600"}`}>
+              {effectiveInStock ? t('product.inStock') : t('product.outOfStock')}
             </p>
           </div>
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             onClick={handleAddToCart}
-            disabled={!product.in_stock}
+            disabled={!effectiveInStock}
             className="h-10 px-6"
           >
             <ShoppingCart className="mr-2 h-4 w-4" />

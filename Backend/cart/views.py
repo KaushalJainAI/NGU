@@ -67,6 +67,20 @@ def _resolve_variant(product, variant_id, *, lock=False):
     return qs.order_by('-is_default', 'display_order', 'weight').first()
 
 
+def _combo_stock_error(stock, quantity):
+    """The refusal for a combo that cannot cover `quantity`, or None when it can.
+
+    `stock` is how many the combo can be BUILT right now (ProductCombo
+    .available_stock). Zero means a component is sold out, retired or switched
+    off, which deserves a clearer message than "Only 0 units available".
+    """
+    if stock <= 0:
+        return 'This combo is currently unavailable'
+    if quantity > stock:
+        return f'Only {stock} units available'
+    return None
+
+
 class CartViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
 
@@ -157,7 +171,7 @@ class CartViewSet(viewsets.ViewSet):
 
                 if item_type == 'combo':
                     item = ProductCombo.objects.select_for_update().get(id=product_id, is_active=True)
-                    stock = getattr(item, 'stock', 999)
+                    stock = item.available_stock
 
                     # Check for existing cart item with lock
                     cart_item = CartItem.objects.select_for_update().filter(
@@ -166,14 +180,16 @@ class CartViewSet(viewsets.ViewSet):
 
                     if cart_item:
                         new_quantity = cart_item.quantity + quantity
-                        if new_quantity > stock:
-                            return Response({'success': False, 'error': f'Only {stock} units available'},
+                        problem = _combo_stock_error(stock, new_quantity)
+                        if problem:
+                            return Response({'success': False, 'error': problem},
                                             status=status.HTTP_400_BAD_REQUEST)
                         cart_item.quantity = new_quantity
                         cart_item.save()
                     else:
-                        if quantity > stock:
-                            return Response({'success': False, 'error': f'Only {stock} units available'},
+                        problem = _combo_stock_error(stock, quantity)
+                        if problem:
+                            return Response({'success': False, 'error': problem},
                                             status=status.HTTP_400_BAD_REQUEST)
                         if cart.items.count() >= MAX_CART_ITEMS:
                             return Response({'success': False,
@@ -286,7 +302,7 @@ class CartViewSet(viewsets.ViewSet):
                 if item_type == 'combo':
                     item = ProductCombo.objects.select_for_update().get(id=product_id, is_active=True)
                     cart_item = CartItem.objects.select_for_update().get(cart=cart, combo=item, item_type='combo')
-                    stock = getattr(item, 'stock', 999)
+                    stock = item.available_stock
                 else:
                     item = Product.objects.select_for_update().get(id=product_id, is_active=True)
                     variant = _resolve_variant(item, variant_id, lock=True)
@@ -317,8 +333,12 @@ class CartViewSet(viewsets.ViewSet):
                 if quantity <= 0:
                     cart_item.delete()
                 else:
-                    if stock < quantity:
-                        return Response({'success': False, 'error': f'Only {stock} units available'},
+                    if item_type == 'combo':
+                        problem = _combo_stock_error(stock, quantity)
+                    else:
+                        problem = f'Only {stock} units available' if stock < quantity else None
+                    if problem:
+                        return Response({'success': False, 'error': problem},
                                         status=status.HTTP_400_BAD_REQUEST)
                     cart_item.quantity = quantity
                     cart_item.save()
@@ -497,12 +517,12 @@ class CartViewSet(viewsets.ViewSet):
                         })
                         continue
 
-                    stock = getattr(item, 'stock', 999)
+                    stock = item.available_stock
                     if stock < quantity:
                         skipped.append({
                             'id': str(product_id),
                             'type': 'combo',
-                            'reason': f'only {stock} available'
+                            'reason': 'currently unavailable' if stock <= 0 else f'only {stock} available'
                         })
                         continue
 
@@ -707,7 +727,7 @@ class FavoritesViewSet(viewsets.ViewSet):
         favorites = Favorite.objects.filter(
             user=request.user,
             product__is_active=True,
-        ).select_related('product')
+        ).select_related('product').prefetch_related('product__variants')
 
         serializer = FavoriteItemSerializer(
             favorites,

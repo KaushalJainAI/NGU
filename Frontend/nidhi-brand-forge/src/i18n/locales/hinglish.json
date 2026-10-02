@@ -195,7 +195,24 @@
     "freeShippingUnlocked": "🎉 You've unlocked FREE shipping!",
     "addMoreForShipping": "Add ₹{{amount}} more for FREE shipping",
     "shipping": "Shipping",
-    "free": "FREE"
+    "free": "FREE",
+    "combo": "Combo",
+    "increase": "Quantity badhayein",
+    "decrease": "Quantity ghatayein",
+    "clearConfirm": "Saare items hatayein?",
+    "cancel": "Cancel",
+    "unavailableNote": "Available nahi — aapke total mein shamil nahi",
+    "unavailable": {
+      "product_off": "Ye product ab nahi bikta",
+      "size_retired": "Ye size ab available nahi hai",
+      "combo_off": "Ye combo ab available nahi hai",
+      "combo_unavailable": "Ye combo abhi available nahi hai",
+      "out_of_stock": "Stock Mein Nahi",
+      "insufficient_stock": "Sirf {{count}} bache hain — quantity kam karein"
+    },
+    "removeUnavailable": "Unavailable items hatayein",
+    "fixToContinue": "Aage badhne ke liye highlight kiye gaye items hatayein ya theek karein",
+    "unavailableRemoved": "Unavailable items hata diye gaye"
   },
   "auth": {
     "welcomeBack": "Wapsi Par Swagat Hai",
@@ -899,7 +916,8 @@
     "scanHint": "QR scan karein ya upar button click karein, phir neeche payment confirm karein",
     "paymentDone": "Maine payment complete kar li hai",
     "processing": "Process ho raha hai...",
-    "placeOrder": "Order Place karein"
+    "placeOrder": "Order Place karein",
+    "cartChanged": "Aapke cart ke kuch items ab available nahi hain. Kripya apna cart dekhein."
   },
   "profile": {
     "loadFailed": "Profile load karne mein fail",

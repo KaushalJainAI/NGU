@@ -29,8 +29,13 @@ export const getDashboardStats = () =>
   api.get<DashboardStats>('/dashboard/');
 
 export interface LowStockItem {
+  /** The PRODUCT's id (links to the product). */
   id: number;
+  /** The size that is running low — a product can have several. */
+  variant_id?: number;
   name: string;
+  /** The size's label, e.g. "500g". */
+  size?: string;
   stock: number;
 }
 

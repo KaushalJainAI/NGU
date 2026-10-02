@@ -57,6 +57,7 @@ from .place_of_supply import place_of_supply_for, state_name
 from .refunds import record_refund, refundable_balance
 from .serializers import OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
 from cart.models import Cart
+from products.availability import PRODUCT_OFF, SIZE_RETIRED, line_problem
 from admin_panel.models import Coupon
 from spices_backend.limits import (
     MAX_ITEM_QUANTITY, MAX_ORDER_TOTAL, MAX_ONLINE_ORDER_TOTAL,
@@ -559,11 +560,18 @@ class OrderViewSet(viewsets.ModelViewSet):
                 item_name = cart_item.product.name
                 variant = cart_item.variant
 
-                # G1: never sell a delisted/inactive product, even if it is still
-                # sitting in a cart from before it was hidden.
-                if not item.is_active:
+                # G1: never sell a delisted/inactive product — or a RETIRED SIZE
+                # of a live one — even if it is still sitting in a cart from
+                # before it was switched off. Asked of the same helper the cart
+                # page uses, so the two can never disagree about a line.
+                problem = line_problem(cart_item)
+                if problem == PRODUCT_OFF:
                     return Response({'error': f'{item_name} is no longer available'},
                                     status=status.HTTP_400_BAD_REQUEST)
+                if problem == SIZE_RETIRED:
+                    return Response(
+                        {'error': f'{item_name} ({variant.formatted_weight}) is no longer available'},
+                        status=status.HTTP_400_BAD_REQUEST)
 
                 if variant:
                     item_weight = variant.formatted_weight
@@ -962,8 +970,23 @@ class OrderViewSet(viewsets.ModelViewSet):
                 variant_after = {}
                 if variant_updates:
                     variants = list(ProductVariant.objects.select_for_update().filter(pk__in=variant_updates.keys()))
+                    # The alert level is the PRODUCT's "Low-stock alert level" — the
+                    # one the owner can actually set — applied to each of its sizes
+                    # (a size's own column is 5 everywhere and not editable). One
+                    # query for all of them, not one per size inside the locked loop.
+                    product_levels = dict(
+                        Product.objects.filter(
+                            pk__in={v.product_id for v in variants}
+                        ).values_list('pk', 'low_stock_threshold'))
                     for variant in variants:
                         reduce_by = variant_updates[variant.pk]
+                        # Re-checked on the LOCKED row: a size retired after the
+                        # cart check above (or between the check and this lock)
+                        # must not be sold. Same pattern as the stock check.
+                        if not variant.is_active:
+                            raise ValueError(
+                                f'{variant.product.name} ({variant.formatted_weight}) '
+                                f'is no longer available')
                         if variant.stock < reduce_by:
                             raise ValueError(f'Insufficient stock for {variant.product.name}. Available: {variant.stock}')
                         before = variant.stock
@@ -976,7 +999,8 @@ class OrderViewSet(viewsets.ModelViewSet):
                         # variant the Product mirror below carries the same signal,
                         # so only alert here for NON-default sizes to avoid a
                         # duplicate email for the same physical stock.
-                        threshold = variant.low_stock_threshold
+                        threshold = product_levels.get(
+                            variant.product_id, variant.low_stock_threshold)
                         if (not variant.is_default and before > threshold
                                 and variant.stock <= threshold):
                             low_stock_alerts.append({

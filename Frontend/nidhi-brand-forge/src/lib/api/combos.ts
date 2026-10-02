@@ -40,6 +40,9 @@ export interface Combo {
   weight?: number;
   unit?: string;
   display_title: string;
+  /** Whether every component can be had right now (a boolean, never a count).
+   *  Absent on a payload that predates the field — treat as true. */
+  in_stock?: boolean;
 }
 
 export const combosAPI = {

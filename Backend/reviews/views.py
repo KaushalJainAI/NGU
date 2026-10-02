@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAuthenticatedOrReadOnly
@@ -10,6 +11,13 @@ from admin_panel.recycle import RecycleBinDestroyMixin
 
 # An order only counts as a purchase once it has left the pending/payment stage.
 PURCHASED_ORDER_STATUSES = ['confirmed', 'processing', 'shipped', 'delivered', 'delivering']
+
+
+# A review of something that is switched off is not shown to shoppers: the home
+# page would link to a product that no longer exists for them. Nothing is deleted
+# or edited — the review is back the moment the product or combo is.
+ITEM_IS_LIVE = (Q(item_type='product', product__is_active=True)
+                | Q(item_type='combo', combo__is_active=True))
 
 
 def has_purchased(user, item_type, product=None, combo=None):
@@ -53,11 +61,11 @@ class ReviewViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
         # Moderation: hidden reviews vanish from public listings but stay
         # visible to staff (to moderate) and to their own author.
         if not is_staff:
+            public = Q(is_hidden=False) & ITEM_IS_LIVE
             if user.is_authenticated:
-                from django.db.models import Q
-                queryset = queryset.filter(Q(is_hidden=False) | Q(user=user))
+                queryset = queryset.filter(public | Q(user=user))
             else:
-                queryset = queryset.filter(is_hidden=False)
+                queryset = queryset.filter(public)
 
         # Filter by product or combo
         product_id = self.request.query_params.get('product')
@@ -160,10 +168,11 @@ class ReviewViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
         Admin-flagged reviews come first; if fewer than three are flagged (or a
         flagged one has since been hidden or deleted) the rest are topped up
         with the best recent reviews, so the strip is never sparse or empty.
-        Public: no auth, hidden reviews excluded unconditionally.
+        Public: no auth, hidden reviews and reviews of switched-off products
+        excluded unconditionally.
         """
-        visible = Review.objects.filter(is_hidden=False).select_related(
-            'user', 'product', 'combo')
+        visible = Review.objects.filter(is_hidden=False).filter(
+            ITEM_IS_LIVE).select_related('user', 'product', 'combo')
 
         chosen = list(visible.filter(is_featured=True).order_by('-created_at')[:MAX_FEATURED_REVIEWS])
 
@@ -204,6 +213,14 @@ class ReviewViewSet(RecycleBinDestroyMixin, viewsets.ModelViewSet):
         if featured and review.is_hidden:
             return Response(
                 {"error": "A hidden review can't be featured. Make it visible first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        subject = review.product if review.item_type == 'product' else review.combo
+        if featured and (subject is None or not subject.is_active):
+            return Response(
+                {"error": "This review's product is switched off, so it can't be featured. "
+                          "Switch the product back on first."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

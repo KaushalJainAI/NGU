@@ -40,6 +40,8 @@ const ComboStoryCard = ({ combo, reverse = false }: ComboStoryCardProps) => {
 
   const heroImage = combo.image || items[0]?.product_image || "";
   const itemInCart = cart.find((it) => it.id === id && it.itemType === "combo");
+  // A payload that predates the flag has none: treat that as buildable.
+  const inStock = combo.in_stock !== false;
 
   // The story: prefer the editor's description; otherwise synthesise an honest
   // hook from the bundle's contents and savings so every combo still "sells".
@@ -179,7 +181,11 @@ const ComboStoryCard = ({ combo, reverse = false }: ComboStoryCardProps) => {
           </div>
 
           <div className="flex items-center gap-2">
-            {itemInCart ? (
+            {!inStock ? (
+              <Button disabled variant="outline" className="h-10 rounded-full px-5 font-bold">
+                {t('product.outOfStock')}
+              </Button>
+            ) : itemInCart ? (
               <div className="flex h-10 animate-bounce-in items-center gap-1 rounded-full bg-primary px-1 text-primary-foreground">
                 <Button
                   variant="ghost"

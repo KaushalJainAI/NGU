@@ -146,11 +146,47 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
+    @staticmethod
+    def _hide_blocker(category):
+        """Why this category cannot be hidden right now, or None.
+
+        Hiding a category 404s its page but would leave its products on sale,
+        searchable and filterable — with no shelf. So a category that still holds
+        ACTIVE products (their primary shelf; a secondary shelf does not count,
+        the product still has its own) must be emptied first. Same pattern as
+        retiring a size that a combo is built from.
+        """
+        active = Product.objects.filter(category=category, is_active=True)
+        count = active.count()
+        if not count:
+            return None
+        names = list(active.order_by('name').values_list('name', flat=True)[:10])
+        more = '…' if count > len(names) else ''
+        return {
+            'detail': (f'"{category.name}" still has {count} active product'
+                       f'{"s" if count != 1 else ""}: {", ".join(names)}{more} '
+                       'Move them to another category or switch them off first.'),
+            'count': count,
+            'products': names,
+        }
+
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
+        blocker = self._hide_blocker(instance)
+        if blocker:
+            return Response(blocker, status=status.HTTP_409_CONFLICT)
         instance.is_active = False
         instance.save(update_fields=['is_active'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def perform_update(self, serializer):
+        # The panel's show/hide switch is a PATCH, not a DELETE.
+        instance = serializer.instance
+        if instance.is_active and serializer.validated_data.get('is_active') is False:
+            blocker = self._hide_blocker(instance)
+            if blocker:
+                raise ValidationError({'is_active': blocker['detail']})
+        serializer.save()
 
 
 class ProductSectionViewSet(viewsets.ModelViewSet):
@@ -238,8 +274,16 @@ class ProductFilter(django_filters.FilterSet):
             return queryset
         # The storefront passes an id; accept a slug too.
         key = 'id' if str(value).isdigit() else 'slug'
+        user = getattr(self.request, 'user', None)
+        if user is not None and user.is_staff:
+            return queryset.filter(
+                Q(**{f'category__{key}': value}) | Q(**{f'extra_categories__{key}': value})
+            ).distinct()
+        # Shoppers: a hidden category lists nothing (its page 404s, so its
+        # products must not stay reachable through the filter either).
         return queryset.filter(
-            Q(**{f'category__{key}': value}) | Q(**{f'extra_categories__{key}': value})
+            Q(**{f'category__{key}': value, 'category__is_active': True})
+            | Q(**{f'extra_categories__{key}': value, 'extra_categories__is_active': True})
         ).distinct()
 
 

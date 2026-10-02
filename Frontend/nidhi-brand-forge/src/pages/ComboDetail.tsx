@@ -147,9 +147,11 @@ const ComboDetail = () => {
 
   // Check if combo is already in cart
   const itemInCart = cart.find(item => item.id === Number(id) && item.itemType === "combo");
+  // A payload that predates the flag has none: treat that as buildable.
+  const comboInStock = combo?.in_stock !== false;
 
   const handleAddToCart = () => {
-    if (!combo) return;
+    if (!combo || !comboInStock) return;
     
     if (!isLoggedIn) {
       toast.warning(t('product.loginRequired'));
@@ -527,9 +529,10 @@ const ComboDetail = () => {
               <Button 
                 className="flex-1 h-12" 
                 onClick={handleAddToCart}
+                disabled={!comboInStock}
               >
                 <ShoppingCart className="mr-2 h-5 w-5" />
-                {t('product.addToCart')}
+                {comboInStock ? t('product.addToCart') : t('product.outOfStock')}
               </Button>
               <Button 
                 variant="outline" 
@@ -802,10 +805,11 @@ const ComboDetail = () => {
           <Button 
             size="sm" 
             onClick={handleAddToCart}
+            disabled={!comboInStock}
             className="h-10 px-6"
           >
             <ShoppingCart className="mr-2 h-4 w-4" />
-            {t('product.addToCart')}
+            {comboInStock ? t('product.addToCart') : t('product.outOfStock')}
           </Button>
           {cart.length > 0 && (
             <Button size="sm" variant="secondary" asChild className="h-10 px-4">

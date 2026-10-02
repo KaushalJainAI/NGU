@@ -192,7 +192,8 @@ class CartItem(models.Model):
             if self.product:
                 return self.product.stock
         elif self.item_type == 'combo' and self.combo:
-            return getattr(self.combo, 'stock', 999)
+            # How many can be built from the components' stock.
+            return self.combo.available_stock
         return 0
 
     @property
@@ -234,7 +235,7 @@ class CartItem(models.Model):
                 errors['quantity'] = f'Only {avail} units available for {name}'
         
         elif self.item_type == 'combo' and self.combo:
-            combo_stock = getattr(self.combo, 'stock', 999)
+            combo_stock = self.combo.available_stock
             if self.quantity > combo_stock:
                 errors['quantity'] = f'Only {combo_stock} units available for {self.combo.name}'
         

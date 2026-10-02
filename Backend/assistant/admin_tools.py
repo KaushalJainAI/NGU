@@ -165,19 +165,23 @@ def admin_list_recent_orders(user, args):
 
 
 def admin_low_stock(user, args):
-    """Products at or below their low-stock threshold, lowest first."""
-    from products.models import Product
+    """Sizes at or below their product's low-stock threshold, lowest first.
+
+    One row per SIZE (a 500 g pack can be low while the default size is not);
+    `count` is the number of distinct products affected.
+    """
+    from products.availability import low_stock_sizes
 
     limit = _coerce_limit(args, default=15)
-    base = Product.objects.filter(is_active=True, stock__lte=F('low_stock_threshold'))
+    base = low_stock_sizes()
     # Count the FULL match set before slicing — .count() on a sliced queryset
     # would cap at `limit` and under-report how many products are actually low.
-    total = base.count()
-    qs = base.order_by('stock')[:limit]
+    total = base.order_by().values('product_id').distinct().count()
     return {
         'products': [
-            {'name': p.name, 'stock': p.stock, 'threshold': p.low_stock_threshold}
-            for p in qs
+            {'name': v.product.name, 'size': v.formatted_weight, 'stock': v.stock,
+             'threshold': v.product.low_stock_threshold}
+            for v in base[:limit]
         ],
         'count': total,
     }

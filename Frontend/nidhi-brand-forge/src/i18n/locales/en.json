@@ -288,7 +288,24 @@
     "addMoreForShipping": "Add ₹{{amount}} more for FREE shipping",
     "shipping": "Shipping",
     "shippingGst": "GST on delivery (18%)",
-    "free": "FREE"
+    "free": "FREE",
+    "combo": "Combo",
+    "increase": "Increase quantity",
+    "decrease": "Decrease quantity",
+    "clearConfirm": "Remove all items?",
+    "cancel": "Cancel",
+    "unavailableNote": "Unavailable — not included in your total",
+    "unavailable": {
+      "product_off": "This item is no longer sold",
+      "size_retired": "This size is no longer sold",
+      "combo_off": "This combo is no longer sold",
+      "combo_unavailable": "This combo can't be made right now",
+      "out_of_stock": "Out of stock",
+      "insufficient_stock": "Only {{count}} left — lower the quantity"
+    },
+    "removeUnavailable": "Remove unavailable items",
+    "fixToContinue": "Remove or fix the highlighted items to continue",
+    "unavailableRemoved": "Unavailable items removed"
   },
   "category": {
     "allSpices": "All Spices",
@@ -937,7 +954,8 @@
     "payAmount": "Pay ₹{{amount}}",
     "securePay": "Secure payment via Razorpay — UPI, cards, netbanking & wallets",
     "confirmingPayment": "Confirming your payment… we'll update your order shortly.",
-    "paymentIncomplete": "Payment not completed. You can finish it from My Orders."
+    "paymentIncomplete": "Payment not completed. You can finish it from My Orders.",
+    "cartChanged": "Some items in your cart are no longer available. Please review your cart."
   },
   "profile": {
     "loadFailed": "Failed to load profile",

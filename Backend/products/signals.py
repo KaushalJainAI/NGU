@@ -48,7 +48,14 @@ def auto_update_product_on_save(sender, instance, created, **kwargs):
             ensure_default_variant_for(instance)
 
     # Update search KB asynchronously in background
-    if instance.is_active and instance.stock > 0:
+    # "In stock" means any active size has stock, not only the default one the
+    # `stock` mirror reflects. The mirror is checked first: it settles the common
+    # case without a query (this fires on every product save).
+    if instance.is_active and (
+        instance.stock > 0
+        or ProductVariant.objects.filter(
+            product_id=instance.pk, is_active=True, stock__gt=0).exists()
+    ):
         run_in_background(search_engine.a_ensure_search_kb, instance)
 
     # Invalidate caches

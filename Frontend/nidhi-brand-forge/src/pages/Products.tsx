@@ -115,6 +115,7 @@ const Products = () => {
     badge: product.badge,
     itemType: "product" as const,
     variantCount: product.variant_count ?? 1,
+    inStock: product.in_stock !== false,
   });
 
   return (

@@ -129,6 +129,15 @@ const Billing = () => {
           return;
         }
 
+        // A line the server will no longer sell (a size retired, a combo sold
+        // out) is flagged in the summary. Billing must never be where the
+        // customer finds out: send them back to the cart, which shows which.
+        if ((cartResp.summary?.unavailable_count ?? 0) > 0) {
+          toast.error(t('billing.cartChanged'));
+          navigate("/cart");
+          return;
+        }
+
         setCartItems(items);
 
         // 3. Use the backend's authoritative summary (per-line GST, shipping,

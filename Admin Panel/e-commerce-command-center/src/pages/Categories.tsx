@@ -124,10 +124,14 @@ const Categories = () => {
         description: t('categories.hiddenBody', { name: category.name }),
       });
       fetchCategories();
-    } catch {
+    } catch (error) {
+      // The server says WHY (a category that still holds active products cannot be
+      // hidden, and it names them) — show that, not a generic failure.
       toast({
         title: t('common.error'),
-        description: t('categories.hideFailed'),
+        description: error instanceof Error && error.message
+          ? error.message
+          : t('categories.hideFailed'),
         variant: 'destructive',
       });
     }
@@ -141,10 +145,12 @@ const Categories = () => {
         description: t('categories.visibleBody', { name: category.name }),
       });
       fetchCategories();
-    } catch {
+    } catch (error) {
       toast({
         title: t('common.error'),
-        description: t('categories.updateFailed'),
+        description: error instanceof Error && error.message
+          ? error.message
+          : t('categories.updateFailed'),
         variant: 'destructive',
       });
     }

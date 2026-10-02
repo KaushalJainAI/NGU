@@ -123,6 +123,7 @@ const Index = () => {
     badge: product.badge,
     itemType: "product" as const,
     variantCount: (product as any).variant_count ?? 1,
+    inStock: (product as any).in_stock !== false,
   });
 
   const formatCombo = (combo: any, index: number) => ({
@@ -134,6 +135,7 @@ const Index = () => {
     weight: combo.total_weight || "",
     badge: combo.badge || "",
     itemType: "combo" as const,
+    inStock: combo.in_stock !== false,
   });
 
   const handleCategoryClick = (category: CategoryData) => {
@@ -164,6 +166,7 @@ const Index = () => {
     weight: formatWeight(product.weight, product.unit),
     badge: product.is_featured ? "Featured" : undefined,
     itemType: "product" as const,
+    inStock: product.in_stock !== false,
   });
 
   const newlyLaunched = getSectionProducts("new");

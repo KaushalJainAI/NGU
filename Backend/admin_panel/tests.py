@@ -12,6 +12,7 @@ from rest_framework import status
 
 from admin_panel.models import Coupon, Policy
 from orders.models import Order, OrderItem
+from products.models import default_variant_for
 
 
 # ==================== DASHBOARD TESTS ====================
@@ -350,8 +351,11 @@ class TestDashboardActions:
             payment_method='COD', subtotal=Decimal('10'), total_amount=Decimal('10'),
             status='pending',
         )
-        test_product.stock = 3          # at/below threshold 5 → low stock
-        test_product.save(update_fields=['stock'])
+        # Low stock is read per SIZE now; the product's own `stock` is only a
+        # mirror of its default size.
+        size = default_variant_for(test_product.pk)
+        size.stock = 3                  # at/below threshold 5 → low stock
+        size.save(update_fields=['stock'])
 
         resp = admin_client.get('/api/dashboard/actions/')
         assert resp.status_code == 200
@@ -574,8 +578,9 @@ class TestDailyDigest:
     def test_digest_lists_low_stock_and_waiting_orders(
             self, capture_email, owner_email, test_user, test_product):
         _order(test_user, test_product, status='pending')  # waiting to confirm
-        test_product.stock = 2  # below default threshold 5
-        test_product.save(update_fields=['stock'])
+        size = default_variant_for(test_product.pk)
+        size.stock = 2  # below default threshold 5
+        size.save(update_fields=['stock'])
 
         call_command('send_daily_digest')
 

@@ -27,7 +27,7 @@ interface SearchProduct {
   image: string;
   score: number;
   score_type: string;
-  in_stock: number;
+  in_stock: boolean;
   is_featured: boolean;
 }
 
@@ -213,6 +213,7 @@ const SearchResults = () => {
                   price={product.price}
                   originalPrice={product.original_price}
                   weight={formatWeight(product.weight, product.unit, "100g")}
+                  inStock={product.in_stock !== false}
                   badge={product.is_featured ? t('product.featured') : product.discount > 0 ? `${product.discount}${t('product.off')}` : undefined}
                 />
               ))}

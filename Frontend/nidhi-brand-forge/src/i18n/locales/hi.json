@@ -273,7 +273,24 @@
     "freeShippingUnlocked": "🎉 आपने फ्री शिपिंग अनलॉक किया!",
     "addMoreForShipping": "फ्री शिपिंग के लिए ₹{{amount}} और जोड़ें",
     "shipping": "शिपिंग",
-    "free": "मुफ़्त"
+    "free": "मुफ़्त",
+    "combo": "कॉम्बो",
+    "increase": "मात्रा बढ़ाएं",
+    "decrease": "मात्रा घटाएं",
+    "clearConfirm": "सभी आइटम हटाएं?",
+    "cancel": "रद्द करें",
+    "unavailableNote": "अनुपलब्ध — आपके कुल में शामिल नहीं",
+    "unavailable": {
+      "product_off": "यह उत्पाद अब नहीं बिकता",
+      "size_retired": "यह साइज़ अब उपलब्ध नहीं है",
+      "combo_off": "यह कॉम्बो अब उपलब्ध नहीं है",
+      "combo_unavailable": "यह कॉम्बो अभी उपलब्ध नहीं है",
+      "out_of_stock": "स्टॉक में नहीं",
+      "insufficient_stock": "केवल {{count}} बचे हैं — मात्रा कम करें"
+    },
+    "removeUnavailable": "अनुपलब्ध आइटम हटाएं",
+    "fixToContinue": "आगे बढ़ने के लिए चिह्नित आइटम हटाएं या ठीक करें",
+    "unavailableRemoved": "अनुपलब्ध आइटम हटा दिए गए"
   },
   "category": {
     "allSpices": "सभी मसाले",
@@ -913,7 +930,8 @@
     "scanHint": "QR स्कैन करें या ऊपर बटन क्लिक करें, फिर नीचे भुगतान की पुष्टि करें",
     "paymentDone": "मैंने भुगतान पूरा कर लिया है",
     "processing": "प्रोसेस हो रहा है...",
-    "placeOrder": "ऑर्डर दें"
+    "placeOrder": "ऑर्डर दें",
+    "cartChanged": "आपके कार्ट के कुछ आइटम अब उपलब्ध नहीं हैं। कृपया अपना कार्ट देखें।"
   },
   "profile": {
     "loadFailed": "प्रोफ़ाइल लोड करने में विफल",

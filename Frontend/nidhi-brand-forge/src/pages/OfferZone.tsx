@@ -51,6 +51,7 @@ const OfferZone = () => {
             badge: p.badge || `${Math.round(((p.price - (p.final_price || p.discount_price || p.price)) / p.price) * 100)}${t('product.off')}`,
             weight: formatWeight(p.weight, p.unit, "100g"),
             itemType: "product" as const,
+            inStock: p.in_stock !== false,
           }));
 
         // Format combos with images
@@ -64,6 +65,7 @@ const OfferZone = () => {
           badge: c.badge || t('combo.comboDeal'),
           image: c.image || comboImages[index % comboImages.length],
           productCount: c.products?.length || 0,
+          inStock: c.in_stock !== false,
         }));
 
         setHotDeals(discountedProducts);
@@ -232,6 +234,10 @@ const OfferZone = () => {
                                 <Plus className="h-4 w-4" />
                               </Button>
                             </div>
+                          ) : combo.inStock === false ? (
+                            <Button disabled variant="outline" className="w-full py-3 font-semibold">
+                              {t('product.outOfStock')}
+                            </Button>
                           ) : (
                             <Button
                               onClick={() => {

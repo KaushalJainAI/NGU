@@ -19,8 +19,9 @@ const UspRibbon = () => {
   return (
     <div className="bg-primary text-primary-foreground text-[11px] sm:text-xs overflow-hidden">
       <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-0.5 px-4 py-1.5">
+        {/* Phones show the free-shipping line only; the rest wrapped to 3-4 rows. */}
         {items.map((text, i) => (
-          <span key={i} className="notranslate">
+          <span key={i} className={i === 0 ? "notranslate" : "notranslate hidden sm:inline"}>
             {text}
           </span>
         ))}

@@ -9,21 +9,23 @@ const FloatingWhatsApp = () => {
   // AP12: at most one floating action at a time on phones — the cart bar owns
   // the slot whenever it shows (same visibility rule, mirrored here), so the
   // two never stack above the bottom nav.
+  const hasItems = cart.reduce((sum, item) => sum + item.quantity, 0) > 0;
   const cartBarVisible =
-    cart.reduce((sum, item) => sum + item.quantity, 0) > 0 &&
-    !["/cart", "/billing", "/checkout"].includes(location.pathname);
+    hasItems && !["/cart", "/billing", "/checkout"].includes(location.pathname);
   if (cartBarVisible) return null;
+  // The cart page pins its own checkout bar in this slot on phones.
+  const checkoutBarVisible = hasItems && location.pathname === "/cart";
   return (
     <a
       href="https://wa.me/919300005040"
       target="_blank"
       rel="noopener noreferrer"
       aria-label={t('footer.whatsapp')}
-      className="fixed right-6 z-50 md:bottom-24 bottom-28
+      className={`fixed right-6 z-50 md:bottom-24 bottom-28
                  h-14 w-14 rounded-full shadow-lg hover:shadow-xl
-                 flex items-center justify-center
+                 ${checkoutBarVisible ? "hidden md:flex" : "flex"} items-center justify-center
                  bg-[#25D366] hover:bg-[#20b858]
-                 transition-all duration-300 hover:scale-110 active:scale-95"
+                 transition-all duration-300 hover:scale-110 active:scale-95`}
     >
       {/* WhatsApp SVG */}
       <svg

@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from django.db.models import F, Q
 
+from products.availability import combo_can_be_built, in_stock_products, product_has_stock
 from products.models import Product, ProductCombo, ProductVariant, Category, default_variant_for
 from products.recommendations import build_suggestions
 
@@ -75,7 +76,8 @@ def _product_public(p, full=False):
         'type': 'product',
         'price': float(p.final_price),
         'original_price': float(p.price),
-        'in_stock': p.stock > 0,
+        # Any active size with stock — not just the default one.
+        'in_stock': product_has_stock(p),
         'route': f'/products/{p.slug}',
     }
     if full:
@@ -97,10 +99,9 @@ def _combo_public(c, full=False):
         'type': 'combo',
         'price': float(c.final_price),
         'original_price': float(c.price),
-        # Combos carry no stock field in the model (availability is governed only
-        # by is_active), so they are always reported in stock — consistent with
-        # the rest of the app. Revisit if combos ever track member-product stock.
-        'in_stock': True,
+        # A combo has no stock of its own: it is buildable while every component
+        # size is active and stocked (ProductCombo.available_stock).
+        'in_stock': combo_can_be_built(c),
         'route': f'/combos/{c.slug}',
     }
     if full:
@@ -405,7 +406,7 @@ def tool_browse_products(user, args):
     if isinstance(spice_form, str) and spice_form.strip().lower() in _SPICE_FORMS:
         pq = pq.filter(spice_form=spice_form.strip().lower())
     if in_stock is True:
-        pq = pq.filter(stock__gt=0)
+        pq = in_stock_products(pq)
 
     candidates = list(pq.order_by('-is_featured', '-id')[:BROWSE_CANDIDATE_CAP])
 
@@ -421,9 +422,12 @@ def tool_browse_products(user, args):
         rows.append((p, fp, bool(p.is_featured), p.id))
 
     # ---- Combos (only when not constrained to a spice/category facet) ----
-    if include_combos and not (category or spice_form) and in_stock is not True:
-        cq = ProductCombo.objects.filter(is_active=True)
+    if include_combos and not (category or spice_form):
+        cq = ProductCombo.objects.filter(is_active=True).prefetch_related(
+            'productcomboitem_set__variant', 'productcomboitem_set__product')
         for c in list(cq.order_by('-is_featured', '-id')[:BROWSE_CANDIDATE_CAP]):
+            if in_stock is True and not combo_can_be_built(c):
+                continue
             fp = c.final_price
             if min_price is not None and fp < min_price:
                 continue
@@ -557,10 +561,13 @@ def _resolve_proposal_variant(product_id=None, variant_id=None, item_type='produ
 
 
 def _proposal_stock_ok(obj, variant):
-    """In-stock check against the SIZE when one is pinned (AP10)."""
+    """In-stock check against the SIZE when one is pinned (AP10); a combo is
+    checked against its components."""
+    if isinstance(obj, ProductCombo):
+        return combo_can_be_built(obj), None
     if variant is not None:
         return variant.stock > 0, variant
-    return obj.stock > 0 if hasattr(obj, 'stock') else True, None
+    return obj.stock > 0, None
 
 
 def build_add_to_cart(user, args):
@@ -576,7 +583,9 @@ def build_add_to_cart(user, args):
     if err:
         return None, err
     ok, _ = _proposal_stock_ok(obj, variant)
-    if item_type == 'product' and not ok:
+    if not ok:
+        if item_type == 'combo':
+            return None, f'{obj.name} is currently unavailable.'
         size = f' ({variant.formatted_weight})' if variant else ''
         return None, f'{obj.name}{size} is out of stock.'
 
@@ -626,7 +635,9 @@ def build_cart_proposal(user, args):
         if err:
             return None, err
         ok, _ = _proposal_stock_ok(obj, variant)
-        if (entry.get('item_type', 'product') == 'product') and not ok:
+        if not ok:
+            if entry.get('item_type', 'product') == 'combo':
+                return None, f'{obj.name} is currently unavailable.'
             size = f' ({variant.formatted_weight})' if variant else ''
             return None, f'{obj.name}{size} is out of stock.'
         if variant is not None:

@@ -15,8 +15,11 @@ const FloatingCartBar = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const totalQuantity = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  // Same lines the cart page counts: one the server will not sell is not in the
+  // total, so the bar and the page quote the same number.
+  const buyable = cart.filter((item) => item.inStock !== false);
+  const totalQuantity = buyable.reduce((sum, item) => sum + item.quantity, 0);
+  const subtotal = buyable.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   // Don't show on pages that already focus on the cart/checkout flow.
   const hiddenRoutes = ["/cart", "/billing", "/checkout"];

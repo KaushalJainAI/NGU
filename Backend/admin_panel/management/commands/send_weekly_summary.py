@@ -94,9 +94,10 @@ class Command(BaseCommand):
             ).values('term').annotate(n=Sum('count')).order_by('-n')[:5]
         )
 
-        low = list(Product.objects.filter(
-            is_active=True, stock__lte=F('low_stock_threshold'),
-        ).order_by('stock').values_list('name', 'stock')[:10])
+        from products.availability import low_stock_sizes
+        low = [(f"{v.product.name} ({v.formatted_weight})" if v.formatted_weight
+                else v.product.name, v.stock)
+               for v in low_stock_sizes()[:10]]
 
         # ---- Compose ----
         lines = [

@@ -15,7 +15,7 @@ export interface SearchProduct {
   image: string;
   score: number;
   score_type: string;
-  in_stock: number;
+  in_stock: boolean;
   is_featured: boolean;
 }
 

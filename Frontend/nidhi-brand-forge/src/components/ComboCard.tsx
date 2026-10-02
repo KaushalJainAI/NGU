@@ -43,6 +43,8 @@ const ComboCard = ({ combo }: ComboCardProps) => {
   const heroImage = combo.image || items[0]?.product_image || "";
 
   const itemInCart = cart.find((it) => it.id === id && it.itemType === "combo");
+  // A payload that predates the flag has none: treat that as buildable.
+  const inStock = combo.in_stock !== false;
 
   const handleAddToCart = () => {
     if (!isLoggedIn) {
@@ -208,7 +210,11 @@ const ComboCard = ({ combo }: ComboCardProps) => {
 
       {/* Action */}
       <div className="mt-auto px-3 pb-3 sm:px-4 sm:pb-4">
-        {itemInCart ? (
+        {!inStock ? (
+          <Button disabled variant="outline" className="h-9 w-full rounded-lg text-xs font-bold sm:h-10 sm:text-sm" size="sm">
+            {t("product.outOfStock")}
+          </Button>
+        ) : itemInCart ? (
           <div className="flex h-9 animate-bounce-in items-center justify-between gap-1 rounded-lg bg-primary px-1 text-primary-foreground sm:h-10 sm:gap-2">
             <Button
               variant="ghost"

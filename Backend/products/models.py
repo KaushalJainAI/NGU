@@ -128,7 +128,10 @@ class ProductSection(models.Model):
         return self.combos.filter(
             is_active=True
         ).with_mrp().prefetch_related(
-            'productcomboitem_set__variant'
+            # Both: the card's "in stock" flag walks every component's size and
+            # its product (ProductCombo.available_stock).
+            'productcomboitem_set__variant',
+            'productcomboitem_set__product',
         )[:self.max_products]
 
 
@@ -468,8 +471,10 @@ class Product(models.Model):
 
     @property
     def in_stock(self):
-        """Check if product is in stock"""
-        return self.stock > 0
+        """True when ANY active size has stock (not only the default one, which
+        is all the `stock` mirror column reflects)."""
+        from .availability import product_has_stock
+        return product_has_stock(self)
 
     @property
     def formatted_weight(self):

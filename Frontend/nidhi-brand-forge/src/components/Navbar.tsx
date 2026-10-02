@@ -61,7 +61,7 @@ const Navbar = () => {
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         {compact ? (
-          <Button variant="ghost" size="icon" className="text-primary font-bold" aria-label={t('nav.language')}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 text-primary font-bold" aria-label={t('nav.language')}>
             <Languages className="h-5 w-5" />
           </Button>
         ) : (
@@ -96,7 +96,7 @@ const Navbar = () => {
     <nav className="sticky top-0 z-50 bg-background/90 border-b border-border backdrop-blur-md shadow-sm">
       <div className="container mx-auto px-4">
         {/* Main Navbar Row */}
-        <div className="flex items-center justify-between gap-4 h-16 md:h-18">
+        <div className="flex items-center justify-between gap-2 md:gap-4 h-16 md:h-18">
           {/* Logo Section */}
           <div className="flex items-center shrink-0">
             <Link to="/" className="flex items-center gap-2">
@@ -107,8 +107,10 @@ const Navbar = () => {
               />
               {/* Stacked brand lock-up matching the redesign concept. The
                   lock-up must never shrink: with min-w-0 the flex row collapses
-                  it to "Ni..." once the search pill competes for space. */}
-              <div className="leading-tight notranslate shrink-0">
+                  it to "Ni..." once the search pill competes for space. On the
+                  narrowest phones (< 352px) it is dropped whole instead, so
+                  the four action icons stay on screen. */}
+              <div className="leading-tight notranslate shrink-0 hidden min-[352px]:block">
                 <div className="font-extrabold text-primary text-base md:text-lg whitespace-nowrap">Nidhi Masala</div>
                 <div className="text-[10px] text-muted-foreground -mt-0.5 whitespace-nowrap">निधि गृह उद्योग</div>
               </div>
@@ -206,7 +208,7 @@ const Navbar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className="h-9 w-9 rounded-full"
               onClick={() => navigate('/favorites')}
             >
               <Heart className="h-5 w-5" aria-hidden />
@@ -214,7 +216,7 @@ const Navbar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full"
+              className="h-9 w-9 rounded-full"
               onClick={handleProfileClick}
               title={t('nav.account')}
             >
@@ -223,7 +225,7 @@ const Navbar = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="relative rounded-full"
+              className="relative h-9 w-9 rounded-full"
               onClick={() => navigate('/cart')}
             >
               <ShoppingCart className="h-5 w-5" aria-hidden />

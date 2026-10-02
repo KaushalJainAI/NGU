@@ -22,6 +22,10 @@ export interface CartItem {
   price: number;
   quantity: number;
   weight?: string;
+  /** Whether the line can be bought exactly as it stands, and if not, why
+   *  (a code from the backend's products/availability.py). */
+  available?: boolean;
+  unavailable_reason?: string | null;
 }
 
 /** One GST rate slab present in the cart (0% papad, 5% spices, …). */
@@ -54,6 +58,9 @@ export interface CartSummary {
   free_shipping_threshold?: number;
   discount: number;
   total: number;
+  /** Lines checkout would refuse as they stand. Above zero, Billing sends the
+   *  customer back to the cart. */
+  unavailable_count?: number;
 }
 
 export interface CartResponse {

@@ -23,7 +23,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from orders.models import Order
-        from products.models import Product
+        from products.availability import low_stock_sizes
         from assistant.models import AssistantConversation
         from orders.emails import _send_async  # shared best-effort sender
 
@@ -66,9 +66,10 @@ class Command(BaseCommand):
         to_ship = Order.objects.filter(
             is_deleted=False, status__in=['confirmed', 'processing']).count()
 
-        low = list(Product.objects.filter(
-            is_active=True, stock__lte=F('low_stock_threshold'),
-        ).order_by('stock').values_list('name', 'stock')[:10])
+        # Per size, so a pack that is not the default one is reported too.
+        low = [(f"{v.product.name} ({v.formatted_weight})" if v.formatted_weight
+                else v.product.name, v.stock)
+               for v in low_stock_sizes()[:10]]
 
         chats = AssistantConversation.objects.filter(
             needs_human=True, status='active').count()

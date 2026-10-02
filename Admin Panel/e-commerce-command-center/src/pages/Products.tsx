@@ -705,7 +705,6 @@ const Products = () => {
   // "Low" is per-product: each product carries its own low_stock_threshold
   // (backend default 5), matching what the dashboard, digest and low-stock API
   // consider low — so the ?stock=low deep-link shows exactly that set.
-  const isLowStock = (p: Product) => p.stock > 0 && p.stock <= (p.low_stock_threshold ?? 5);
   const visibleProducts = useMemo(() => {
     let list = products;
     const q = searchQuery.trim().toLowerCase();
@@ -719,13 +718,13 @@ const Products = () => {
       list = list.filter(p => String(p.category) === filterCategory);
     }
     if (filterStock === 'low') list = list.filter(isLowStock);
-    if (filterStock === 'out') list = list.filter(p => p.stock === 0);
+    if (filterStock === 'out') list = list.filter(isOutOfStock);
     const sorted = [...list];
     switch (sortBy) {
       case 'name': sorted.sort((a, b) => a.name.localeCompare(b.name)); break;
       case 'priceLow': sorted.sort((a, b) => Number(a.price) - Number(b.price)); break;
       case 'priceHigh': sorted.sort((a, b) => Number(b.price) - Number(a.price)); break;
-      case 'stockLow': sorted.sort((a, b) => a.stock - b.stock); break;
+      case 'stockLow': sorted.sort((a, b) => lowestStock(a) - lowestStock(b)); break;
       default: break; // 'newest' — keep server order (-created_at)
     }
     return sorted;

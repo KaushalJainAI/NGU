@@ -22,6 +22,10 @@ interface ProductCardProps {
   weight?: string | number;
   itemType?: "product" | "combo";
   variantCount?: number;
+  /** False when nothing can be bought right now (every size sold out, or a combo
+   *  a component of which is). Absent = true, so a payload that predates the
+   *  field keeps working. */
+  inStock?: boolean;
 }
 
 
@@ -36,6 +40,7 @@ const ProductCard = ({
   weight,
   itemType,
   variantCount = 1,
+  inStock = true,
 }: ProductCardProps) => {
   const { t } = useTranslation();
   const { isLoggedIn } = useAuth();
@@ -163,7 +168,16 @@ const ProductCard = ({
         </CardContent>
       </Link>
       <div className="px-3 sm:px-4 pb-3 sm:pb-4 mt-auto">
-        {hasMultipleSizes ? (
+        {!inStock ? (
+          <Button
+            disabled
+            variant="outline"
+            className="w-full h-9 sm:h-10 text-xs sm:text-sm rounded-lg font-bold"
+            size="sm"
+          >
+            {t('product.outOfStock')}
+          </Button>
+        ) : hasMultipleSizes ? (
           <Button asChild className="w-full h-9 sm:h-10 text-xs sm:text-sm rounded-lg border-2 border-primary text-primary font-bold hover:bg-primary/10 active-press" size="sm" variant="outline">
             <Link to={`/products/${id}`} onClick={handleCardClick}>{t('product.selectSize')}</Link>
           </Button>

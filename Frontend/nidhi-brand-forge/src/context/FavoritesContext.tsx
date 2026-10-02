@@ -12,6 +12,8 @@ interface FavoriteItem {
   weight?: number | string;
   unit?: string;
   badge?: string;
+  /** From the server's favourites payload; absent on items saved on this device. */
+  in_stock?: boolean;
 }
 
 interface FavoritesContextType {
@@ -89,6 +91,7 @@ export const FavoritesProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           weight: item.weight,
           unit: item.unit,
           badge: item.badge,
+          in_stock: item.in_stock,
         }));
         
         // Merge with local favorites

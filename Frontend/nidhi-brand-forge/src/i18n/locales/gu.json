@@ -195,7 +195,19 @@
     "freeShippingUnlocked": "🎉 તમે મફત શિપિંગ અનલૉક કર્યું!",
     "addMoreForShipping": "મફત શિપિંગ માટે ₹{{amount}} વધુ ઉમેરો",
     "shipping": "શિપિંગ",
-    "free": "મફત"
+    "free": "મફત",
+    "unavailable": {
+      "product_off": "આ પ્રોડક્ટ હવે વેચાતી નથી",
+      "size_retired": "આ સાઇઝ હવે ઉપલબ્ધ નથી",
+      "combo_off": "આ કૉમ્બો હવે ઉપલબ્ધ નથી",
+      "combo_unavailable": "આ કૉમ્બો હમણાં ઉપલબ્ધ નથી",
+      "out_of_stock": "સ્ટોકમાં નથી",
+      "insufficient_stock": "ફક્ત {{count}} બાકી છે — જથ્થો ઘટાડો"
+    },
+    "removeUnavailable": "અનુપલબ્ધ આઇટમ દૂર કરો",
+    "fixToContinue": "આગળ વધવા માટે માર્ક કરેલી આઇટમ દૂર કરો અથવા સુધારો",
+    "unavailableRemoved": "અનુપલબ્ધ આઇટમ દૂર કરી",
+    "unavailableNote": "અનુપલબ્ધ — તમારા કુલમાં સામેલ નથી"
   },
   "auth": {
     "welcomeBack": "પાછા આવ્યા તે બદલ સ્વાગત છે",
@@ -899,7 +911,8 @@
     "scanHint": "QR સ્કેન કરો અથવા ઉપરનું બટન ક્લિક કરો, પછી નીચે ચુકવણીની પુષ્ટિ કરો",
     "paymentDone": "મેં ચુકવણી પૂર્ણ કરી છે",
     "processing": "પ્રોસેસ થઈ રહ્યું છે...",
-    "placeOrder": "ઓર્ડર આપો"
+    "placeOrder": "ઓર્ડર આપો",
+    "cartChanged": "તમારા કાર્ટની કેટલીક આઇટમ હવે ઉપલબ્ધ નથી. કૃપા કરીને તમારું કાર્ટ જુઓ."
   },
   "profile": {
     "loadFailed": "પ્રોફાઈલ લોડ કરવામાં નિષ્ફળ",

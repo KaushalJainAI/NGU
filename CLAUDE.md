@@ -755,3 +755,56 @@ suites against a **local seeded server or staging** instead:
     is off. One-off for existing data, **dry-run first — it switches live combos off**:
     `python manage.py detach_inactive_products_from_combos --dry-run`.
 
+### Availability gaps found 2026-10-02 — FIXED (in the working tree, NOT deployed)
+
+All seven were one problem: something switched off, retired or sold out that one
+surface had not been told about. The rule now lives in one place —
+`Backend/products/availability.py` (`line_problem`, `line_max_quantity`,
+`in_stock_products`/`product_has_stock`, `combo_can_be_built`,
+`low_stock_sizes`/`out_of_stock_sizes`) — and every surface below reads from it.
+Tests: `products/test_availability.py`, `cart/test_availability.py`,
+`orders/test_retired_size_checkout.py`, `products/test_category_hide.py`,
+`reviews/test_switched_off_items.py`, `admin_panel/test_low_stock_sizes.py`,
+`assistant/test_availability_tools.py`. Full plan (defaults D1–D5, browser checks):
+`GAP_FIX_PLAN_2026-10.md`.
+
+- ✅ **A retired size in a cart can no longer be ordered.** Checkout asks
+  `line_problem` (400 `no longer available`, no order, stock unchanged) and
+  re-checks `is_active` on the locked rows (`orders/views.py`).
+- ✅ **Combos show as unavailable before checkout.** Cart caps lines by
+  `available_stock` (was hard-coded 999 in `cart/models.py`/`views.py`/
+  `serializers.py`); every public combo payload carries boolean `in_stock`
+  (assistant `_combo_public`/browse/proposals too).
+- ✅ **Search, suggestions, recommendations and the product list's `in_stock`
+  read every active size** (`in_stock_products`/`product_has_stock`), not the
+  default-size `Product.stock` mirror.
+- ✅ **Low-stock (dashboard, daily digest, weekly summary, admin assistant) is
+  per size against the product's alert level** (`low_stock_sizes()`; dashboard
+  counts distinct products, items name `name (size)`).
+- ✅ **Hiding a category with active products is refused** (409 on DELETE / 400
+  on PATCH, naming up to 10 products; secondary shelves don't block).
+  Already-hidden categories list nothing publicly (`ProductFilter` +
+  corpus + category fallback); staff still see them.
+- ✅ **Reviews of switched-off products/combos are hidden from shoppers**
+  (featured strip, public list; author still sees their own; staff see all;
+  featuring one is refused). Nothing deleted — back when the item is back.
+- ✅ **A switched-off product / retired size / unbuildable combo in a cart is
+  flagged** (`available`/`unavailable_reason`/`in_stock`, summary excludes it,
+  `unavailable_count`; storefront greys it, blocks checkout, offers "Remove
+  unavailable items", Billing sends back to `/cart`).
+- **Hard deletes outside the panel bypass every safeguard:** `Product.category` and
+  `Order.user` are `CASCADE`, so deleting a category (Django admin) deletes its
+  products, and deleting a user deletes their un-invoiced orders.
+- **Bulk edit writes sizes only.** A change without `variant_id` lands on the product's
+  default size, never on the Product mirror columns. Price > 0, discount < price (checked
+  against the values the row ends up with), errors carry `variant_id`. The panel grid is
+  one line per size.
+- **Combo saves are one transaction**, lines validated before anything is written;
+  `items` accepts a JSON list as well as the multipart JSON string.
+- **Un-ticking a size (`PATCH is_active:false`) runs the same guards as DELETE**: refused
+  for the last active size and for a size a combo is built from. The panel therefore
+  saves active sizes first and retirements last.
+- Catalog lookups go through `products.views._as_pk`: an id that is not an id is a 404 /
+  empty list, not an exception.
+- Local `Backend/.env` still pins `ASSISTANT_MODEL_CONTEXT_TOKENS=200000`, which fails
+  two tests in `assistant/test_chat_limits.py` on this machine (unrelated to the above).

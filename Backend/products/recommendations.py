@@ -2,6 +2,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Union
 
+from django.db.models import prefetch_related_objects
 from django.utils import timezone
 from rapidfuzz import process, fuzz
 from langchain_core.prompts import ChatPromptTemplate
@@ -11,6 +12,7 @@ from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 import os
 
+from .availability import in_stock_products
 from .models import ProductSearchKB, ProductComboSearchKB, Product, Category, ProductCombo
 from .serializers import SearchProductSerializer, SearchComboSerializer
 from .cache import (
@@ -60,6 +62,8 @@ def build_search_corpus() -> List[Dict[str, Any]]:
     keeps working even when a KB row is missing or LLM generation failed.
     Out-of-stock products stay in the corpus on purpose: stock is re-filtered
     when results are fetched, so stock changes don't invalidate this cache.
+    The category name is a search term only while the category is shown in the
+    store (a hidden category must not keep surfacing its products).
     """
     entries: List[Dict[str, Any]] = []
     seen = set()
@@ -88,7 +92,7 @@ def build_search_corpus() -> List[Dict[str, Any]]:
         wt = _weight_token(product)
         if wt:
             add(f"{product.name} {wt}", product.id, 'product', 'token')
-        if product.category_id:
+        if product.category_id and product.category.is_active:
             add(product.category.name, product.id, 'product', 'category')
         kb = product_kbs.get(product.id)
         if kb:
@@ -207,9 +211,9 @@ def build_suggestions(query: str, limit: int) -> Dict[str, Any]:
     product_ids = [oid for otype, oid in ordered if otype == 'product']
     combo_ids = [oid for otype, oid in ordered if otype == 'combo']
     products = {
-        p.id: p for p in Product.objects.filter(
-            id__in=product_ids, is_active=True, stock__gt=0
-        ).only('id', 'name', 'slug', 'price', 'discount_price', 'image', 'thumbnail')
+        p.id: p for p in in_stock_products(Product.objects.filter(
+            id__in=product_ids, is_active=True
+        )).only('id', 'name', 'slug', 'price', 'discount_price', 'image', 'thumbnail')
     } if product_ids else {}
     combos = {
         # NOTE: no 'price' here — ProductCombo has no price COLUMN (its MRP is a
@@ -555,9 +559,9 @@ class SpiceSearchEngine:
                 pid for pid, _ in
                 sorted(product_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
             ]
-            products = Product.objects.filter(
-                id__in=top_ids, is_active=True, stock__gt=0
-            ).select_related('category')
+            products = in_stock_products(Product.objects.filter(
+                id__in=top_ids, is_active=True
+            )).select_related('category')
             results.extend(self._format_products(products, product_scores))
 
         combo_scores = _score_matches(
@@ -568,9 +572,15 @@ class SpiceSearchEngine:
                 cid for cid, _ in
                 sorted(combo_scores.items(), key=lambda x: x[1], reverse=True)[:max(top_k // 2, 1)]
             ]
+            # The component sizes and products too: each result carries an
+            # `in_stock` flag, which walks them (ProductCombo.available_stock).
             combos = ProductCombo.objects.filter(
                 id__in=top_ids, is_active=True
-            ).prefetch_related('products')
+            ).prefetch_related(
+                'products',
+                'productcomboitem_set__variant',
+                'productcomboitem_set__product',
+            )
             serialized = SearchComboSerializer(combos, many=True).data
             for item in serialized:
                 item['score'] = combo_scores.get(item['id'], 0)
@@ -582,6 +592,9 @@ class SpiceSearchEngine:
 
     def _format_products(self, products, scored_scores: Dict, score_type: str = 'direct') -> List[Dict]:
         """Batch formatting via serializer for safety"""
+        # `in_stock` reads every size; load them for all products in one query.
+        products = list(products)
+        prefetch_related_objects(products, 'variants')
         serialized = SearchProductSerializer(products, many=True).data
         # Merge score info into each serialized item
         for item in serialized:
@@ -594,19 +607,20 @@ class SpiceSearchEngine:
         results = []
 
         # Category match
-        category_match = Category.objects.filter(name__icontains=query).first()
+        category_match = Category.objects.filter(
+            name__icontains=query, is_active=True).first()
         if category_match:
-            products = Product.objects.filter(
-                category=category_match, is_active=True, stock__gt=0
-            ).select_related('category')[:max(top_k // 4, 1)]
+            products = in_stock_products(Product.objects.filter(
+                category=category_match, is_active=True
+            )).select_related('category')[:max(top_k // 4, 1)]
             results.extend(self._format_products(
                 products, {p.id: 75 for p in products}, score_type='category'
             ))
 
         # Trending/featured
-        trending_products = Product.objects.filter(
-            is_featured=True, is_active=True, stock__gt=0
-        ).select_related('category')[:max(top_k // 4, 1)]
+        trending_products = in_stock_products(Product.objects.filter(
+            is_featured=True, is_active=True
+        )).select_related('category')[:max(top_k // 4, 1)]
         results.extend(self._format_products(
             trending_products, {p.id: 60 for p in trending_products}, score_type='trending'
         ))

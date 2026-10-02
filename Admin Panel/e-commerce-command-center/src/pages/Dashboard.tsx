@@ -68,7 +68,7 @@ const Dashboard = () => {
   // could only ever have been right about one of them.
   const lowStockNames = !actions?.low_stock_items?.length
     ? ''
-    : ` — ${actions.low_stock_items.slice(0, 3).map(i => i.name).join(', ')}${
+    : ` — ${actions.low_stock_items.slice(0, 3).map(i => (i.size ? `${i.name} (${i.size})` : i.name)).join(', ')}${
         actions.low_stock_count > 3 ? '…' : ''
       }`;
 
