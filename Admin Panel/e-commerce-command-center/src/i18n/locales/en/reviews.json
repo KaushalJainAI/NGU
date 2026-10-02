@@ -1,0 +1,53 @@
+{
+  "reviews": {
+    "title": "Reviews",
+    "subtitle": "What customers say about your products. Hide a review to remove it from the store without deleting it, and pick up to {{max}} to show on the home page.",
+    "pageHelp": "Only customers who actually bought the product can review it, so these are all verified. Hide abuse or a factual mistake — not a low rating: honest 2-star reviews are what make the 5-star ones believable. Answer the customer instead.",
+    "allReviews": "All Reviews",
+    "empty": "No reviews yet.",
+
+    "colProduct": "Product",
+    "colRating": "Rating",
+    "colReview": "Review",
+    "colCustomer": "Customer",
+    "colDate": "Date",
+    "colShown": "Shown?",
+    "colHome": "Home page",
+
+    "shown": "Shown",
+    "hidden": "Hidden",
+    "showInStore": "Show in store",
+    "hideFromStore": "Hide from store",
+    "deletePermanently": "Delete permanently",
+    "pager": "Page {{page}} of {{totalPages}} ({{count}} reviews)",
+
+    "slotCounter": "{{count}} of {{max}} on the home page",
+    "slotsTitle": "Reviews currently shown on the home page.",
+    "slotsFullTitle": "All {{max}} home page slots are taken — unpick one to choose another.",
+    "onHomePage": "On home page",
+    "notShown": "Not shown",
+    "pickAdd": "Show this review on the home page",
+    "pickRemove": "On the home page — click to remove",
+    "pickSlotsFull": "All {{max}} slots are taken — unpick one first",
+    "pickHiddenBlocked": "A hidden review cannot be shown on the home page",
+
+    "addedTitle": "Added to the home page",
+    "addedBody": "Shoppers will see this review on the home page.",
+    "removedTitle": "Removed from the home page",
+    "removedBody": "This review no longer appears on the home page.",
+    "featureFailedTitle": "Could not update the home page",
+    "tryAgain": "Please try again.",
+
+    "confirmHide": "Hide this review of \"{{name}}\" from the store? The customer keeps their review, but other shoppers won't see it.",
+    "hiddenTitle": "Hidden",
+    "hiddenBody": "Shoppers will no longer see this review.",
+    "visibleTitle": "Visible again",
+    "visibleBody": "This review is shown in the store again.",
+    "updateFailed": "Could not update the review.",
+
+    "confirmDelete": "Permanently delete this review of \"{{name}}\"? This cannot be undone — hiding is usually enough.",
+    "deletedTitle": "Deleted",
+    "deletedBody": "The review has been removed.",
+    "deleteFailed": "Could not delete the review."
+  }
+}

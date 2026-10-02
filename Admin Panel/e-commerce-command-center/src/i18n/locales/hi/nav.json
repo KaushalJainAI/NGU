@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "mainMenu": "मुख्य मेन्यू",
+    "dashboard": "डैशबोर्ड",
+    "insights": "जानकारी",
+    "products": "उत्पाद",
+    "categories": "श्रेणियाँ",
+    "sections": "सेक्शन",
+    "combos": "कॉम्बो",
+    "reviews": "समीक्षाएँ",
+    "bulkEdit": "एक साथ कीमत और स्टॉक",
+    "orders": "ऑर्डर",
+    "gst": "जीएसटी / एचएसएन",
+    "accounts": "हिसाब",
+    "customers": "ग्राहक",
+    "coupons": "कूपन",
+    "recycleBin": "रीसायकल बिन",
+    "adminInfo": "एडमिन जानकारी",
+    "contact": "संपर्क",
+    "conversations": "बातचीत",
+    "logout": "लॉग आउट",
+    "admin": "एडमिन"
+  }
+}

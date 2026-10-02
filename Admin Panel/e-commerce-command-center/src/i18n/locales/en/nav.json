@@ -1,0 +1,24 @@
+{
+  "nav": {
+    "mainMenu": "Main Menu",
+    "dashboard": "Dashboard",
+    "insights": "Insights",
+    "products": "Products",
+    "categories": "Categories",
+    "sections": "Sections",
+    "combos": "Combos",
+    "reviews": "Reviews",
+    "bulkEdit": "Bulk Price & Stock",
+    "orders": "Orders",
+    "gst": "GST / HSN",
+    "accounts": "Accounts",
+    "customers": "Customers",
+    "coupons": "Coupons",
+    "recycleBin": "Recycle Bin",
+    "adminInfo": "Admin Info",
+    "contact": "Contact",
+    "conversations": "Conversations",
+    "logout": "Logout",
+    "admin": "Admin"
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "insights": {
+    "title": "जानकारी",
+    "subtitle": "बिक्री और ग्राहक व्यवहार का विश्लेषण",
+    "pageHelp": "सिर्फ़ रिपोर्ट — यहाँ से दुकान में कुछ नहीं बदलता। आँकड़े हर कुछ मिनट में दोबारा बनते हैं, इसलिए आज के नंबर थोड़े पीछे हो सकते हैं। दो चीज़ें काम की हैं: ग्राहकों ने क्या खोजा पर मिला नहीं (वह सामान रखने की सोचें), और कार्ट से भुगतान तक पहुँचने में लोग कहाँ छूट जाते हैं।",
+    "emailSummary": "इस हफ़्ते का सारांश मुझे ईमेल करें",
+    "sending": "भेजा जा रहा है…",
+    "summarySentTitle": "सारांश भेज दिया",
+    "summarySentBody": "इस हफ़्ते का आसान भाषा वाला सारांश दुकान के ईमेल पर देखें।",
+    "summaryFailedTitle": "गड़बड़ी",
+    "summaryFailedBody": "सारांश ईमेल नहीं भेजा जा सका।",
+
+    "tabs": {
+      "overview": "सारांश",
+      "sales": "बिक्री",
+      "funnel": "फ़नल",
+      "search": "खोज",
+      "customers": "ग्राहक",
+      "anonymous": "संभावित ग्राहक"
+    },
+
+    "toolbar": {
+      "daily": "रोज़ाना",
+      "weekly": "हफ़्तेवार",
+      "monthly": "महीनेवार",
+      "compare": "तुलना करें",
+      "refresh": "रिफ़्रेश करें"
+    },
+
+    "indiaMapLabel": "भारत का रंग-मानचित्र",
+
+    "chart": {
+      "noData": "इस अवधि के लिए कोई डेटा नहीं",
+      "loadFailed": "लोड नहीं हो सका।",
+      "exportCsv": "CSV एक्सपोर्ट करें",
+      "noDataShort": "कोई डेटा नहीं"
+    },
+
+    "kpi": {
+      "revenue": "आमदनी",
+      "orders": "ऑर्डर",
+      "aov": "औसत ऑर्डर मूल्य",
+      "repeatRate": "दोबारा ख़रीद दर",
+      "anonPageViews": "अनाम पेज व्यू",
+      "couponOrders": "कूपन वाले ऑर्डर",
+      "vsPrev": "पिछली अवधि से",
+      "off": "{{amount}} की छूट",
+      "newCustomers": "नए ग्राहक",
+      "returningCustomers": "दोबारा आए ग्राहक"
+    },
+
+    "overview": {
+      "revenueAndOrders": "आमदनी और ऑर्डर",
+      "conversionFunnel": "कन्वर्ज़न फ़नल",
+      "loggedInJourney": "लॉग इन ग्राहकों का सफ़र",
+      "topProducts": "सबसे ज़्यादा बिकने वाले उत्पाद",
+      "anonByDevice": "डिवाइस के हिसाब से अनाम",
+      "anonBySource": "स्रोत के हिसाब से अनाम"
+    },
+
+    "sales": {
+      "overTime": "समय के साथ आमदनी और ऑर्डर",
+      "compareHint": "बिंदुदार रेखा = पिछली अवधि",
+      "topProducts": "सबसे ज़्यादा बिकने वाले उत्पाद",
+      "topCategories": "सबसे ज़्यादा बिकने वाली श्रेणियाँ"
+    },
+
+    "funnel": {
+      "title": "कन्वर्ज़न फ़नल (लॉग इन ग्राहक)",
+      "description": "हर चरण की गिनती और छूटे हुए ग्राहक",
+      "stepConversion": "चरण-दर-चरण कन्वर्ज़न",
+      "fromPrevious": "पिछले चरण से",
+      "stage": {
+        "view": "उत्पाद देखे गए",
+        "add_to_cart": "कार्ट में डाले गए",
+        "checkout_started": "चेकआउट शुरू किया",
+        "purchase": "ख़रीदा गया",
+        "page_view": "पेज देखे गए",
+        "product_view": "उत्पाद देखे गए",
+        "checkout_completed": "चेकआउट पूरा हुआ"
+      }
+    },
+
+    "searchTab": {
+      "topTerms": "सबसे ज़्यादा खोजे गए शब्द",
+      "zeroResults": "बिना नतीजे वाली खोजें",
+      "zeroResultsDesc": "ऐसी माँग जो हम पूरी नहीं कर रहे",
+      "zeroResultsEmpty": "कोई बिना नतीजे वाली खोज नहीं 🎉",
+      "viewedNotBought": "देखा गया पर ख़रीदा नहीं"
+    },
+
+    "customersTab": {
+      "repeatRate": "दोबारा ख़रीद दर",
+      "returning": "दोबारा आए",
+      "newVsReturning": "नए बनाम दोबारा आए",
+      "new": "नए",
+      "returningSeries": "दोबारा आए",
+      "byRegion": "क्षेत्र के हिसाब से ग्राहक",
+      "byRegionDesc": "राज्य के हिसाब से रजिस्टर्ड ग्राहक",
+      "topCustomers": "सबसे बड़े ग्राहक",
+      "users": "ग्राहक"
+    },
+
+    "anonymousTab": {
+      "macroFunnel": "अनाम विज़िटर का फ़नल",
+      "macroFunnelDesc": "लॉग आउट ट्रैफ़िक की कुल गिनती — किसी एक विज़िटर की ट्रैकिंग नहीं",
+      "byDevice": "डिवाइस के हिसाब से",
+      "bySource": "ट्रैफ़िक स्रोत के हिसाब से",
+      "pageViews": "पेज व्यू",
+      "anonPageViews": "अनाम पेज व्यू",
+      "whereFrom": "अनाम विज़िटर कहाँ से आते हैं",
+      "whereFromDesc": "आईपी से अनुमानित क्षेत्र",
+      "pageViewsUnit": "पेज व्यू"
+    },
+
+    "series": {
+      "revenue": "आमदनी",
+      "prevRevenue": "पिछली आमदनी",
+      "orders": "ऑर्डर"
+    },
+
+    "col": {
+      "product": "उत्पाद",
+      "category": "श्रेणी",
+      "revenue": "आमदनी",
+      "units": "नग",
+      "views": "व्यू",
+      "email": "ईमेल",
+      "orders": "ऑर्डर",
+      "stage": "चरण",
+      "count": "गिनती",
+      "pctOfTop": "शीर्ष का %",
+      "stepPct": "चरण %",
+      "term": "शब्द",
+      "searches": "खोजें"
+    }
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "dashboard": {
+    "greetingMorning": "सुप्रभात!",
+    "greetingAfternoon": "नमस्कार!",
+    "greetingEvening": "शुभ संध्या!",
+    "subtitle": "आज आपकी दुकान का हाल यह है।",
+
+    "salesToday": "आज की बिक्री",
+    "ordersToday": "आज के ऑर्डर",
+    "avgOrder": "औसत ऑर्डर",
+    "thisMonth": "इस महीने",
+    "vsLastWeek": "पिछले हफ़्ते के इसी दिन से",
+    "vsPrevMtd": "पिछले महीने की इसी अवधि से",
+    "onlineCodSplit": "ऑनलाइन मिला ₹{{online}} · सीओडी बाक़ी ₹{{cod}}",
+
+    "codCash": "सीओडी नकद",
+    "codUncollected_one": "{{count}} भेजे गए ऑर्डर का पैसा बाक़ी है",
+    "codUncollected_other": "{{count}} भेजे गए ऑर्डर का पैसा बाक़ी है",
+    "codAged": "{{count}} ऑर्डर 7 दिन से ज़्यादा पुराने हैं — इनका पीछा करें।",
+    "codConfirmedToday": "आज पक्का हुआ",
+    "codNotePrefix": "पैसा हाथ में आते ही ऑर्डर पर ",
+    "codNoteStrong": "नकद मिल गया",
+    "codNoteSuffix": " पर टिक करें। तब तक उसका रिफ़ंड भी नहीं हो सकता।",
+
+    "topSellers": "पिछले 7 दिन के टॉप विक्रेता",
+    "topSellersEmpty": "पिछले 7 दिनों में कोई बिक्री नहीं।",
+    "topColProduct": "उत्पाद",
+    "topColUnits": "इकाइयाँ",
+    "topColRevenue": "कमाई",
+
+    "gstMonthLine": "इस महीने वसूला गया जीएसटी: ₹{{amount}}",
+    "openGstReport": "जीएसटी रिपोर्ट खोलें",
+
+    "needsAttention": "आपके ध्यान की ज़रूरत है",
+    "allCaughtUp": "सब काम पूरा! 🎉",
+    "allCaughtUpBody": "अभी किसी चीज़ पर ध्यान देने की ज़रूरत नहीं है।",
+
+    "action": {
+      "confirm_one": "{{count}} नया ऑर्डर आपकी पुष्टि के इंतज़ार में है।",
+      "confirm_other": "{{count}} नए ऑर्डर आपकी पुष्टि के इंतज़ार में हैं।",
+      "confirmButton": "ऑर्डर पक्के करें",
+      "ship_one": "{{count}} ऑर्डर पैक करके भेजना है।",
+      "ship_other": "{{count}} ऑर्डर पैक करके भेजने हैं।",
+      "viewOrders": "ऑर्डर देखें",
+      "stock_one": "{{count}} उत्पाद का स्टॉक ख़त्म होने वाला है{{names}}।",
+      "stock_other": "{{count}} उत्पादों का स्टॉक ख़त्म होने वाला है{{names}}।",
+      "stockButton": "स्टॉक भरें",
+      "chats_one": "{{count}} ग्राहक चैट के जवाब का इंतज़ार कर रहा है।",
+      "chats_other": "{{count}} ग्राहक चैट के जवाब का इंतज़ार कर रहे हैं।",
+      "chatsButton": "अभी जवाब दें",
+      "unreadChats_one": "{{count}} बिना पढ़ी बातचीत — ग्राहक ने आख़िरी संदेश भेजा है और किसी ने जवाब नहीं दिया।",
+      "unreadChats_other": "{{count}} बिना पढ़ी बातचीतें — ग्राहक ने आख़िरी संदेश भेजा है और किसी ने जवाब नहीं दिया।",
+      "unreadChatsButton": "चैट खोलें",
+      "contacts_one": "संपर्क फ़ॉर्म से {{count}} बिना पढ़ा संदेश आया है।",
+      "contacts_other": "संपर्क फ़ॉर्म से {{count}} बिना पढ़े संदेश आए हैं।",
+      "contactsButton": "संदेश पढ़ें",
+      "stuck_one": "{{count}} ऑनलाइन भुगतान अटका लग रहा है — ये अपने आप ठीक हो जाते हैं, फिर भी नज़र रखें।",
+      "stuck_other": "{{count}} ऑनलाइन भुगतान अटके लग रहे हैं — ये अपने आप ठीक हो जाते हैं, फिर भी नज़र रखें।",
+      "unshippedAged_one": "{{count}} ऑर्डर 2 दिन से ज़्यादा से भेजने के इंतज़ार में है।",
+      "unshippedAged_other": "{{count}} ऑर्डर 2 दिन से ज़्यादा से भेजने के इंतज़ार में हैं।",
+      "outOfStock_one": "{{count}} उत्पाद का स्टॉक ख़त्म है।",
+      "outOfStock_other": "{{count}} उत्पादों का स्टॉक ख़त्म है।",
+      "invoicesMissing_one": "{{count}} ऑर्डर का बिल अभी नहीं बना है।",
+      "invoicesMissing_other": "{{count}} ऑर्डरों का बिल अभी नहीं बना है।",
+      "unclassifiedHsn_one": "{{count}} उत्पाद का एचएसएन कोड नहीं है।",
+      "unclassifiedHsn_other": "{{count}} उत्पादों का एचएसएन कोड नहीं है।",
+      "failedPayments_one": "आज {{count}} ऑनलाइन भुगतान नाकाम रहा।",
+      "failedPayments_other": "आज {{count}} ऑनलाइन भुगतान नाकाम रहे।",
+      "openGst": "जीएसटी रिपोर्ट खोलें"
+    },
+
+    "recentOrders": "हाल के ऑर्डर",
+    "noRecentOrders": "कोई हालिया ऑर्डर नहीं"
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "insights": {
+    "title": "Insights",
+    "subtitle": "Sales and behavioral analytics",
+    "pageHelp": "Reporting only — nothing here changes your store. Figures are rebuilt every few minutes, so today's numbers can lag by a little. The two worth acting on: what customers searched for and did not find (things to stock), and where they drop out between cart and payment.",
+    "emailSummary": "Email me this week's summary",
+    "sending": "Sending…",
+    "summarySentTitle": "Summary sent",
+    "summarySentBody": "Check the store email for this week's plain-language summary.",
+    "summaryFailedTitle": "Error",
+    "summaryFailedBody": "Could not send the summary email.",
+
+    "tabs": {
+      "overview": "Overview",
+      "sales": "Sales",
+      "funnel": "Funnel",
+      "search": "Search",
+      "customers": "Customers",
+      "anonymous": "Potential Customers"
+    },
+
+    "toolbar": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "compare": "Compare",
+      "refresh": "Refresh"
+    },
+
+    "indiaMapLabel": "India choropleth",
+
+    "chart": {
+      "noData": "No data for this range",
+      "loadFailed": "Failed to load.",
+      "exportCsv": "Export CSV",
+      "noDataShort": "No data"
+    },
+
+    "kpi": {
+      "revenue": "Revenue",
+      "orders": "Orders",
+      "aov": "Avg Order Value",
+      "repeatRate": "Repeat Rate",
+      "anonPageViews": "Anon Page Views",
+      "couponOrders": "Coupon Orders",
+      "vsPrev": "vs prev",
+      "off": "{{amount}} off",
+      "newCustomers": "New customers",
+      "returningCustomers": "Returning customers"
+    },
+
+    "overview": {
+      "revenueAndOrders": "Revenue & orders",
+      "conversionFunnel": "Conversion funnel",
+      "loggedInJourney": "Logged-in journey",
+      "topProducts": "Top products",
+      "anonByDevice": "Anonymous by device",
+      "anonBySource": "Anonymous by source"
+    },
+
+    "sales": {
+      "overTime": "Revenue & orders over time",
+      "compareHint": "Dashed line = previous period",
+      "topProducts": "Top products",
+      "topCategories": "Top categories"
+    },
+
+    "funnel": {
+      "title": "Conversion funnel (logged-in)",
+      "description": "Stage counts and drop-off",
+      "stepConversion": "Step conversion",
+      "fromPrevious": "from previous",
+      "stage": {
+        "view": "Product views",
+        "add_to_cart": "Added to cart",
+        "checkout_started": "Checkout started",
+        "purchase": "Purchased",
+        "page_view": "Page views",
+        "product_view": "Product views",
+        "checkout_completed": "Checkout completed"
+      }
+    },
+
+    "searchTab": {
+      "topTerms": "Top search terms",
+      "zeroResults": "Zero-result searches",
+      "zeroResultsDesc": "Demand we aren't meeting",
+      "zeroResultsEmpty": "No zero-result searches 🎉",
+      "viewedNotBought": "Viewed but not bought"
+    },
+
+    "customersTab": {
+      "repeatRate": "Repeat rate",
+      "returning": "returning",
+      "newVsReturning": "New vs returning",
+      "new": "New",
+      "returningSeries": "Returning",
+      "byRegion": "Customers by region",
+      "byRegionDesc": "Registered users by state",
+      "topCustomers": "Top customers",
+      "users": "users"
+    },
+
+    "anonymousTab": {
+      "macroFunnel": "Anonymous macro funnel",
+      "macroFunnelDesc": "Aggregate stage counts for logged-out traffic — no per-visitor tracking",
+      "byDevice": "By device",
+      "bySource": "By traffic source",
+      "pageViews": "Page views",
+      "anonPageViews": "anonymous page views",
+      "whereFrom": "Where anonymous visitors come from",
+      "whereFromDesc": "Approximate region from IP",
+      "pageViewsUnit": "page views"
+    },
+
+    "series": {
+      "revenue": "Revenue",
+      "prevRevenue": "Prev revenue",
+      "orders": "Orders"
+    },
+
+    "col": {
+      "product": "Product",
+      "category": "Category",
+      "revenue": "Revenue",
+      "units": "Units",
+      "views": "Views",
+      "email": "Email",
+      "orders": "Orders",
+      "stage": "Stage",
+      "count": "Count",
+      "pctOfTop": "% of top",
+      "stepPct": "Step %",
+      "term": "Term",
+      "searches": "Searches"
+    }
+  }
+}

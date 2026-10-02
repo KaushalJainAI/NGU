@@ -1,0 +1,75 @@
+{
+  "dashboard": {
+    "greetingMorning": "Good morning!",
+    "greetingAfternoon": "Good afternoon!",
+    "greetingEvening": "Good evening!",
+    "subtitle": "Here's how your store is doing today.",
+
+    "salesToday": "Sales today",
+    "ordersToday": "Orders today",
+    "avgOrder": "Average order",
+    "thisMonth": "This month",
+    "vsLastWeek": "vs same day last week",
+    "vsPrevMtd": "vs last month to date",
+    "onlineCodSplit": "Online received ₹{{online}} · COD to collect ₹{{cod}}",
+
+    "codCash": "COD cash",
+    "codUncollected_one": "Uncollected across {{count}} dispatched order",
+    "codUncollected_other": "Uncollected across {{count}} dispatched orders",
+    "codAged": "{{count}} older than 7 days — chase these.",
+    "codConfirmedToday": "Confirmed today",
+    "codNotePrefix": "Tick ",
+    "codNoteStrong": "Paid in cash",
+    "codNoteSuffix": " on an order once the money is in hand. Until then it can't be refunded either.",
+
+    "topSellers": "Top sellers, last 7 days",
+    "topSellersEmpty": "No sales in the last 7 days.",
+    "topColProduct": "Product",
+    "topColUnits": "Units",
+    "topColRevenue": "Revenue",
+
+    "gstMonthLine": "GST collected this month: ₹{{amount}}",
+    "openGstReport": "open GST report",
+
+    "needsAttention": "Needs your attention",
+    "allCaughtUp": "All caught up! 🎉",
+    "allCaughtUpBody": "Nothing needs your attention right now.",
+
+    "action": {
+      "confirm_one": "{{count}} new order waiting for you to confirm.",
+      "confirm_other": "{{count}} new orders waiting for you to confirm.",
+      "confirmButton": "Confirm orders",
+      "ship_one": "{{count}} order to pack and ship.",
+      "ship_other": "{{count}} orders to pack and ship.",
+      "viewOrders": "View orders",
+      "stock_one": "{{count}} product almost out of stock{{names}}.",
+      "stock_other": "{{count}} products almost out of stock{{names}}.",
+      "stockButton": "Restock products",
+      "chats_one": "{{count}} customer waiting for a chat reply.",
+      "chats_other": "{{count}} customers waiting for a chat reply.",
+      "chatsButton": "Reply now",
+      "unreadChats_one": "{{count}} unread conversation — the customer wrote last and nobody has replied.",
+      "unreadChats_other": "{{count}} unread conversations — the customer wrote last and nobody has replied.",
+      "unreadChatsButton": "Open chats",
+      "contacts_one": "{{count}} unread contact message from the Contact Us form.",
+      "contacts_other": "{{count}} unread contact messages from the Contact Us form.",
+      "contactsButton": "Read messages",
+      "stuck_one": "{{count}} online payment looking stuck — these fix themselves automatically, but keep an eye out.",
+      "stuck_other": "{{count}} online payments looking stuck — these fix themselves automatically, but keep an eye out.",
+      "unshippedAged_one": "{{count}} order waiting more than 2 days to ship.",
+      "unshippedAged_other": "{{count}} orders waiting more than 2 days to ship.",
+      "outOfStock_one": "{{count}} product is out of stock.",
+      "outOfStock_other": "{{count}} products are out of stock.",
+      "invoicesMissing_one": "{{count}} order has no invoice yet.",
+      "invoicesMissing_other": "{{count}} orders have no invoice yet.",
+      "unclassifiedHsn_one": "{{count}} product has no HSN code.",
+      "unclassifiedHsn_other": "{{count}} products have no HSN code.",
+      "failedPayments_one": "{{count}} online payment failed today.",
+      "failedPayments_other": "{{count}} online payments failed today.",
+      "openGst": "Open GST report"
+    },
+
+    "recentOrders": "Recent Orders",
+    "noRecentOrders": "No recent orders"
+  }
+}
