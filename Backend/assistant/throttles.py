@@ -22,6 +22,26 @@ class AssistantDailyThrottle(SimpleRateThrottle):
         return self.cache_format % {'scope': self.scope, 'ident': ident}
 
 
+class AdminAssistantBurstThrottle(SimpleRateThrottle):
+    """The store-manager chat has its own counters, separate from the shopper
+    chat's, so staff and customers never share an allowance."""
+    scope = 'admin_assistant'
+
+    def get_cache_key(self, request, view):
+        ident = request.user.pk if request.user and request.user.is_authenticated \
+            else self.get_ident(request)
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
+class AdminAssistantDailyThrottle(SimpleRateThrottle):
+    scope = 'admin_assistant_day'
+
+    def get_cache_key(self, request, view):
+        ident = request.user.pk if request.user and request.user.is_authenticated \
+            else self.get_ident(request)
+        return self.cache_format % {'scope': self.scope, 'ident': ident}
+
+
 class AssistantTranscribeThrottle(SimpleRateThrottle):
     """Voice transcription is CPU-heavy on our self-hosted whisper server, so it
     gets a tighter per-minute cap than text chat."""

@@ -8,6 +8,8 @@ import { FREE_SHIPPING_THRESHOLD } from "@/config/limits";
  * Swiggy-style floating action bar that slides up whenever the cart has items.
  * Mounted globally; hidden on the cart/checkout/billing routes where it would
  * be redundant. Sits just above the mobile bottom nav (which is h-16).
+ * On product/combo detail pages the sticky buy bar already owns the slot just
+ * above the nav, so here the bar is lifted above it instead of overlapping it.
  */
 const FloatingCartBar = () => {
   const { t } = useTranslation();
@@ -25,10 +27,16 @@ const FloatingCartBar = () => {
   const hiddenRoutes = ["/cart", "/billing", "/checkout"];
   if (totalQuantity === 0 || hiddenRoutes.includes(location.pathname)) return null;
 
+  // Detail pages render their own sticky buy bar on phones (which already
+  // carries a Cart button), so on phones this bar floats above it.
+  const isDetailRoute =
+    /^\/products\/.+/.test(location.pathname) ||
+    /^\/combos\/.+/.test(location.pathname);
+
   const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md bottom-20 md:bottom-6 animate-cart-slide-up">
+    <div className={`fixed left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-md md:bottom-6 ${isDetailRoute ? "bottom-[10.5rem]" : "bottom-20"} animate-cart-slide-up`}>
       <button
         onClick={() => navigate("/cart")}
         className="w-full bg-secondary text-secondary-foreground rounded-2xl shadow-2xl px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between active-press hover:brightness-105 transition"

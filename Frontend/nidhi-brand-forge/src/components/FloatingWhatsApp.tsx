@@ -6,26 +6,40 @@ const FloatingWhatsApp = () => {
   const { t } = useTranslation();
   const { cart } = useCart();
   const location = useLocation();
-  // AP12: at most one floating action at a time on phones — the cart bar owns
-  // the slot whenever it shows (same visibility rule, mirrored here), so the
-  // two never stack above the bottom nav.
-  const hasItems = cart.reduce((sum, item) => sum + item.quantity, 0) > 0;
+  // Same lines the cart bar counts: one the server will not sell is not in the
+  // total. Previously this used ALL lines while the cart bar used only buyable
+  // ones, so a cart with only out-of-stock items hid WhatsApp with no cart bar
+  // to justify it.
+  const hasItems =
+    cart
+      .filter((item) => item.inStock !== false)
+      .reduce((sum, item) => sum + item.quantity, 0) > 0;
+  const hiddenRoutes = ["/cart", "/billing", "/checkout"];
   const cartBarVisible =
-    hasItems && !["/cart", "/billing", "/checkout"].includes(location.pathname);
-  if (cartBarVisible) return null;
-  // The cart page pins its own checkout bar in this slot on phones.
-  const checkoutBarVisible = hasItems && location.pathname === "/cart";
+    hasItems && !hiddenRoutes.includes(location.pathname);
+  // Product/combo detail pages always render their own sticky buy bar on
+  // phones; the cart page pins its checkout bar above the bottom nav. On
+  // phones WhatsApp sits ABOVE those bars — it is never removed, only lifted,
+  // so contact access survives a non-empty cart.
+  const isDetailRoute =
+    /^\/products\/.+/.test(location.pathname) ||
+    /^\/combos\/.+/.test(location.pathname);
+  const pinnedBarVisible = hasItems && location.pathname === "/cart";
+  // Detail page with items in cart: sticky bar + cart bar both occupy slots.
+  const doubleStacked = isDetailRoute && cartBarVisible;
+  const stacked = cartBarVisible || pinnedBarVisible || isDetailRoute;
   return (
     <a
       href="https://wa.me/919300005040"
       target="_blank"
       rel="noopener noreferrer"
       aria-label={t('footer.whatsapp')}
-      className={`fixed right-6 z-50 md:bottom-24 bottom-28
-                 h-14 w-14 rounded-full shadow-lg hover:shadow-xl
-                 ${checkoutBarVisible ? "hidden md:flex" : "flex"} items-center justify-center
-                 bg-[#25D366] hover:bg-[#20b858]
-                 transition-all duration-300 hover:scale-110 active:scale-95`}
+      className={`fixed right-6 z-50 md:bottom-24
+                 ${doubleStacked ? "bottom-[15.5rem]" : stacked ? "bottom-44" : "bottom-28"}
+                  h-14 w-14 rounded-full shadow-lg hover:shadow-xl
+                  flex items-center justify-center
+                  bg-[#25D366] hover:bg-[#20b858]
+                  transition-all duration-300 hover:scale-110 active:scale-95`}
     >
       {/* WhatsApp SVG */}
       <svg

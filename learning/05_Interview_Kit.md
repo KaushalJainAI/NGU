@@ -552,7 +552,7 @@ The full table is in [Part 1 §8](01_HLD.md). The ones most worth remembering:
 | Access / refresh token | 15 minutes / 7 days |
 | Unpaid online order cancelled after | 15 minutes |
 | Reconcile and roll-up | every 5 minutes |
-| Assistant | 4 rounds, 20 s per call, 10/min, 100/day |
+| Assistant | 4 rounds, 20 s per call, 45 s per message, 10/min, 100/day |
 | COD | ₹5,000 per order, 3 open orders |
 | Free delivery from | ₹499 |
 | Delivery | ₹59 + 18% = ₹69.62 |

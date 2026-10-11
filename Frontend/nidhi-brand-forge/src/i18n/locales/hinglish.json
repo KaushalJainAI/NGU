@@ -689,7 +689,7 @@
         },
         {
           "q": "Kya main apna order cancel kar sakta hoon?",
-          "a": "Haan. Order dene ke 24 ghante ke andar unhe free of charge cancel kiya ja sakta hai, bashart ki wo abhi tak ship na hue hon. Details ke liye hamari Return & Refund Policy dekhein."
+          "a": "Order ship hone se pehle aap kabhi bhi free me cancel kar sakte hain aur poora refund milta hai. Ship hone ke baad cancel nahi ho sakta — aap delivery lene se mana kar sakte hain ya return process use kar sakte hain, aur delivery charge refund nahi hota."
         },
         {
           "q": "Aapki return aur refund policy kya hai?",
@@ -869,7 +869,13 @@
   },
   "assistant": {
     "langAuto": "Auto",
-    "greeting": "Hi! Main Nidhi Assistant hoon. Hamare masalon, apne orders ke baare mein poochein, ya bas bataayein ki aap kya paka rahe hain! 🌶️",
+    "greeting": "Hi! Main Nidhi Assistant hoon. Bataiye aap kya paka rahe hain — sahi masala chunne me madad karoon? Ya delivery, offers aur apne orders ke baare mein poochein. 🌶️",
+    "chipDelivery": "Delivery charge kitna hai?",
+    "chipCod": "COD milega kya?",
+    "chipReturns": "Return policy kya hai?",
+    "chipDeliveryTime": "Delivery kitne din me hoti hai?",
+    "errorDaily": "Aaj ki chat limit poori ho gayi hai — ye kal phir shuru hogi. Aap browse aur order kar sakte hain, ya Contact page se hamari team se baat karein.",
+    "errorBusy": "Ek pal — main abhi aapke pichhle message par kaam kar raha hoon. Kuch second baad phir try karein.",
     "justNow": "abhi",
     "minutesAgo": "{{count}}m pehle",
     "hoursAgo": "{{count}}h pehle",

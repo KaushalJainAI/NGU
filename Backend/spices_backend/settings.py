@@ -342,8 +342,11 @@ REST_FRAMEWORK = {
         # AP7c/S5+S8: 10/min burst (one slow multi-call turn already occupies
         # a gunicorn slot for seconds) and 100/day hard cap (500 turns x up to
         # 4 LLM calls each was an uncapped spend path on free accounts).
-        'assistant': '10/min',   # AI assistant: 10 messages per minute
-        'assistant_day': '100/day',  # AI assistant: hard daily cap (cost guard)
+        'assistant': config('THROTTLE_ASSISTANT', default='10/min'),         # messages per minute
+        'assistant_day': config('THROTTLE_ASSISTANT_DAY', default='100/day'),  # hard daily cap (cost guard)
+        # Store-manager chat (staff): its own counters, generous - read-only and few users.
+        'admin_assistant': config('THROTTLE_ADMIN_ASSISTANT', default='20/min'),
+        'admin_assistant_day': config('THROTTLE_ADMIN_ASSISTANT_DAY', default='500/day'),
         'assistant_stt': config('THROTTLE_ASSISTANT_STT', default='15/min'),  # voice transcription (CPU-heavy)
         'events': '600/hour',    # Behavioral event ingest (batched on client)
         'anon_events': config('THROTTLE_ANON_EVENTS', default='120/min'),  # Anonymous counter beacons (per-IP)

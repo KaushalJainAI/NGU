@@ -21,6 +21,8 @@ Back to the [learning index](../README.md).
 | 07 | [An AI assistant that fails politely](07_an_ai_assistant_that_fails_politely.md) | Design the failure before the feature | timeouts, bounded loops, reason codes, honest messages, cost limits |
 | 08 | [`return` inside a transaction commits](08_return_inside_a_transaction_commits.md) | Only an exception rolls back | `transaction.atomic`, validate-then-write, raising to refuse, savepoints |
 | 09 | [One repository from three](09_one_repository_from_three.md) | Repository boundaries should match how code changes | monorepo vs polyrepo, merging histories, `.gitignore`, secrets before the first commit |
+| 10 | [Timeouts that nest, and replies in the right language](10_timeouts_that_nest_and_replies_in_the_right_language.md) | Each limit must fit inside the one outside it | nested timeouts, canned replies, fuzzy matching, answering without the model, measuring token savings |
+| 11 | [A conversation is a budget](11_a_conversation_is_a_budget.md) | Count in the billed unit; summarise before you forget | token estimates, rolling summaries, background work, compare-and-set, why not JSONL |
 
 ---
 
@@ -64,6 +66,13 @@ Back to the [learning index](../README.md).
 - Reason codes: our failure vs the user needs help (07)
 - Text sent with a tool call is not the answer (07)
 - Scripted tests vs live model tests (07)
+- Timeouts must nest: call < turn budget < proxy (10)
+- Canned replies need every language, not just English (10)
+- Answering common questions from a file, with no model call (10)
+- Measuring a "saving" before claiming it (10)
+- A conversation is a token budget; summaries must be written before messages fall out (11)
+- Untrusted text in a persistent summary; closing the data markers (11)
+- Profile before changing the datastore (11)
 
 ### Git and repository hygiene
 - Monorepo vs polyrepo (09)

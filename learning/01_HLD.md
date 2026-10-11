@@ -352,7 +352,7 @@ These are in the repository, so you can check each one.
 | Page size | 12 rows per page | same file |
 | Unpaid online order | cancelled and restocked after 15 minutes | `PAYMENT_STUCK_TTL_MINUTES` |
 | Reconcile and roll-up cadence | every 5 minutes | `RECONCILE_INTERVAL_MINUTES`, `ROLLUP_INTERVAL_MINUTES` |
-| Assistant | at most 4 model rounds per message; 20 s timeout per call | [assistant/agent.py](../Backend/assistant/agent.py) |
+| Assistant | at most 4 model rounds per message; 20 s timeout per call, no retry; the whole message must finish in 45 s (the proxy gives up at 60 s) | [assistant/agent.py](../Backend/assistant/agent.py) |
 | Cash on delivery | at most ₹5,000 per order, at most 3 open COD orders per account | [limits.py](../Backend/spices_backend/limits.py) |
 | Languages for product text | English, Hindi, Hinglish, Gujarati, Marathi, Punjabi | settings |
 | Backend tests | about 1,280 | `cd Backend && pytest` |

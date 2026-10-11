@@ -765,7 +765,7 @@ surface had not been told about. The rule now lives in one place —
 Tests: `products/test_availability.py`, `cart/test_availability.py`,
 `orders/test_retired_size_checkout.py`, `products/test_category_hide.py`,
 `reviews/test_switched_off_items.py`, `admin_panel/test_low_stock_sizes.py`,
-`assistant/test_availability_tools.py`. Full plan (defaults D1–D5, browser checks):
+`assistant/tests.py`. Full plan (defaults D1–D5, browser checks):
 `GAP_FIX_PLAN_2026-10.md`.
 
 - ✅ **A retired size in a cart can no longer be ordered.** Checkout asks
@@ -807,4 +807,57 @@ Tests: `products/test_availability.py`, `cart/test_availability.py`,
 - Catalog lookups go through `products.views._as_pk`: an id that is not an id is a 404 /
   empty list, not an exception.
 - Local `Backend/.env` still pins `ASSISTANT_MODEL_CONTEXT_TOKENS=200000`, which fails
-  two tests in `assistant/test_chat_limits.py` on this machine (unrelated to the above).
+  two tests in `assistant/tests.py` (`TestChatLimitsHistoryBudget`, `TestThrottleBudget`) on
+  this machine (unrelated to the above).
+
+## Chat assistant fixes (2026-10-03 — in the working tree, NOT deployed)
+
+Plan and decisions: `ASSISTANT_FIX_PLAN_2026-10.md`. ⚠ **Needs migration `assistant/0005`**
+(thread summary columns + a message index; additive, no data change) and a rebuild of the
+BACKEND and STOREFRONT images (the widget has chips, new error messages, new locale keys).
+
+- **Never silent, never English-only.** The four canned replies (+ a new `slow` one) exist in
+  all six languages (`prompts.FAILURE_REPLIES`); `lang.py` picks the language (explicit choice,
+  else script of the message). Devanagari cannot separate Hindi from Marathi.
+- **Timeouts nest:** model call 20 s < turn budget 45 s (`ASSISTANT_TURN_BUDGET_SECONDS`) <
+  nginx 60 s. `LLM_MAX_RETRIES` is 0. ⚠ Do not raise the nginx timeout to fit a slow model,
+  and keep `ASSISTANT_LLM_TIMEOUT` below the budget. Empty reply + `finish=length` (a
+  reasoning model spent its tokens thinking) answers at once instead of asking again.
+- ⚠ **PROD ENV STILL TO EDIT (nothing has touched prod):** `ASSISTANT_REASONING_EFFORT`
+  `high` → `low` (the likely cause of the slow/empty replies and the biggest token cost; the
+  2026-10-02 note above set it to high), and add `ASSISTANT_TURN_BUDGET_SECONDS=45`. Back up
+  `~/NGU/.env.backend` first; recreate `backend` + `scheduler`.
+- **FAQ file:** `Backend/assistant/faq_data.json` (17 questions, six languages) +
+  `assistant/faq.py` (rapidfuzz, no model). Two uses: the `search_faq` tool, and a word-for-word
+  answer with NO model call (`views._faq_result`, `reason 'faq'`) for near-exact matches only.
+  Numbers are `{placeholders}` filled from `limits.py` — never type 499 into it (a test fails).
+  Edit the file, restart the backend, then `manage.py faq_search --check`. `faq_gaps` lists
+  questions customers asked that the file cannot answer. Entries with a `review` note are never
+  served word for word: **`payment-methods` still needs the owner to list the Razorpay methods
+  that are switched on.**
+- **The storefront FAQ page's cancellation answer was changed** (all six locales) from "within
+  24 hours" to "any time before shipping", to match the Return policy page and the assistant
+  (the plan's default D5). Revert both together if the owner disagrees.
+- **429s are named** (`views.NamedThrottleMixin`): `Daily chat limit reached.` /
+  `Too many messages…` / `A reply is already in progress.`; the widget matches on "daily".
+  Staff chat has its own scopes (`admin_assistant` 20/min, `_day` 500/day). Caps are env:
+  `THROTTLE_ASSISTANT[_DAY]`.
+- **Replies are cut at 4,000 chars** at a sentence end (was 1,500, silently).
+- **Context management (2026-10-03, later):** `assistant/compaction.py` folds the OLD part of a
+  long thread into `AssistantConversation.summary` (a background thread after the reply is
+  saved; never blocks, never deletes a message; fails to "as before"). The prompt = system +
+  summary (as DATA) + messages after `summary_upto` + new message. Trigger
+  `ASSISTANT_COMPACT_AFTER_TOKENS` (4,500) is CLAMPED to 80% of the prompt's real history room,
+  so it cannot be set to 500,000 — the model is only ever shown ~6,000 tokens of history, and
+  a higher trigger would let messages fall out unsummarised. Token estimate is now script-aware
+  (non-ASCII = 2/3 token each). `_spotlight` strips `<<`/`>>` from payloads. Not JSONL: a turn
+  spends ~11 ms in the DB and 1–20 s in the model (measured). Details: `Backend/docs/ASSISTANT.md`
+  → "Context management".
+- **Selling:** `SYSTEM_PROMPT` has a SELLING section; `get_cart` returns `free_delivery_gap`,
+  new `get_recommendations` tool (bought-together → same shelf → bestsellers, in-stock only).
+  The tool list is no longer written out in the prompt (it lives in the function schemas):
+  ~4,100 → ~3,500 estimated tokens per model call (measured). The scripted eval cannot show
+  whether the MODEL sells well — run `ASSISTANT_EVAL_LIVE=1 pytest assistant/tests.py -k sell`.
+- Tests: ALL assistant tests are one file, `assistant/tests.py` (15 former files as banner-marked
+  sections; see its docstring). 411 tests: 409 pass, the same two `.env`-caused failures as before.
+  Lesson: `learning/lessons/10_*.md`.

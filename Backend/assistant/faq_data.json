@@ -1,0 +1,493 @@
+{
+  "_how_to_edit": [
+    "One entry = one question the shop gets asked. Add a new entry or edit an answer, then restart the backend.",
+    "questions: every way a customer might ask it - English, Hinglish, Hindi, Gujarati, Marathi, Punjabi. More ways = better matching.",
+    "answer: write 'en', 'hi', 'hinglish', 'gu', 'mr' and 'pa'. A customer is answered word for word only in a language written here; otherwise the AI writes the reply.",
+    "Never type a number that lives in settings. Use {free_above} {delivery_fee} {fee_net} {tax_rate} {cod_max} {cod_open} {phone} {email} - they are filled in from the live configuration.",
+    "route: an in-store page to point to (must be one of the assistant's allowed routes), or null.",
+    "direct: true = this answer may be given word for word with no AI call. Use false when the right answer depends on the customer's own order.",
+    "review: a note for the owner. An entry carrying a review note is never given word for word - the AI still sees it.",
+    "The storefront's suggested-question chips (locale key assistant.chip*) must stay worded exactly like a question here - a test checks it.",
+    "Check your edit: python manage.py faq_search --check   and   python manage.py faq_search \"your question\""
+  ],
+  "entries": [
+    {
+      "id": "delivery-areas",
+      "topic": "shipping",
+      "questions": [
+        "Which areas do you deliver to?",
+        "Do you deliver to my city?",
+        "Do you ship outside India?",
+        "international shipping",
+        "kahan kahan delivery hoti hai",
+        "kya aap mere shehar me delivery karte ho",
+        "India ke bahar delivery hoti hai kya",
+        "कहाँ कहाँ डिलीवरी होती है",
+        "क्या आप मेरे शहर में डिलीवरी करते हैं",
+        "તમે ક્યાં ક્યાં ડિલિવરી કરો છો",
+        "तुम्ही कुठे कुठे डिलिव्हरी करता",
+        "ਤੁਸੀਂ ਕਿੱਥੇ ਕਿੱਥੇ ਡਿਲੀਵਰੀ ਕਰਦੇ ਹੋ"
+      ],
+      "answer": {
+        "en": "We deliver all across India. We do not ship outside India at the moment.",
+        "hi": "हम पूरे भारत में डिलीवरी करते हैं। फ़िलहाल भारत के बाहर डिलीवरी नहीं होती।",
+        "hinglish": "Hum poore India me delivery karte hain. Abhi India ke bahar delivery nahi hoti.",
+        "gu": "અમે આખા ભારતમાં ડિલિવરી કરીએ છીએ. હાલમાં ભારત બહાર ડિલિવરી થતી નથી.",
+        "mr": "आम्ही संपूर्ण भारतात डिलिव्हरी करतो. सध्या भारताबाहेर डिलिव्हरी होत नाही.",
+        "pa": "ਅਸੀਂ ਪੂਰੇ ਭਾਰਤ ਵਿੱਚ ਡਿਲੀਵਰੀ ਕਰਦੇ ਹਾਂ। ਫ਼ਿਲਹਾਲ ਭਾਰਤ ਤੋਂ ਬਾਹਰ ਡਿਲੀਵਰੀ ਨਹੀਂ ਹੁੰਦੀ।"
+      },
+      "route": "/shipping-policy",
+      "direct": true
+    },
+    {
+      "id": "delivery-time",
+      "topic": "shipping",
+      "questions": [
+        "How long does delivery take?",
+        "How many days does delivery take?",
+        "delivery time",
+        "kitne din me delivery hogi",
+        "delivery kitne din me hoti hai",
+        "delivery me kitna time lagta hai",
+        "डिलीवरी कितने दिन में होगी",
+        "डिलीवरी में कितना समय लगता है",
+        "ડિલિવરી કેટલા દિવસમાં થાય છે",
+        "डिलिव्हरी किती दिवसांत होते",
+        "ਡਿਲੀਵਰੀ ਵਿੱਚ ਕਿੰਨੇ ਦਿਨ ਲੱਗਦੇ ਹਨ"
+      ],
+      "answer": {
+        "en": "Orders are processed within 24–48 hours of payment confirmation. After that, delivery usually takes 3–5 business days in metro cities, 5–7 in other cities and 7–10 in remote areas.",
+        "hi": "पेमेंट कन्फ़र्म होने के 24–48 घंटे के अंदर ऑर्डर प्रोसेस हो जाता है। उसके बाद मेट्रो शहरों में 3–5 कार्यदिवस, बाकी शहरों में 5–7 और दूर के इलाकों में 7–10 कार्यदिवस लगते हैं।",
+        "hinglish": "Payment confirm hone ke 24–48 ghante ke andar order process ho jata hai. Uske baad metro cities me 3–5 business days, baaki cities me 5–7 aur remote areas me 7–10 din lagte hain.",
+        "gu": "પેમેન્ટ કન્ફર્મ થયાના 24–48 કલાકમાં ઓર્ડર પ્રોસેસ થાય છે. ત્યારબાદ મેટ્રો શહેરોમાં 3–5 કાર્યદિવસ, અન્ય શહેરોમાં 5–7 અને દૂરના વિસ્તારોમાં 7–10 દિવસ લાગે છે.",
+        "mr": "पेमेंट कन्फर्म झाल्यानंतर 24–48 तासांत ऑर्डर प्रोसेस होतो. त्यानंतर मेट्रो शहरांत 3–5 कामकाजी दिवस, इतर शहरांत 5–7 आणि दुर्गम भागात 7–10 दिवस लागतात.",
+        "pa": "ਪੇਮੈਂਟ ਕਨਫ਼ਰਮ ਹੋਣ ਤੋਂ 24–48 ਘੰਟਿਆਂ ਵਿੱਚ ਆਰਡਰ ਪ੍ਰੋਸੈਸ ਹੋ ਜਾਂਦਾ ਹੈ। ਉਸ ਤੋਂ ਬਾਅਦ ਮੈਟਰੋ ਸ਼ਹਿਰਾਂ ਵਿੱਚ 3–5 ਕੰਮਕਾਜੀ ਦਿਨ, ਹੋਰ ਸ਼ਹਿਰਾਂ ਵਿੱਚ 5–7 ਅਤੇ ਦੂਰ-ਦੁਰਾਡੇ ਇਲਾਕਿਆਂ ਵਿੱਚ 7–10 ਦਿਨ ਲੱਗਦੇ ਹਨ।"
+      },
+      "route": "/shipping-policy",
+      "direct": true
+    },
+    {
+      "id": "delivery-charge",
+      "topic": "shipping",
+      "questions": [
+        "What are the shipping charges?",
+        "What is the delivery charge?",
+        "Is delivery free?",
+        "minimum order for free delivery",
+        "how much should I order for free shipping",
+        "delivery charge kitna hai",
+        "shipping charge kitna lagega",
+        "free delivery kitne ke order par milti hai",
+        "डिलीवरी चार्ज कितना है",
+        "फ्री डिलीवरी कितने के ऑर्डर पर मिलती है",
+        "ડિલિવરી ચાર્જ કેટલો છે",
+        "डिलिव्हरी शुल्क किती आहे",
+        "ਡਿਲੀਵਰੀ ਚਾਰਜ ਕਿੰਨਾ ਹੈ"
+      ],
+      "answer": {
+        "en": "Delivery is free on orders of ₹{free_above} and above (counted after any coupon discount). Below that, the delivery charge is ₹{delivery_fee} (₹{fee_net} + {tax_rate}% GST), shown at checkout before you pay.",
+        "hi": "₹{free_above} या उससे ज़्यादा के ऑर्डर पर डिलीवरी फ्री है (कूपन की छूट घटाने के बाद)। उससे कम पर ₹{delivery_fee} डिलीवरी चार्ज लगता है (₹{fee_net} + {tax_rate}% GST), जो पेमेंट से पहले चेकआउट पर दिखता है।",
+        "hinglish": "₹{free_above} ya usse zyada ke order par delivery free hai (coupon discount ghatane ke baad). Usse kam par ₹{delivery_fee} delivery charge lagta hai (₹{fee_net} + {tax_rate}% GST), jo payment se pehle checkout par dikhta hai.",
+        "gu": "₹{free_above} કે તેથી વધુના ઓર્ડર પર ડિલિવરી ફ્રી છે (કૂપન ડિસ્કાઉન્ટ બાદ કર્યા પછી). તેનાથી ઓછા પર ₹{delivery_fee} ડિલિવરી ચાર્જ લાગે છે (₹{fee_net} + {tax_rate}% GST), જે ચુકવણી પહેલાં ચેકઆઉટ પર દેખાય છે.",
+        "mr": "₹{free_above} किंवा त्याहून अधिकच्या ऑर्डरवर डिलिव्हरी मोफत आहे (कूपन सवलत वजा केल्यानंतर). त्यापेक्षा कमी रकमेवर ₹{delivery_fee} डिलिव्हरी शुल्क लागते (₹{fee_net} + {tax_rate}% GST), जे पेमेंटपूर्वी चेकआउटवर दिसते.",
+        "pa": "₹{free_above} ਜਾਂ ਇਸ ਤੋਂ ਵੱਧ ਦੇ ਆਰਡਰ 'ਤੇ ਡਿਲੀਵਰੀ ਮੁਫ਼ਤ ਹੈ (ਕੂਪਨ ਦੀ ਛੋਟ ਘਟਾਉਣ ਤੋਂ ਬਾਅਦ)। ਇਸ ਤੋਂ ਘੱਟ 'ਤੇ ₹{delivery_fee} ਡਿਲੀਵਰੀ ਚਾਰਜ ਲੱਗਦਾ ਹੈ (₹{fee_net} + {tax_rate}% GST), ਜੋ ਭੁਗਤਾਨ ਤੋਂ ਪਹਿਲਾਂ ਚੈੱਕਆਊਟ 'ਤੇ ਦਿਸਦਾ ਹੈ।"
+      },
+      "route": "/shipping-policy",
+      "direct": true
+    },
+    {
+      "id": "track-order",
+      "topic": "orders",
+      "questions": [
+        "How do I track my order?",
+        "order tracking",
+        "where can I see my order status",
+        "where do I find the tracking number",
+        "order track kaise kare",
+        "order ka status kahan dekhu",
+        "tracking number kahan milega",
+        "ऑर्डर कैसे ट्रैक करें",
+        "ऑर्डर का स्टेटस कहाँ देखें",
+        "ઓર્ડર ટ્રૅક કેવી રીતે કરવો",
+        "ऑर्डर ट्रॅक कसा करायचा",
+        "ਆਰਡਰ ਟਰੈਕ ਕਿਵੇਂ ਕਰੀਏ"
+      ],
+      "answer": {
+        "en": "Once your order ships you get a tracking number by email/SMS. You can also see the status and the tracking link any time under My Orders.",
+        "hi": "ऑर्डर शिप होते ही आपको ईमेल/SMS पर ट्रैकिंग नंबर मिल जाता है। My Orders में आप कभी भी स्टेटस और ट्रैकिंग लिंक देख सकते हैं।",
+        "hinglish": "Order ship hote hi aapko email/SMS par tracking number mil jata hai. My Orders me aap kabhi bhi status aur tracking link dekh sakte hain.",
+        "gu": "ઓર્ડર શિપ થતાં જ તમને ઇમેઇલ/SMS પર ટ્રેકિંગ નંબર મળે છે. My Orders માં તમે ગમે ત્યારે સ્ટેટસ અને ટ્રેકિંગ લિંક જોઈ શકો છો.",
+        "mr": "ऑर्डर शिप होताच तुम्हाला ईमेल/SMS वर ट्रॅकिंग नंबर मिळतो. My Orders मध्ये तुम्ही कधीही स्टेटस आणि ट्रॅकिंग लिंक पाहू शकता.",
+        "pa": "ਆਰਡਰ ਸ਼ਿਪ ਹੁੰਦੇ ਹੀ ਤੁਹਾਨੂੰ ਈਮੇਲ/SMS 'ਤੇ ਟਰੈਕਿੰਗ ਨੰਬਰ ਮਿਲ ਜਾਂਦਾ ਹੈ। My Orders ਵਿੱਚ ਤੁਸੀਂ ਕਦੇ ਵੀ ਸਟੇਟਸ ਅਤੇ ਟਰੈਕਿੰਗ ਲਿੰਕ ਵੇਖ ਸਕਦੇ ਹੋ।"
+      },
+      "route": "/my-orders",
+      "direct": false
+    },
+    {
+      "id": "invoice",
+      "topic": "orders",
+      "questions": [
+        "How do I download my bill?",
+        "How do I get the GST invoice?",
+        "invoice download",
+        "I need a GST bill",
+        "bill kaise download kare",
+        "GST bill chahiye",
+        "invoice kahan milega",
+        "बिल कैसे डाउनलोड करें",
+        "जीएसटी बिल चाहिए",
+        "બિલ કેવી રીતે ડાઉનલોડ કરવું",
+        "बिल कसे डाउनलोड करायचे",
+        "ਬਿੱਲ ਕਿਵੇਂ ਡਾਊਨਲੋਡ ਕਰੀਏ"
+      ],
+      "answer": {
+        "en": "Open My Orders, select the order and tap Bill to download the GST tax invoice as a PDF. The bill is available once the order is paid — for Cash on Delivery orders, once it has been shipped.",
+        "hi": "My Orders खोलें, ऑर्डर चुनें और Bill पर टैप करके GST टैक्स इनवॉइस PDF में डाउनलोड करें। बिल पेमेंट होने के बाद मिलता है — कैश ऑन डिलीवरी ऑर्डर में शिप होने के बाद।",
+        "hinglish": "My Orders kholiye, order chuniye aur Bill par tap karke GST tax invoice PDF me download kijiye. Bill payment hone ke baad milta hai — Cash on Delivery order me ship hone ke baad.",
+        "gu": "My Orders ખોલો, ઓર્ડર પસંદ કરો અને Bill પર ટૅપ કરી GST ટૅક્સ ઇન્વૉઇસ PDF તરીકે ડાઉનલોડ કરો. બિલ ચુકવણી થયા પછી મળે છે — કૅશ ઑન ડિલિવરી ઓર્ડરમાં શિપ થયા પછી.",
+        "mr": "My Orders उघडा, ऑर्डर निवडा आणि Bill वर टॅप करून GST टॅक्स इन्व्हॉइस PDF म्हणून डाउनलोड करा. बिल पेमेंट झाल्यानंतर मिळते — कॅश ऑन डिलिव्हरी ऑर्डरमध्ये शिप झाल्यानंतर.",
+        "pa": "My Orders ਖੋਲ੍ਹੋ, ਆਰਡਰ ਚੁਣੋ ਅਤੇ Bill 'ਤੇ ਟੈਪ ਕਰਕੇ GST ਟੈਕਸ ਇਨਵੌਇਸ PDF ਵਿੱਚ ਡਾਊਨਲੋਡ ਕਰੋ। ਬਿੱਲ ਭੁਗਤਾਨ ਹੋਣ ਤੋਂ ਬਾਅਦ ਮਿਲਦਾ ਹੈ — ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਆਰਡਰ ਵਿੱਚ ਸ਼ਿਪ ਹੋਣ ਤੋਂ ਬਾਅਦ।"
+      },
+      "route": "/my-orders",
+      "direct": true
+    },
+    {
+      "id": "payment-methods",
+      "topic": "payment",
+      "questions": [
+        "What payment methods do you accept?",
+        "payment options",
+        "Can I pay by UPI?",
+        "Can I pay by card?",
+        "payment kaise kare",
+        "UPI se payment ho sakta hai kya",
+        "card se payment ho sakta hai kya",
+        "पेमेंट कैसे करें",
+        "कौन कौन से पेमेंट तरीके हैं",
+        "ચુકવણી કેવી રીતે કરવી",
+        "पेमेंट कसे करायचे",
+        "ਭੁਗਤਾਨ ਕਿਵੇਂ ਕਰੀਏ"
+      ],
+      "answer": {
+        "en": "You can pay online at checkout — the options available, such as UPI, are shown on the payment screen — or choose Cash on Delivery for orders up to ₹{cod_max}.",
+        "hi": "आप चेकआउट पर ऑनलाइन पेमेंट कर सकते हैं — UPI जैसे उपलब्ध विकल्प पेमेंट स्क्रीन पर दिखते हैं — या ₹{cod_max} तक के ऑर्डर पर कैश ऑन डिलीवरी चुन सकते हैं।",
+        "hinglish": "Aap checkout par online payment kar sakte hain — UPI jaise available options payment screen par dikhte hain — ya ₹{cod_max} tak ke order par Cash on Delivery chun sakte hain.",
+        "gu": "તમે ચેકઆઉટ પર ઓનલાઇન ચુકવણી કરી શકો છો — UPI જેવા ઉપલબ્ધ વિકલ્પો પેમેન્ટ સ્ક્રીન પર દેખાય છે — અથવા ₹{cod_max} સુધીના ઓર્ડર માટે કૅશ ઑન ડિલિવરી પસંદ કરી શકો છો.",
+        "mr": "तुम्ही चेकआउटवर ऑनलाइन पेमेंट करू शकता — UPI सारखे उपलब्ध पर्याय पेमेंट स्क्रीनवर दिसतात — किंवा ₹{cod_max} पर्यंतच्या ऑर्डरसाठी कॅश ऑन डिलिव्हरी निवडू शकता.",
+        "pa": "ਤੁਸੀਂ ਚੈੱਕਆਊਟ 'ਤੇ ਆਨਲਾਈਨ ਭੁਗਤਾਨ ਕਰ ਸਕਦੇ ਹੋ — UPI ਵਰਗੇ ਉਪਲਬਧ ਵਿਕਲਪ ਪੇਮੈਂਟ ਸਕ੍ਰੀਨ 'ਤੇ ਦਿਸਦੇ ਹਨ — ਜਾਂ ₹{cod_max} ਤੱਕ ਦੇ ਆਰਡਰ ਲਈ ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਚੁਣ ਸਕਦੇ ਹੋ।"
+      },
+      "route": null,
+      "direct": true,
+      "review": "The storefront FAQ page says only 'We accept UPI payments'. Confirm which Razorpay methods are switched on (cards, net banking, wallets) and name them here."
+    },
+    {
+      "id": "cod",
+      "topic": "payment",
+      "questions": [
+        "Is cash on delivery available?",
+        "Do you have COD?",
+        "What is the COD limit?",
+        "Why can't I choose cash on delivery?",
+        "COD milega kya",
+        "cash on delivery hai kya",
+        "COD kyu nahi ho raha",
+        "क्या कैश ऑन डिलीवरी है",
+        "सीओडी क्यों नहीं हो रहा",
+        "શું કૅશ ઑન ડિલિવરી મળે છે",
+        "कॅश ऑन डिलिव्हरी मिळते का",
+        "ਕੀ ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਮਿਲਦੀ ਹੈ"
+      ],
+      "answer": {
+        "en": "Yes, Cash on Delivery is available across India for orders up to ₹{cod_max}. Your email must be verified, and you can have at most {cod_open} Cash on Delivery orders open at a time.",
+        "hi": "हाँ, ₹{cod_max} तक के ऑर्डर पर पूरे भारत में कैश ऑन डिलीवरी उपलब्ध है। आपका ईमेल वेरिफ़ाई होना चाहिए, और एक समय में ज़्यादा से ज़्यादा {cod_open} कैश ऑन डिलीवरी ऑर्डर चालू रह सकते हैं।",
+        "hinglish": "Haan, ₹{cod_max} tak ke order par poore India me Cash on Delivery available hai. Aapka email verified hona chahiye, aur ek time par zyada se zyada {cod_open} Cash on Delivery order open reh sakte hain.",
+        "gu": "હા, ₹{cod_max} સુધીના ઓર્ડર પર આખા ભારતમાં કૅશ ઑન ડિલિવરી ઉપલબ્ધ છે. તમારો ઇમેઇલ વેરિફાઇડ હોવો જોઈએ, અને એક સમયે વધુમાં વધુ {cod_open} કૅશ ઑન ડિલિવરી ઓર્ડર ચાલુ રહી શકે છે.",
+        "mr": "होय, ₹{cod_max} पर्यंतच्या ऑर्डरवर संपूर्ण भारतात कॅश ऑन डिलिव्हरी उपलब्ध आहे. तुमचा ईमेल व्हेरिफाय केलेला असावा, आणि एका वेळी जास्तीत जास्त {cod_open} कॅश ऑन डिलिव्हरी ऑर्डर सुरू राहू शकतात.",
+        "pa": "ਹਾਂ, ₹{cod_max} ਤੱਕ ਦੇ ਆਰਡਰ 'ਤੇ ਪੂਰੇ ਭਾਰਤ ਵਿੱਚ ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਉਪਲਬਧ ਹੈ। ਤੁਹਾਡੀ ਈਮੇਲ ਵੈਰੀਫ਼ਾਈ ਹੋਈ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ, ਅਤੇ ਇੱਕ ਸਮੇਂ ਵੱਧ ਤੋਂ ਵੱਧ {cod_open} ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਆਰਡਰ ਚੱਲ ਸਕਦੇ ਹਨ।"
+      },
+      "route": null,
+      "direct": true
+    },
+    {
+      "id": "cancel-order",
+      "topic": "orders",
+      "questions": [
+        "Can I cancel my order?",
+        "How do I cancel an order?",
+        "Can I cancel after the order has shipped?",
+        "order cancel kaise kare",
+        "order cancel karna hai",
+        "ship hone ke baad cancel ho sakta hai kya",
+        "ऑर्डर कैंसिल कैसे करें",
+        "ऑर्डर कैंसिल करना है",
+        "ઓર્ડર કેવી રીતે રદ કરવો",
+        "ऑर्डर कसा रद्द करायचा",
+        "ਆਰਡਰ ਕਿਵੇਂ ਰੱਦ ਕਰੀਏ"
+      ],
+      "answer": {
+        "en": "You can cancel free of charge any time before the order is shipped, and you get a full refund. Once it has shipped it can no longer be cancelled — you can refuse the delivery or use the return process, and the delivery charge is not refunded.",
+        "hi": "ऑर्डर शिप होने से पहले आप कभी भी बिना किसी शुल्क के कैंसिल कर सकते हैं और पूरा रिफंड मिलता है। शिप होने के बाद कैंसिल नहीं हो सकता — आप डिलीवरी लेने से मना कर सकते हैं या रिटर्न प्रक्रिया अपना सकते हैं, और डिलीवरी चार्ज वापस नहीं होता।",
+        "hinglish": "Order ship hone se pehle aap kabhi bhi free me cancel kar sakte hain aur poora refund milta hai. Ship hone ke baad cancel nahi ho sakta — aap delivery lene se mana kar sakte hain ya return process use kar sakte hain, aur delivery charge refund nahi hota.",
+        "gu": "ઓર્ડર શિપ થાય તે પહેલાં તમે ગમે ત્યારે મફતમાં રદ કરી શકો છો, અને પૂરું રિફંડ મળે છે. શિપ થયા પછી રદ થઈ શકતો નથી — તમે ડિલિવરી લેવાની ના પાડી શકો છો અથવા રિટર્ન પ્રક્રિયા અપનાવી શકો છો, અને ડિલિવરી ચાર્જ પાછો મળતો નથી.",
+        "mr": "ऑर्डर शिप होण्यापूर्वी तुम्ही कधीही विनामूल्य रद्द करू शकता, आणि पूर्ण परतावा मिळतो. शिप झाल्यानंतर रद्द करता येत नाही — तुम्ही डिलिव्हरी नाकारू शकता किंवा रिटर्न प्रक्रिया वापरू शकता, आणि डिलिव्हरी शुल्क परत मिळत नाही.",
+        "pa": "ਆਰਡਰ ਸ਼ਿਪ ਹੋਣ ਤੋਂ ਪਹਿਲਾਂ ਤੁਸੀਂ ਕਦੇ ਵੀ ਬਿਨਾਂ ਕਿਸੇ ਖ਼ਰਚ ਦੇ ਰੱਦ ਕਰ ਸਕਦੇ ਹੋ, ਅਤੇ ਪੂਰਾ ਰਿਫ਼ੰਡ ਮਿਲਦਾ ਹੈ। ਸ਼ਿਪ ਹੋਣ ਤੋਂ ਬਾਅਦ ਰੱਦ ਨਹੀਂ ਹੋ ਸਕਦਾ — ਤੁਸੀਂ ਡਿਲੀਵਰੀ ਲੈਣ ਤੋਂ ਇਨਕਾਰ ਕਰ ਸਕਦੇ ਹੋ ਜਾਂ ਰਿਟਰਨ ਪ੍ਰਕਿਰਿਆ ਵਰਤ ਸਕਦੇ ਹੋ, ਅਤੇ ਡਿਲੀਵਰੀ ਚਾਰਜ ਵਾਪਸ ਨਹੀਂ ਹੁੰਦਾ।"
+      },
+      "route": "/return-policy",
+      "direct": true
+    },
+    {
+      "id": "return-policy",
+      "topic": "returns",
+      "questions": [
+        "What is your return policy?",
+        "What is your return and refund policy?",
+        "Can I return a product?",
+        "Can I return it if I don't like it?",
+        "return policy kya hai",
+        "product wapas kar sakte hain kya",
+        "saman return kaise kare",
+        "रिटर्न पॉलिसी क्या है",
+        "सामान वापस कर सकते हैं क्या",
+        "રિટર્ન પોલિસી શું છે",
+        "रिटर्न पॉलिसी काय आहे",
+        "ਰਿਟਰਨ ਪਾਲਿਸੀ ਕੀ ਹੈ"
+      ],
+      "answer": {
+        "en": "Returns are accepted within 7 days of delivery, only for a damaged or defective item, a wrong product, tampered or broken packaging, or a missing item. An unboxing video is required. Opened, used or consumed products and change-of-mind returns are not accepted.",
+        "hi": "डिलीवरी के 7 दिन के अंदर रिटर्न लिया जाता है — केवल ख़राब या टूटा सामान, गलत प्रोडक्ट, खुली या फटी पैकिंग, या कम सामान आने पर। अनबॉक्सिंग वीडियो ज़रूरी है। खुला, इस्तेमाल किया हुआ सामान या 'पसंद नहीं आया' वाला रिटर्न नहीं लिया जाता।",
+        "hinglish": "Delivery ke 7 din ke andar return liya jata hai — sirf damaged ya defective item, galat product, khuli ya phati packing, ya item kam aane par. Unboxing video zaroori hai. Khula, use kiya hua saman ya 'pasand nahi aaya' wala return nahi liya jata.",
+        "gu": "ડિલિવરીના 7 દિવસની અંદર રિટર્ન સ્વીકારવામાં આવે છે — ફક્ત ખરાબ કે ખામીવાળી વસ્તુ, ખોટું પ્રોડક્ટ, ખુલ્લું કે તૂટેલું પૅકેજિંગ, અથવા ઓછી વસ્તુ આવે ત્યારે. અનબૉક્સિંગ વીડિયો ફરજિયાત છે. ખોલેલા, વપરાયેલા કે ખાધેલા પ્રોડક્ટ અને 'ગમ્યું નહીં' માટેના રિટર્ન સ્વીકારાતા નથી.",
+        "mr": "डिलिव्हरीनंतर 7 दिवसांत रिटर्न स्वीकारले जाते — फक्त खराब किंवा सदोष वस्तू, चुकीचे प्रॉडक्ट, उघडलेले किंवा फाटलेले पॅकिंग, किंवा कमी वस्तू आल्यास. अनबॉक्सिंग व्हिडिओ आवश्यक आहे. उघडलेले, वापरलेले किंवा खाल्लेले प्रॉडक्ट आणि 'आवडले नाही' म्हणून केलेले रिटर्न स्वीकारले जात नाहीत.",
+        "pa": "ਡਿਲੀਵਰੀ ਦੇ 7 ਦਿਨਾਂ ਦੇ ਅੰਦਰ ਰਿਟਰਨ ਲਿਆ ਜਾਂਦਾ ਹੈ — ਸਿਰਫ਼ ਖ਼ਰਾਬ ਜਾਂ ਨੁਕਸਦਾਰ ਚੀਜ਼, ਗਲਤ ਪ੍ਰੋਡਕਟ, ਖੁੱਲ੍ਹੀ ਜਾਂ ਫਟੀ ਪੈਕਿੰਗ, ਜਾਂ ਘੱਟ ਸਾਮਾਨ ਆਉਣ 'ਤੇ। ਅਨਬਾਕਸਿੰਗ ਵੀਡੀਓ ਜ਼ਰੂਰੀ ਹੈ। ਖੋਲ੍ਹਿਆ, ਵਰਤਿਆ ਜਾਂ ਖਾਧਾ ਹੋਇਆ ਸਾਮਾਨ ਅਤੇ 'ਪਸੰਦ ਨਹੀਂ ਆਇਆ' ਵਾਲਾ ਰਿਟਰਨ ਨਹੀਂ ਲਿਆ ਜਾਂਦਾ।"
+      },
+      "route": "/return-policy",
+      "direct": true
+    },
+    {
+      "id": "damaged-item",
+      "topic": "returns",
+      "questions": [
+        "My order arrived damaged",
+        "I received the wrong product",
+        "An item is missing from my order",
+        "The packet was torn",
+        "How do I raise a return request?",
+        "saman toota hua aaya hai",
+        "galat product aaya hai",
+        "order me item kam aaya hai",
+        "packet phata hua tha",
+        "सामान टूटा हुआ आया है",
+        "गलत प्रोडक्ट आया है",
+        "સામાન તૂટેલો આવ્યો છે",
+        "सामान तुटलेले आले आहे",
+        "ਸਾਮਾਨ ਟੁੱਟਿਆ ਹੋਇਆ ਆਇਆ ਹੈ"
+      ],
+      "answer": {
+        "en": "Sorry about that. Please contact support at {phone} within 7 days of delivery with your order number, the reason and your unboxing video (one continuous video from the sealed package, with the shipping label visible). We verify within 24–48 hours; an approved item is picked up from your address in its original packaging, and the replacement ships free.",
+        "hi": "इसके लिए खेद है। कृपया डिलीवरी के 7 दिन के अंदर {phone} पर सपोर्ट से संपर्क करें — ऑर्डर नंबर, कारण और अनबॉक्सिंग वीडियो के साथ (सील बंद पैकेट से शुरू होने वाला एक लगातार वीडियो, जिसमें शिपिंग लेबल दिखे)। हम 24–48 घंटे में जाँच करते हैं; मंज़ूर होने पर सामान आपके पते से असली पैकिंग में उठाया जाता है और रिप्लेसमेंट फ्री भेजा जाता है।",
+        "hinglish": "Iske liye sorry. Please delivery ke 7 din ke andar {phone} par support se contact kijiye — order number, reason aur unboxing video ke saath (sealed packet se shuru hone wala ek continuous video, jisme shipping label dikhe). Hum 24–48 ghante me verify karte hain; approve hone par saman aapke address se original packing me pickup hota hai aur replacement free bheja jata hai.",
+        "gu": "તે માટે દિલગીર છીએ. કૃપા કરીને ડિલિવરીના 7 દિવસની અંદર {phone} પર સપોર્ટનો સંપર્ક કરો — ઓર્ડર નંબર, કારણ અને અનબૉક્સિંગ વીડિયો સાથે (સીલબંધ પૅકેજથી શરૂ થતો એક સળંગ વીડિયો, જેમાં શિપિંગ લેબલ દેખાય). અમે 24–48 કલાકમાં ચકાસીએ છીએ; મંજૂર થાય તો વસ્તુ તમારા સરનામેથી મૂળ પૅકિંગમાં લેવામાં આવે છે અને રિપ્લેસમેન્ટ ફ્રી મોકલાય છે.",
+        "mr": "त्याबद्दल क्षमस्व. कृपया डिलिव्हरीनंतर 7 दिवसांत {phone} वर सपोर्टशी संपर्क साधा — ऑर्डर नंबर, कारण आणि अनबॉक्सिंग व्हिडिओसह (सीलबंद पॅकेटपासून सुरू होणारा एक सलग व्हिडिओ, ज्यात शिपिंग लेबल दिसेल). आम्ही 24–48 तासांत तपासणी करतो; मंजूर झाल्यास वस्तू तुमच्या पत्त्यावरून मूळ पॅकिंगमध्ये घेतली जाते आणि बदली वस्तू मोफत पाठवली जाते.",
+        "pa": "ਇਸ ਲਈ ਅਫ਼ਸੋਸ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਡਿਲੀਵਰੀ ਦੇ 7 ਦਿਨਾਂ ਦੇ ਅੰਦਰ {phone} 'ਤੇ ਸਪੋਰਟ ਨਾਲ ਸੰਪਰਕ ਕਰੋ — ਆਰਡਰ ਨੰਬਰ, ਕਾਰਨ ਅਤੇ ਅਨਬਾਕਸਿੰਗ ਵੀਡੀਓ ਸਮੇਤ (ਸੀਲ ਬੰਦ ਪੈਕੇਟ ਤੋਂ ਸ਼ੁਰੂ ਹੋਣ ਵਾਲਾ ਇੱਕ ਲਗਾਤਾਰ ਵੀਡੀਓ, ਜਿਸ ਵਿੱਚ ਸ਼ਿਪਿੰਗ ਲੇਬਲ ਦਿਸੇ)। ਅਸੀਂ 24–48 ਘੰਟਿਆਂ ਵਿੱਚ ਜਾਂਚ ਕਰਦੇ ਹਾਂ; ਮਨਜ਼ੂਰ ਹੋਣ 'ਤੇ ਸਾਮਾਨ ਤੁਹਾਡੇ ਪਤੇ ਤੋਂ ਅਸਲ ਪੈਕਿੰਗ ਵਿੱਚ ਲਿਆ ਜਾਂਦਾ ਹੈ ਅਤੇ ਬਦਲਵਾਂ ਸਾਮਾਨ ਮੁਫ਼ਤ ਭੇਜਿਆ ਜਾਂਦਾ ਹੈ।"
+      },
+      "route": "/return-policy",
+      "direct": true
+    },
+    {
+      "id": "refund-time",
+      "topic": "returns",
+      "questions": [
+        "When will I get my refund?",
+        "How long does a refund take?",
+        "How is a cash on delivery order refunded?",
+        "refund kab milega",
+        "refund kitne din me aata hai",
+        "COD order ka refund kaise milega",
+        "रिफंड कब मिलेगा",
+        "रिफंड कितने दिन में आता है",
+        "રિફંડ ક્યારે મળશે",
+        "परतावा कधी मिळेल",
+        "ਰਿਫ਼ੰਡ ਕਦੋਂ ਮਿਲੇਗਾ"
+      ],
+      "answer": {
+        "en": "Approved refunds are processed within 5–7 business days after we inspect the returned item. Prepaid orders are refunded to the original payment method. For Cash on Delivery orders our team calls you to arrange a UPI or bank transfer.",
+        "hi": "लौटाए गए सामान की जाँच के बाद मंज़ूर रिफंड 5–7 कार्यदिवस में प्रोसेस होता है। ऑनलाइन पेमेंट वाले ऑर्डर का रिफंड उसी पेमेंट तरीके में आता है। कैश ऑन डिलीवरी ऑर्डर में हमारी टीम आपको कॉल करके UPI या बैंक ट्रांसफ़र से रिफंड करती है।",
+        "hinglish": "Return kiye gaye saman ki jaanch ke baad approved refund 5–7 business days me process hota hai. Prepaid order ka refund usi payment method me aata hai. Cash on Delivery order me hamari team aapko call karke UPI ya bank transfer se refund karti hai.",
+        "gu": "પરત કરેલી વસ્તુની તપાસ પછી મંજૂર થયેલું રિફંડ 5–7 કાર્યદિવસમાં પ્રોસેસ થાય છે. પ્રીપેઇડ ઓર્ડરનું રિફંડ મૂળ ચુકવણી પદ્ધતિમાં જમા થાય છે. કૅશ ઑન ડિલિવરી ઓર્ડરમાં અમારી ટીમ તમને કૉલ કરીને UPI કે બેંક ટ્રાન્સફરથી રિફંડ ગોઠવે છે.",
+        "mr": "परत केलेल्या वस्तूची तपासणी झाल्यानंतर मंजूर झालेला परतावा 5–7 कामकाजी दिवसांत प्रोसेस होतो. प्रीपेड ऑर्डरचा परतावा मूळ पेमेंट पद्धतीत जमा होतो. कॅश ऑन डिलिव्हरी ऑर्डरमध्ये आमची टीम तुम्हाला कॉल करून UPI किंवा बँक ट्रान्सफरने परतावा देते.",
+        "pa": "ਵਾਪਸ ਕੀਤੇ ਸਾਮਾਨ ਦੀ ਜਾਂਚ ਤੋਂ ਬਾਅਦ ਮਨਜ਼ੂਰ ਹੋਇਆ ਰਿਫ਼ੰਡ 5–7 ਕੰਮਕਾਜੀ ਦਿਨਾਂ ਵਿੱਚ ਪ੍ਰੋਸੈਸ ਹੁੰਦਾ ਹੈ। ਪ੍ਰੀਪੇਡ ਆਰਡਰ ਦਾ ਰਿਫ਼ੰਡ ਅਸਲ ਭੁਗਤਾਨ ਤਰੀਕੇ ਵਿੱਚ ਆਉਂਦਾ ਹੈ। ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਆਰਡਰ ਵਿੱਚ ਸਾਡੀ ਟੀਮ ਤੁਹਾਨੂੰ ਕਾਲ ਕਰਕੇ UPI ਜਾਂ ਬੈਂਕ ਟ੍ਰਾਂਸਫ਼ਰ ਨਾਲ ਰਿਫ਼ੰਡ ਕਰਦੀ ਹੈ।"
+      },
+      "route": "/return-policy",
+      "direct": true
+    },
+    {
+      "id": "address-change",
+      "topic": "orders",
+      "questions": [
+        "Can I change my delivery address?",
+        "I entered the wrong address",
+        "How do I change the address on my order?",
+        "address change kaise kare",
+        "address galat ho gaya",
+        "order ka address badalna hai",
+        "ऑर्डर का पता बदलना है",
+        "पता गलत हो गया",
+        "સરનામું કેવી રીતે બદલવું",
+        "पत्ता कसा बदलायचा",
+        "ਪਤਾ ਕਿਵੇਂ ਬਦਲੀਏ"
+      ],
+      "answer": {
+        "en": "The address can be changed only within 1 hour of placing the order — message us on WhatsApp at {phone}. Please give a complete, correct address: we cannot refund delays caused by a wrong address.",
+        "hi": "पता केवल ऑर्डर करने के 1 घंटे के अंदर बदला जा सकता है — हमें {phone} पर WhatsApp करें। कृपया पूरा और सही पता दें: गलत पते से हुई देरी पर रिफंड नहीं दिया जाता।",
+        "hinglish": "Address sirf order karne ke 1 ghante ke andar change ho sakta hai — hume {phone} par WhatsApp kijiye. Please poora aur sahi address dijiye: galat address se hui delay par refund nahi milta.",
+        "gu": "સરનામું ફક્ત ઓર્ડર આપ્યાના 1 કલાકની અંદર બદલી શકાય છે — અમને {phone} પર WhatsApp કરો. કૃપા કરીને પૂરું અને સાચું સરનામું આપો: ખોટા સરનામાને કારણે થયેલા વિલંબ પર રિફંડ મળતું નથી.",
+        "mr": "पत्ता फक्त ऑर्डर दिल्यानंतर 1 तासाच्या आत बदलता येतो — आम्हाला {phone} वर WhatsApp करा. कृपया पूर्ण आणि अचूक पत्ता द्या: चुकीच्या पत्त्यामुळे झालेल्या विलंबावर परतावा मिळत नाही.",
+        "pa": "ਪਤਾ ਸਿਰਫ਼ ਆਰਡਰ ਕਰਨ ਦੇ 1 ਘੰਟੇ ਦੇ ਅੰਦਰ ਬਦਲਿਆ ਜਾ ਸਕਦਾ ਹੈ — ਸਾਨੂੰ {phone} 'ਤੇ WhatsApp ਕਰੋ। ਕਿਰਪਾ ਕਰਕੇ ਪੂਰਾ ਅਤੇ ਸਹੀ ਪਤਾ ਦਿਓ: ਗਲਤ ਪਤੇ ਕਾਰਨ ਹੋਈ ਦੇਰੀ 'ਤੇ ਰਿਫ਼ੰਡ ਨਹੀਂ ਮਿਲਦਾ।"
+      },
+      "route": "/shipping-policy",
+      "direct": true
+    },
+    {
+      "id": "freshness-storage",
+      "topic": "products",
+      "questions": [
+        "Are your spices fresh?",
+        "How should I store the spices?",
+        "What is the shelf life?",
+        "Where is the expiry date?",
+        "masale fresh hain kya",
+        "masala kaise store kare",
+        "masala kitne din tak chalega",
+        "expiry date kahan likhi hai",
+        "मसाले ताज़ा हैं क्या",
+        "मसाले कैसे रखें",
+        "મસાલા કેવી રીતે સાચવવા",
+        "मसाले कसे साठवायचे",
+        "ਮਸਾਲੇ ਕਿਵੇਂ ਸਾਂਭੀਏ"
+      ],
+      "answer": {
+        "en": "Yes — our spices and papad are packed fresh. Check the best-before date printed on the pack, and store them in a cool, dry place away from direct sunlight and moisture.",
+        "hi": "हाँ — हमारे मसाले और पापड़ ताज़ा पैक किए जाते हैं। पैकेट पर छपी 'बेस्ट बिफ़ोर' तारीख देखें, और इन्हें ठंडी, सूखी जगह पर धूप और नमी से दूर रखें।",
+        "hinglish": "Haan — hamare masale aur papad fresh pack kiye jate hain. Packet par chhapi best-before date dekhiye, aur inhe thandi, sookhi jagah par dhoop aur nami se door rakhiye.",
+        "gu": "હા — અમારા મસાલા અને પાપડ તાજા પૅક કરવામાં આવે છે. પૅકેટ પર છપાયેલી 'બેસ્ટ બિફોર' તારીખ જુઓ, અને તેમને ઠંડી, સૂકી જગ્યાએ તડકા અને ભેજથી દૂર રાખો.",
+        "mr": "होय — आमचे मसाले आणि पापड ताजे पॅक केले जातात. पाकिटावर छापलेली 'बेस्ट बिफोर' तारीख पहा, आणि त्यांना थंड, कोरड्या जागी ऊन आणि ओलाव्यापासून दूर ठेवा.",
+        "pa": "ਹਾਂ — ਸਾਡੇ ਮਸਾਲੇ ਅਤੇ ਪਾਪੜ ਤਾਜ਼ੇ ਪੈਕ ਕੀਤੇ ਜਾਂਦੇ ਹਨ। ਪੈਕੇਟ 'ਤੇ ਛਪੀ 'ਬੈਸਟ ਬਿਫੋਰ' ਤਾਰੀਖ਼ ਵੇਖੋ, ਅਤੇ ਇਨ੍ਹਾਂ ਨੂੰ ਠੰਢੀ, ਸੁੱਕੀ ਥਾਂ 'ਤੇ ਧੁੱਪ ਅਤੇ ਨਮੀ ਤੋਂ ਦੂਰ ਰੱਖੋ।"
+      },
+      "route": null,
+      "direct": true
+    },
+    {
+      "id": "contact",
+      "topic": "support",
+      "questions": [
+        "How can I contact customer support?",
+        "What is your customer care number?",
+        "What is your phone number?",
+        "What is your WhatsApp number?",
+        "What is your email address?",
+        "customer care number kya hai",
+        "aapka phone number kya hai",
+        "WhatsApp number kya hai",
+        "कस्टमर केयर नंबर क्या है",
+        "आपका फ़ोन नंबर क्या है",
+        "કસ્ટમર કૅર નંબર શું છે",
+        "कस्टमर केअर नंबर काय आहे",
+        "ਕਸਟਮਰ ਕੇਅਰ ਨੰਬਰ ਕੀ ਹੈ"
+      ],
+      "answer": {
+        "en": "You can reach us at {phone} (Monday–Saturday, 9 AM–6 PM IST), by email at {email}, or through the Contact page. You can also ask here to be connected to our team.",
+        "hi": "आप हमसे {phone} पर (सोमवार–शनिवार, सुबह 9 से शाम 6 बजे) बात कर सकते हैं, {email} पर ईमेल कर सकते हैं, या Contact पेज से संदेश भेज सकते हैं। आप यहीं पर हमारी टीम से जुड़ने के लिए भी कह सकते हैं।",
+        "hinglish": "Aap hume {phone} par (Monday–Saturday, 9 AM–6 PM) call kar sakte hain, {email} par email kar sakte hain, ya Contact page se message bhej sakte hain. Aap yahin par hamari team se connect karne ke liye bhi bol sakte hain.",
+        "gu": "તમે અમને {phone} પર (સોમવારથી શનિવાર, સવારે 9 થી સાંજે 6) કૉલ કરી શકો છો, {email} પર ઇમેઇલ કરી શકો છો, અથવા Contact પેજ દ્વારા સંદેશ મોકલી શકો છો. તમે અહીં જ અમારી ટીમ સાથે જોડાવાનું પણ કહી શકો છો.",
+        "mr": "तुम्ही आम्हाला {phone} वर (सोमवार ते शनिवार, सकाळी 9 ते संध्याकाळी 6) कॉल करू शकता, {email} वर ईमेल करू शकता, किंवा Contact पेजवरून संदेश पाठवू शकता. तुम्ही इथेच आमच्या टीमशी जोडण्यास सांगू शकता.",
+        "pa": "ਤੁਸੀਂ ਸਾਨੂੰ {phone} 'ਤੇ (ਸੋਮਵਾਰ ਤੋਂ ਸ਼ਨੀਵਾਰ, ਸਵੇਰੇ 9 ਤੋਂ ਸ਼ਾਮ 6 ਵਜੇ) ਕਾਲ ਕਰ ਸਕਦੇ ਹੋ, {email} 'ਤੇ ਈਮੇਲ ਕਰ ਸਕਦੇ ਹੋ, ਜਾਂ Contact ਪੇਜ ਰਾਹੀਂ ਸੁਨੇਹਾ ਭੇਜ ਸਕਦੇ ਹੋ। ਤੁਸੀਂ ਇੱਥੇ ਹੀ ਸਾਡੀ ਟੀਮ ਨਾਲ ਜੁੜਨ ਲਈ ਵੀ ਕਹਿ ਸਕਦੇ ਹੋ।"
+      },
+      "route": "/contact",
+      "direct": true
+    },
+    {
+      "id": "prices-gst",
+      "topic": "payment",
+      "questions": [
+        "Do prices include GST?",
+        "Is GST included in the price?",
+        "Is tax extra?",
+        "price me GST shamil hai kya",
+        "tax alag se lagega kya",
+        "GST alag se dena hoga kya",
+        "क्या कीमत में जीएसटी शामिल है",
+        "टैक्स अलग से लगेगा क्या",
+        "કિંમતમાં GST શામેલ છે",
+        "किमतीत GST समाविष्ट आहे का",
+        "ਕੀ ਕੀਮਤ ਵਿੱਚ GST ਸ਼ਾਮਲ ਹੈ"
+      ],
+      "answer": {
+        "en": "Yes. Product prices are MRP and already include GST — nothing is added to the products at checkout. Only the delivery charge, when it applies, has {tax_rate}% GST added.",
+        "hi": "हाँ। प्रोडक्ट की कीमत MRP है और उसमें GST पहले से शामिल है — चेकआउट पर प्रोडक्ट पर कुछ नहीं जुड़ता। केवल डिलीवरी चार्ज (जब लगता है) पर {tax_rate}% GST जुड़ता है।",
+        "hinglish": "Haan. Product ki price MRP hai aur usme GST pehle se shamil hai — checkout par product par kuch nahi judta. Sirf delivery charge (jab lagta hai) par {tax_rate}% GST judta hai.",
+        "gu": "હા. પ્રોડક્ટની કિંમત MRP છે અને તેમાં GST પહેલેથી શામેલ છે — ચેકઆઉટ પર પ્રોડક્ટ પર કંઈ ઉમેરાતું નથી. ફક્ત ડિલિવરી ચાર્જ (જ્યારે લાગે ત્યારે) પર {tax_rate}% GST ઉમેરાય છે.",
+        "mr": "होय. प्रॉडक्टची किंमत MRP आहे आणि त्यात GST आधीच समाविष्ट आहे — चेकआउटवर प्रॉडक्टवर काही जोडले जात नाही. फक्त डिलिव्हरी शुल्कावर (जेव्हा लागू असेल तेव्हा) {tax_rate}% GST जोडला जातो.",
+        "pa": "ਹਾਂ। ਪ੍ਰੋਡਕਟ ਦੀ ਕੀਮਤ MRP ਹੈ ਅਤੇ ਉਸ ਵਿੱਚ GST ਪਹਿਲਾਂ ਤੋਂ ਸ਼ਾਮਲ ਹੈ — ਚੈੱਕਆਊਟ 'ਤੇ ਪ੍ਰੋਡਕਟ 'ਤੇ ਕੁਝ ਨਹੀਂ ਜੁੜਦਾ। ਸਿਰਫ਼ ਡਿਲੀਵਰੀ ਚਾਰਜ (ਜਦੋਂ ਲੱਗਦਾ ਹੈ) 'ਤੇ {tax_rate}% GST ਜੁੜਦਾ ਹੈ।"
+      },
+      "route": null,
+      "direct": true
+    },
+    {
+      "id": "about",
+      "topic": "about",
+      "questions": [
+        "Where are your spices made?",
+        "Tell me about Nidhi Masala",
+        "Who makes these spices?",
+        "Are you FSSAI licensed?",
+        "Where is your company located?",
+        "masale kahan bante hain",
+        "aapki company kahan ki hai",
+        "FSSAI license hai kya",
+        "मसाले कहाँ बनते हैं",
+        "आपकी कंपनी कहाँ की है",
+        "મસાલા ક્યાં બને છે",
+        "मसाले कुठे बनतात",
+        "ਮਸਾਲੇ ਕਿੱਥੇ ਬਣਦੇ ਹਨ"
+      ],
+      "answer": {
+        "en": "Nidhi Masala is made by Nidhi Grah Udyog in Barnagar, Ujjain (Madhya Pradesh), in an FSSAI-licensed facility. We have been making spices since 1995.",
+        "hi": "निधि मसाला, निधि गृह उद्योग द्वारा बड़नगर, उज्जैन (मध्य प्रदेश) में FSSAI-लाइसेंस प्राप्त यूनिट में बनाया जाता है। हम 1995 से मसाले बना रहे हैं।",
+        "hinglish": "Nidhi Masala, Nidhi Grah Udyog dwara Barnagar, Ujjain (Madhya Pradesh) me FSSAI-licensed facility me banaya jata hai. Hum 1995 se masale bana rahe hain.",
+        "gu": "નિધિ મસાલા, નિધિ ગૃહ ઉદ્યોગ દ્વારા બડનગર, ઉજ્જૈન (મધ્ય પ્રદેશ) માં FSSAI-લાઇસન્સવાળી યુનિટમાં બનાવવામાં આવે છે. અમે 1995 થી મસાલા બનાવીએ છીએ.",
+        "mr": "निधी मसाला, निधी गृह उद्योग तर्फे बडनगर, उज्जैन (मध्य प्रदेश) येथे FSSAI-परवानाधारक युनिटमध्ये तयार केला जातो. आम्ही 1995 पासून मसाले बनवत आहोत.",
+        "pa": "ਨਿਧੀ ਮਸਾਲਾ, ਨਿਧੀ ਗ੍ਰਿਹ ਉਦਯੋਗ ਵੱਲੋਂ ਬੜਨਗਰ, ਉੱਜੈਨ (ਮੱਧ ਪ੍ਰਦੇਸ਼) ਵਿੱਚ FSSAI-ਲਾਇਸੰਸ ਵਾਲੀ ਯੂਨਿਟ ਵਿੱਚ ਬਣਾਇਆ ਜਾਂਦਾ ਹੈ। ਅਸੀਂ 1995 ਤੋਂ ਮਸਾਲੇ ਬਣਾ ਰਹੇ ਹਾਂ।"
+      },
+      "route": "/about",
+      "direct": true
+    },
+    {
+      "id": "bulk-orders",
+      "topic": "support",
+      "questions": [
+        "Do you take bulk orders?",
+        "I want to order in bulk",
+        "Do you have wholesale rates?",
+        "I want to become a distributor",
+        "bulk order karna hai",
+        "wholesale rate milega kya",
+        "thok me order karna hai",
+        "थोक में ऑर्डर करना है",
+        "होलसेल रेट मिलेगा क्या",
+        "બલ્ક ઓર્ડર કરવો છે",
+        "बल्क ऑर्डर करायचा आहे",
+        "ਬਲਕ ਆਰਡਰ ਕਰਨਾ ਹੈ"
+      ],
+      "answer": {
+        "en": "For bulk orders, please contact our team at {phone} or through the Contact page and we will help you directly.",
+        "hi": "थोक ऑर्डर के लिए कृपया {phone} पर या Contact पेज से हमारी टीम से संपर्क करें — हम सीधे आपकी मदद करेंगे।",
+        "hinglish": "Bulk order ke liye please {phone} par ya Contact page se hamari team se contact kijiye — hum seedhe aapki help karenge.",
+        "gu": "બલ્ક ઓર્ડર માટે કૃપા કરીને {phone} પર અથવા Contact પેજ દ્વારા અમારી ટીમનો સંપર્ક કરો — અમે સીધી તમારી મદદ કરીશું.",
+        "mr": "बल्क ऑर्डरसाठी कृपया {phone} वर किंवा Contact पेजद्वारे आमच्या टीमशी संपर्क साधा — आम्ही थेट तुम्हाला मदत करू.",
+        "pa": "ਬਲਕ ਆਰਡਰ ਲਈ ਕਿਰਪਾ ਕਰਕੇ {phone} 'ਤੇ ਜਾਂ Contact ਪੇਜ ਰਾਹੀਂ ਸਾਡੀ ਟੀਮ ਨਾਲ ਸੰਪਰਕ ਕਰੋ — ਅਸੀਂ ਸਿੱਧੇ ਤੁਹਾਡੀ ਮਦਦ ਕਰਾਂਗੇ।"
+      },
+      "route": "/contact",
+      "direct": true
+    }
+  ]
+}

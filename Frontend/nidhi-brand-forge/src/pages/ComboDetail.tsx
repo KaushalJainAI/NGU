@@ -789,7 +789,7 @@ const ComboDetail = () => {
       </div>
 
       {/* Sticky Mobile Cart Bar */}
-      <div className="fixed bottom-16 left-0 right-0 bg-card border-t border-border p-3 md:hidden z-40 shadow-lg">
+      <div className="fixed bottom-[4.5rem] left-0 right-0 bg-card border-t border-border p-3 md:hidden z-40 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="flex-1">
             <div className="flex items-baseline gap-2">

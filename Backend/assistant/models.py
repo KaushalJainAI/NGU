@@ -75,6 +75,15 @@ class AssistantConversation(models.Model):
         related_name='paused_conversations',
     )
 
+    # Rolling summary of the OLD part of the thread (assistant/compaction.py).
+    # No message is ever deleted or hidden from the customer or the admin: this is
+    # only what the MODEL is shown in place of messages that no longer fit its
+    # prompt. `summary_upto` is the id of the newest message folded into it; the
+    # prompt carries `summary` plus the messages after that id. NULL = none yet.
+    summary = models.TextField(blank=True, default='')
+    summary_upto = models.BigIntegerField(null=True, blank=True)
+    summary_updated_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -145,6 +154,9 @@ class AssistantMessage(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        # The prompt loader asks for one thread's newest messages every turn.
+        indexes = [models.Index(fields=['conversation', 'created_at'],
+                                name='assistant_msg_conv_created')]
         verbose_name = 'Assistant Message'
         verbose_name_plural = 'Assistant Messages'
 

@@ -50,7 +50,14 @@ Agent.run(message, history, language)
 ```
 
 The loop is bounded to **MAX_ITERATIONS = 4** tool rounds per turn (AP9: one
-round may carry SEVERAL calls — "haldi, jeera, dhaniya" resolves in one turn).
+round may carry SEVERAL calls — "haldi, jeera, dhaniya" resolves in one turn)
+**and by a time budget** (`ASSISTANT_TURN_BUDGET_SECONDS`, default 45 — see
+"Turn budget" below).
+
+**Before the agent runs at all**, the view tries the FAQ file
+(`views._faq_result` → `faq.direct_answer`): a near-exact match on a common shop
+question is answered word for word with NO model call (`reason 'faq'`,
+`llm_used False`). Anything doubtful goes on to the agent as usual.
 
 ---
 
@@ -69,6 +76,9 @@ One thread per customer session. A customer can have many threads and switch bet
 | `status` | CharField | `active` / `resolved` / `archived` |
 | `needs_human` | BooleanField | True when AI escalates or admin flags it |
 | `assigned_to` | FK → User (nullable) | Admin who owns this thread |
+| `summary` | TextField | Rolling summary of the thread's OLD part, written by `compaction.py`; what the model reads in place of messages that no longer fit (never shown as a message) |
+| `summary_upto` | BigInteger (nullable) | Id of the newest message folded into `summary`; the prompt carries the summary plus only messages after this id |
+| `summary_updated_at` | DateTimeField (nullable) | When the summary last changed |
 | `created_at` | DateTimeField | |
 | `updated_at` | DateTimeField | |
 
@@ -134,8 +144,8 @@ Customer tools added in AP10: size-aware `search_products` (per-variant rows) an
 `get_offers`, `get_delivery_info` (live limits), `get_tracking` (own orders);
 `get_policy` answered from `assistant/policies.py` (static-page source, AP10 —
 no longer the retired Policy table). Behaviour contract is locked by
-`assistant/test_eval.py` (43 scripted cases + summary: completion, median
-ms/turn, false-escalation rate).
+the last section of `assistant/tests.py` (50 scripted cases + summary: completion,
+median ms/turn, false-escalation rate).
 
 #### `POST /api/assistant/chat/` Request / Response
 
@@ -186,7 +196,7 @@ ms/turn, false-escalation rate).
 | **G1 — user isolation** | No tool accepts a `user_id`/email argument. Every user-scoped read is hard-filtered by the authenticated user from the view. Admin endpoints verified via `IsAdminUser`. |
 | **G2 — public fields only** | Tool serializers expose a whitelisted subset of fields. No cost prices, margins, supplier data, or internal flags. |
 | **G3 — closed registry + spotlighting** | Only names in `ALL_TOOL_NAMES` can be called. Retrieved data wrapped in `<<DATA source=…>>…<</DATA>>` markers. |
-| **G4 — bounded loop + degrade** | Max 4 iterations; max 600 output tokens. LLM unavailable → `FALLBACK_REPLY`. |
+| **G4 — bounded loop + degrade** | Max 4 iterations inside a 45 s turn budget; `ASSISTANT_MAX_OUTPUT_TOKENS` output tokens; no retry. LLM unavailable → the canned `fallback` reply, in the customer's language. |
 | **G5 — quantity clamp** | Add-to-cart proposals clamped to 10 units max. |
 | **G6 — navigation allowlist** | `navigate` only returns routes from a hardcoded static set or verified slugs. No open redirect. |
 
@@ -203,11 +213,13 @@ ms/turn, false-escalation rate).
 | `get_product_details` | No | Full detail for one product/combo by slug |
 | `get_product_reviews` | No | Rating summary + recent public reviews for one product/combo (public review fields only) |
 | `list_categories` | No | All active categories |
-| `get_policy` | No | Shipping or return policy content |
+| `get_policy` | No | Shipping or return policy content (long; `search_faq` first) |
+| `get_recommendations` | No | What to suggest next: with a product slug, items bought in the same orders (cancelled/unpaid orders excluded), topped up from the same shelf; without one, bestsellers. In-stock products only, public fields, each with pack sizes. Used for the "suggest ONE matching item" sales rule |
+| `search_faq` | No | Short ready answers to common shop questions, from `assistant/faq_data.json` (see "FAQ file" below) |
 | `get_order_status` | Yes | Status of a single order (authenticated user's own) |
 | `get_order_details` | Yes | Line items of one of the user's orders (for "what was in X" / reorder) |
 | `list_my_orders` | Yes | The authenticated user's recent orders (number, status, date, total) |
-| `get_cart` | Yes | Authenticated user's current cart |
+| `get_cart` | Yes | Authenticated user's current cart: items, `total`, `free_above` and `free_delivery_gap` (rupees still needed for free delivery, 0 = free; read live from `limits.FREE_SHIPPING_THRESHOLD`) |
 
 All user-scoped tools (`get_order_*`, `list_my_orders`, `get_cart`) are hard-filtered
 by the authenticated user from the view (G1). No tool accepts a user identifier, so
@@ -223,6 +235,68 @@ stock counts, supplier data, or reviewer emails.
 | `checkout` | Yes | Propose navigating to checkout |
 | `navigate` | No | Return a verified in-app route |
 | `escalate_to_human` | No | Set `needs_human=True`; admin sees thread highlighted |
+
+### FAQ file (`assistant/faq_data.json` + `assistant/faq.py`)
+
+The questions a shop hears every day (delivery time, COD, returns, bills) have fixed
+answers. They live in a plain JSON file, and `faq.py` finds the entry that matches the
+customer's wording. Matching is fuzzy string comparison (rapidfuzz) — **no LLM call, no
+network, no tokens.**
+
+- **One entry** = `id`, `questions` (every way of asking it, in any of the six
+  languages), `answer` (`en` / `hi` / `hinglish` / `gu` / `mr` / `pa`), `route`
+  (an allowlisted page or `null`), `direct`, and an optional `review` note.
+  The `search_faq` tool falls back to the English answer for a language an entry
+  lacks (the model then translates); the word-for-word path does not — it answers
+  only in a language the entry has.
+- **Numbers are placeholders, never typed in.** `{free_above}`, `{delivery_fee}`,
+  `{fee_net}`, `{tax_rate}`, `{cod_max}`, `{cod_open}`, `{phone}`, `{email}` are filled
+  from `spices_backend/limits.py` and settings when the file loads, so the FAQ cannot
+  disagree with checkout. A test fails if `499`, `69.62` or `5000` is typed into an answer.
+- **Scoring**: both sides are lower-cased, stripped of punctuation and filler words
+  ("what is", "kya hai"), then compared; the score (0–100) is the average of rapidfuzz
+  `token_set_ratio` and `token_sort_ratio`, taking the best of the entry's questions.
+- **`faq.search(query)`** — used by the `search_faq` tool. Returns up to 3 entries
+  scoring ≥ 62. The model reads them as DATA and decides whether one fits.
+- **`faq.direct_answer(query, language)`** — an answer that may be given word for word
+  with no model call. Needs score ≥ 88, a lead of ≥ 8 over the next entry, at least two
+  meaningful words, `direct: true`, no `review` note, and an answer in the customer's
+  language. **Called by both chat views before the agent** (`views._run_turn`).
+  A tap on a storefront suggested-question chip is an exact match by design: the
+  four chips (`assistant.chipDelivery`, `chipDeliveryTime`, `chipCod`, `chipReturns`
+  in every locale file) are worded like questions in the file, and
+  `assistant/tests.py::TestStorefrontChips` fails if one stops matching.
+  What it does NOT answer: anything order-specific (`track-order` is `direct: false`),
+  single words ("delivery"), a follow-up that needs the thread, "I want a human".
+- **Finding what to write next**: `python manage.py faq_gaps [--days N]` lists
+  the `search_faq` queries of the last N days that still match nothing, most frequent
+  first.
+- The file is read once per process, so **an edit needs a backend restart**. A broken
+  file is logged and the FAQ switches itself off; the assistant keeps working.
+- After editing: `python manage.py faq_search --check` (every question must find its
+  own entry) and `python manage.py faq_search "your question"`.
+
+---
+
+## Selling (the system prompt's SELLING section)
+
+The assistant is written as a counter salesperson, helpful first and never pushy.
+The rules live in `prompts.SYSTEM_PROMPT`; the two facts they need come from tools,
+never from the model's memory:
+
+| Rule | Tool it reads |
+|------|---------------|
+| A vague need → ask ONE question, or recommend one product with size, price, reason | `search_products`, `browse_products` |
+| After an item is confirmed → suggest ONE matching item, not a list | `get_recommendations(slug)` |
+| Cart under the free-delivery line → say once how much more, name one item that covers it; at 0, say it is free | `get_cart` → `free_delivery_gap` |
+| Customer sounds done → offer checkout | `checkout` proposal |
+| Coupon codes → only when the customer asks about offers | `get_offers` |
+
+Never: invented claims, ratings, discounts, stock shortages or urgency; suggesting
+an out-of-stock item; repeating a suggestion the customer declined. ⚠ The scripted
+eval (`assistant/eval/cases.py`, `sell-*` cases) only checks the tool wiring. Whether
+the MODEL follows these rules is checked by running it live:
+`ASSISTANT_EVAL_LIVE=1 pytest assistant/tests.py -k sell` with a working key.
 
 ---
 
@@ -424,7 +498,7 @@ receives the full history including tool observations.
     the customer's next message.
 - `MAX_ITERATIONS = 4` — the agent loop runs at most 4 tool rounds per turn;
   exhaustion returns a friendly "try fewer items" reply (`reason loop_exhausted`),
-  never a human flag
+  never a human flag. Running out of TIME returns the `slow` reply, same reason.
 - Thread title is derived server-side from the opening message on the first turn
   and stored on `AssistantConversation.title`
 - `status` lifecycle: `active` → `resolved` (admin action) → `archived`
@@ -442,26 +516,125 @@ date range. Unread/needs-attention count shown as a badge in the sidebar.
 
 ## Multilingual Replies
 
-The `language` field (`en`, `hi`, `hinglish`, `gu`, `mr`, `pa`) controls
+The `language` field (`en`, `hi`, `hinglish`, `gu`, `mr`, `pa`, or `auto`) controls
 the final reply language only. Tool names/args and all DB content always stay
 in English.
+
+**Replies no model wrote are translated too.** The failure replies (`fallback`,
+`loop`, `slow`, `handoff`, and the `continued` line) live in
+`prompts.FAILURE_REPLIES` for all six languages, picked by `prompts.failure_reply`.
+For `auto` the language is detected from the message's script (`assistant/lang.py`):
+Devanagari → Hindi, Gujarati script → Gujarati, Gurmukhi → Punjabi, Roman text with
+two or more common Hindi words → Hinglish, otherwise English. Devanagari cannot
+separate Hindi from Marathi, so a Marathi customer must have picked Marathi (the
+storefront sends the site language with the suggested-question chips for this
+reason). The same detection chooses the language of FAQ answers.
+
+---
+
+## Context management
+
+What the model reads on every turn, in order:
+
+```
+system prompt (~1,100 tokens, identical for every customer)  +  language line
+summary of the thread's older part          (only once the thread is long; DATA)
+messages after the summary, newest that fit (token-budgeted)
+the new message
+```
+
+plus the tool schemas (~2,400 tokens) that the provider receives separately and the
+budget below does NOT count: the real prompt is the ceiling plus the schemas.
+
+**Token estimate** (`agent.estimate_tokens`, no tokenizer): Latin text is 3 characters
+per token (over-counts English on purpose); every non-ASCII character counts 2/3 of a
+token, because Hindi/Gujarati/Punjabi tokenize at roughly 1-2 characters per token. At a
+flat 3 per character a Hindi thread cost about twice what the budget thought.
+
+**Budget** (`Agent.run`): `ASSISTANT_MODEL_CONTEXT_TOKENS` - `ASSISTANT_MAX_OUTPUT_TOKENS`
+- `ASSISTANT_TOOL_OBS_RESERVE_TOKENS`, less the system prompt, the new message and the
+summary. Messages are added newest-first until it is spent. About 5,900 tokens of history
+at the defaults (and on prod: 13,500 - 2,500 - 4,000). The ceiling is a COST guard, not the
+model's window. `history_truncated` (and the storefront's "start a new chat" notice)
+now means only: messages that were NOT covered by the summary were dropped.
+
+### Auto-compaction (`assistant/compaction.py`)
+
+Before: a long thread silently lost its oldest messages. A customer who said "no chilli,
+it is for a toddler" at the start was asked again 30 messages later.
+
+Now, after each turn is saved, a background thread checks the thread:
+
+1. Count the estimated tokens of the messages after `summary_upto`. If they exceed the
+   trigger (`ASSISTANT_COMPACT_AFTER_TOKENS`, default 4,500, **clamped to 80% of the
+   prompt's real room for history**), go on.
+2. Keep the newest `ASSISTANT_COMPACT_KEEP_TOKENS` (2,000) word for word - never fewer than
+   the latest exchange - and fold everything older (at most ~12,000 tokens per call; the
+   rest waits for the next run) into the summary with one small model call: temperature 0,
+   reasoning effort `ASSISTANT_SUMMARY_REASONING_EFFORT` (`low`), the old summary as input,
+   cut to `ASSISTANT_SUMMARY_MAX_TOKENS` (700).
+3. Save with a compare-and-set on `summary_upto`, so two workers cannot overwrite each other.
+
+Properties worth knowing:
+
+- **No message is deleted or hidden.** The customer and the admin panel still see the whole
+  thread. The summary is only what the model reads.
+- **It never slows or breaks a reply.** The reply is saved first; the check, and the model
+  call, run in a daemon thread. If the model is down or slow, nothing changes (the thread
+  behaves as it did before) and it backs off for 10 minutes. One summariser per thread
+  (cache lock).
+- **The summary is untrusted text.** It is built from customer messages, so it reaches the
+  model wrapped as DATA like a tool result, the summariser is told the messages are data, and
+  `_spotlight` strips `<<` / `>>` so nothing can close the block early.
+- **Cost:** one extra small call per compaction, at most once every ~15 customer messages,
+  against the 4,500 tokens it stops being re-sent on every later call.
+- Off switch: `ASSISTANT_COMPACT_ENABLED=0`.
+- Not covered: the staff chat (`persona='admin'`) is stateless and never summarised.
+
+**Why the trigger is not 500,000 tokens.** The model is only ever shown ~6,000 tokens of
+history, so a trigger of 500,000 would never be reached in practice: a thread of that size is
+about 1,500 full-length messages, the loader reads only the newest 500, and long before then the
+oldest messages would have fallen out of the prompt UNSUMMARISED. The trigger has to sit below
+what the prompt can hold, which is why it is clamped. Sending 500,000 tokens per call instead
+would cost ~80x more per call (up to 4 calls per message) and take far longer than the 45 s
+turn budget allows - the opposite of faster.
+
+**Why the thread is not stored as JSONL instead of Postgres.** Storage is not where the time
+goes. Measured on a 1,000-message thread: reading the newest 500 messages takes ~11 ms, building
+the model client ~0.3 ms, trimming history ~0.4 ms; a model call takes 1,000-20,000 ms. Replacing
+the database would change under 1% of a turn. It would also lose transactions, concurrent
+writers (3 gunicorn workers x 2 threads, plus a scheduler container), the admin inbox queries
+and ownership checks, for nothing. What does speed a turn up is fewer and smaller model calls:
+the FAQ path (no call), reasoning effort `low`, the smaller prompt, this compaction (a long
+thread stops dragging thousands of tokens through every call) and the turn budget.
 
 ---
 
 ## Rate Limiting
 
-| Throttle | Limit |
-|----------|-------|
-| `AssistantBurstThrottle` | 10 requests/minute (AP7c) |
-| `AssistantDailyThrottle` | 100 requests/day (AP7c) |
+| Throttle | Limit | Env override |
+|----------|-------|--------------|
+| `AssistantBurstThrottle` | 10 requests/minute | `THROTTLE_ASSISTANT` |
+| `AssistantDailyThrottle` | 100 requests/day | `THROTTLE_ASSISTANT_DAY` |
+| `AdminAssistantBurstThrottle` | 20 requests/minute (store-manager chat) | `THROTTLE_ADMIN_ASSISTANT` |
+| `AdminAssistantDailyThrottle` | 500 requests/day (store-manager chat) | `THROTTLE_ADMIN_ASSISTANT_DAY` |
+
+The staff chat has its own counters so the owner and a shopper on the same
+account never spend each other's allowance. A refused request says which limit it
+was (`NamedThrottleMixin`): the error text starts `Daily chat limit reached.`,
+`Too many messages. Please wait a moment.`, or — for a second message while one
+is still being answered — `A reply is already in progress.` The storefront shows a
+different message for the daily cap ("resets tomorrow") than for the other two
+("one moment"), matching on the word "daily".
 
 Plus one in-flight turn per account (concurrent POST → 429, taken BEFORE the
-message is saved so a refused turn leaves nothing in the thread; 180 s dead-man
-TTL) and a ~12k-token prompt ceiling (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
+message is saved so a refused turn leaves nothing in the thread; dead-man TTL =
+turn budget + 30 s) and a ~12k-token prompt ceiling (`ASSISTANT_MODEL_CONTEXT_TOKENS`, AP7c).
 Of that ceiling, what is left for HISTORY is 12000 − 1000 (reply) − 4000 (tool
-reserve) − ~2,100 (system prompt) ≈ 4,900 estimated tokens, roughly 25–30
+reserve) − ~1,100 (system prompt) ≈ 5,900 estimated tokens, roughly 30–35
 ordinary messages. (The reserve was 8000, which left ~800 — about five
-exchanges.) ⚠ These are env-overridable: a deployed env that still pins
+exchanges; the system prompt was ~2,100 until the tool list stopped being
+written out twice.) ⚠ These are env-overridable: a deployed env that still pins
 `ASSISTANT_MODEL_CONTEXT_TOKENS=200000` / `ASSISTANT_TOOL_OBS_RESERVE_TOKENS=8000`
 / `ASSISTANT_MAX_OUTPUT_TOKENS=600` silently overrides all three defaults.
 
@@ -471,9 +644,33 @@ with the results. Only on the last round is such text returned as-is.
 
 AP10b note on worker isolation (S5): chat currently shares the 3×2 gunicorn
 pool with checkout. The shipped mitigation is bounds, not a separate pool —
-20 s LLM timeout + 1 retry (AP2), one in-flight turn per account (AP7c),
-10/min + 100/day throttles and the history cap. A dedicated chat worker pool
-(separate service/upstream) remains future work; see DEPLOYMENT.md.
+20 s LLM timeout and NO retry, a 45 s turn budget, one in-flight turn per
+account (AP7c), 10/min + 100/day throttles and the history cap. A dedicated chat
+worker pool (separate service/upstream) remains future work; see DEPLOYMENT.md.
+
+### Turn budget
+
+The storefront nginx gives up on `/api/` after 60 s (`proxy_read_timeout`). A turn
+used to be allowed 4 rounds × 20 s × 2 attempts = 160 s: past 60 s the customer saw
+a generic error while the answer was still computed, saved and billed. Now:
+
+- `LLM_MAX_RETRIES = 0` — a retry of a 20 s timeout is another 20 s of waiting.
+- `ASSISTANT_TURN_BUDGET_SECONDS` (default **45**): a round starts only if
+  `elapsed + ASSISTANT_LLM_TIMEOUT` still fits; otherwise the turn ends with the
+  `slow` reply, which is saved like any other. The first round always runs.
+  Worst case ≈ 40 s plus tool time.
+- A reply that is empty with `finish_reason == 'length'` (a reasoning model spent
+  its whole output allowance thinking) gets the `fallback` reply at once instead
+  of a second, equally doomed call.
+- **Invariant to keep: `ASSISTANT_LLM_TIMEOUT` < `ASSISTANT_TURN_BUDGET_SECONDS` <
+  the proxy timeout.** Do not raise the nginx timeout to make a slow model fit.
+
+### Reply length
+
+A reply is cut at 4,000 characters (`MAX_REPLY_CHARS`), at the last sentence end in
+its final quarter (`।` counts), and the translated "continued" line is added.
+Before 2026-10-03 the cut was 1,500 characters with no notice, below what the
+output-token allowance can produce.
 
 ---
 
@@ -491,20 +688,32 @@ ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
 # Optional: how hard a reasoning model thinks (sent to OpenRouter as
 # reasoning.effort). Unset = provider default. Thinking tokens are billed as
 # output and count against ASSISTANT_MAX_OUTPUT_TOKENS and ASSISTANT_LLM_TIMEOUT,
-# so raise those two with it or replies truncate / time out.
-ASSISTANT_REASONING_EFFORT=high
+# so raise those two with it or replies truncate / time out. `high` was the likely
+# cause of slow and empty replies on prod; `low` is the recommended setting for a
+# shop assistant (it mostly looks things up and writes two sentences).
+ASSISTANT_REASONING_EFFORT=low
+
+# The whole turn must end before the proxy gives up (60 s). Keep
+# ASSISTANT_LLM_TIMEOUT < ASSISTANT_TURN_BUDGET_SECONDS < 60.
+ASSISTANT_LLM_TIMEOUT=20
+ASSISTANT_TURN_BUDGET_SECONDS=45
 ```
 
 ---
 
 ## Graceful Degradation
 
+Every canned reply below is in the customer's language (see "Multilingual Replies").
+
 ```
-LLM unavailable          → FALLBACK_REPLY, reason llm_unavailable (no crash)
-Provider error/timeout   → FALLBACK_REPLY, reason llm_error, escalate=False
-Unparseable turn         → FALLBACK_REPLY, reason llm_error, escalate=False
-No readable reply        → nudge, then LOOP_EXHAUSTED_REPLY, reason loop_exhausted
-Truncated (finish=length)→ reply + CONTINUED_SUFFIX, escalate=False
+LLM unavailable          → 'fallback', reason llm_unavailable (no crash)
+Provider error/timeout   → 'fallback', reason llm_error, escalate=False
+Unparseable turn         → 'fallback', reason llm_error, escalate=False
+Empty + finish=length    → 'fallback', reason llm_error (no second call)
+No readable reply        → nudge, then 'loop', reason loop_exhausted
+Out of turn budget       → 'slow', reason loop_exhausted
+Truncated (finish=length)→ reply + 'continued' line, escalate=False
+Common question matched  → FAQ answer, reason faq, llm_used False (no model call)
 Unknown tool/action name → error fed back to LLM (not executed)
 Tool raises exception    → {'error': 'tool_error'} returned as observation
 Customer asked for human → escalate_to_human → needs_human + owner email now

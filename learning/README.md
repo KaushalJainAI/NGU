@@ -39,7 +39,7 @@ extension if a block shows as code).
 | 3 | [03_LLD_Backend_Patterns.md](03_LLD_Backend_Patterns.md) | Django and DRF patterns with the OOP behind each: Model, ViewSet, Serializer, transactions and locks, idempotency, signals, caching, cookie login, services, guardrails, the agent, commands, middleware, settings, N+1, adapters | 75 min |
 | 4 | [04_LLD_Frontend_Patterns.md](04_LLD_Frontend_Patterns.md) | React patterns: types as the API contract, the API layer, the fetch wrapper, Context, optimistic updates, data fetching, variants, routing, hooks, i18n, runtime config, the admin panel's axios client | 50 min |
 | 5 | [05_Interview_Kit.md](05_Interview_Kit.md) | The pitch; one feature designed end to end; classic LLD questions mapped to this code; five stories; about 45 questions with answers; numbers; a cheat sheet | 45 min |
-| 6 | [lessons/](lessons/00_INDEX.md) | Nine real problems, each with the cause, the fix, the general idea and interview questions | 10 min each |
+| 6 | [lessons/](lessons/00_INDEX.md) | Eleven real problems, each with the cause, the fix, the general idea and interview questions | 10 min each |
 
 **If Python, Django or object-oriented programming is new to you,** start with
 Part 3. Its first three sections (§0, §0.5, §0.6) explain how a request flows

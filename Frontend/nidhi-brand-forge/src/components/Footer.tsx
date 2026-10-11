@@ -93,7 +93,7 @@ const Footer = () => {
           <div className="col-span-2 sm:col-span-1">
             <h4 className="font-semibold text-foreground text-sm sm:text-base mb-2 sm:mb-4">{t('footer.contactDetail')}</h4>
             <ul className="space-y-1 sm:space-y-3 text-xs sm:text-base">
-              <li className="notranslate hidden sm:flex items-start space-x-3 text-muted-foreground">
+              <li className="notranslate flex items-start space-x-3 text-muted-foreground">
                 <MapPin className="h-5 w-5 mt-0.5 flex-shrink-0" />
                 <span>7, Industrial Area, Runija Road, Barnagar. PIN-456771 <br />
                       Ujjain, MP, India</span>

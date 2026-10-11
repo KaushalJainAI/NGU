@@ -689,7 +689,7 @@
         },
         {
           "q": "Can I cancel my order?",
-          "a": "Yes. Orders can be cancelled free of charge within 24 hours of placing them, provided they have not yet been shipped. See our Return & Refund Policy for details."
+          "a": "You can cancel free of charge any time before the order is shipped, and you get a full refund. Once it has shipped it can no longer be cancelled — you can refuse the delivery or use the return process, and the delivery charge is not refunded."
         },
         {
           "q": "What is your return and refund policy?",
@@ -869,7 +869,13 @@
   },
   "assistant": {
     "langAuto": "Auto",
-    "greeting": "Hi! I'm the Nidhi Assistant. Ask me about our spices, your orders, or just say what you're cooking! 🌶️",
+    "greeting": "Hi! I'm the Nidhi Assistant. Tell me what you're cooking and I'll help pick the right masala — or ask about delivery, offers and your orders. 🌶️",
+    "chipDelivery": "What is the delivery charge?",
+    "chipCod": "Is cash on delivery available?",
+    "chipReturns": "What is your return policy?",
+    "chipDeliveryTime": "How long does delivery take?",
+    "errorDaily": "You've reached today's chat limit — it resets tomorrow. You can still browse and order, or reach our team from the Contact page.",
+    "errorBusy": "One moment — I'm still working on your last message. Please try again in a few seconds.",
     "justNow": "just now",
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",

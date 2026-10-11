@@ -124,7 +124,18 @@ def tool_search_products(user, args):
     if not isinstance(query, str) or not query.strip():
         return {'error': 'bad_args', 'message': 'query is required'}
     payload = build_suggestions(query.strip()[:100], limit=6)
-    product_ids = [s['id'] for s in payload['suggestions'] if s['type'] == 'product']
+    for s in payload['suggestions']:
+        # The autocomplete payload carries an image URL the model can never use
+        # (links are stripped from replies) - ~30 wasted tokens per hit.
+        s.pop('image', None)
+    _attach_variants(payload['suggestions'])
+    return {'query': payload['query'], 'results': payload['suggestions']}
+
+
+def _attach_variants(rows):
+    """Give each product row its active pack sizes (`variants`): variant_id,
+    weight label, price, in_stock. Combos have no sizes and are left alone."""
+    product_ids = [r['id'] for r in rows if r['type'] == 'product']
     variants_by_product = {}
     if product_ids:
         for v in ProductVariant.objects.filter(
@@ -136,10 +147,10 @@ def tool_search_products(user, args):
                 'price': float(v.final_price),
                 'in_stock': v.stock > 0,
             })
-    for s in payload['suggestions']:
-        if s['type'] == 'product':
-            s['variants'] = variants_by_product.get(s['id'], [])
-    return {'query': payload['query'], 'results': payload['suggestions']}
+    for r in rows:
+        if r['type'] == 'product':
+            r['variants'] = variants_by_product.get(r['id'], [])
+    return rows
 
 
 def tool_get_product_details(user, args):
@@ -172,6 +183,24 @@ def tool_get_policy(user, args):
                 'route': '/shipping-policy'}
     title, content, route = POLICIES[kind]
     return {'kind': kind, 'title': title, 'content': content, 'route': route}
+
+
+def tool_search_faq(user, args):
+    """Common shop questions answered from assistant/faq_data.json (see faq.py).
+    Answers go back in English: the model writes the reply in the customer's
+    language. `route` is only ever an allowlisted in-store page."""
+    from . import faq
+    query = args.get('query')
+    if not isinstance(query, str) or not query.strip():
+        return {'error': 'bad_args', 'message': 'query is required'}
+    matches = [
+        {'question': entry.questions[0], 'answer': entry.answer('en'),
+         'route': entry.route if entry.route in NAV_STATIC_ROUTES else None}
+        for entry, _score in faq.search(query)
+    ]
+    if not matches:
+        return {'matches': [], 'message': 'No FAQ entry covers this.'}
+    return {'matches': matches}
 
 
 def tool_get_offers(user, args):
@@ -292,7 +321,14 @@ def tool_get_cart(user, args):
         price = obj.final_price if hasattr(obj, 'final_price') else obj.price
         total += price * it.quantity
         items.append({'name': obj.name, 'quantity': it.quantity, 'price': float(price)})
-    return {'items': items, 'total': float(total), 'count': len(items)}
+    # How far the cart is from free delivery, read live from limits.py. The
+    # assistant uses it to say "add Rs.79 more for free delivery" - and must not
+    # do the sum itself (the threshold is configuration, not a constant).
+    from spices_backend.limits import FREE_SHIPPING_THRESHOLD
+    gap = max(FREE_SHIPPING_THRESHOLD - total, Decimal('0'))
+    return {'items': items, 'total': float(total), 'count': len(items),
+            'free_above': float(FREE_SHIPPING_THRESHOLD),
+            'free_delivery_gap': float(gap)}
 
 
 # How many rows the order/browse/review tools will ever return in one call.
@@ -451,6 +487,61 @@ def tool_browse_products(user, args):
     for obj, _fp, _feat, _id in rows[:limit]:
         results.append(_combo_public(obj) if isinstance(obj, ProductCombo) else _product_public(obj))
     return {'results': results, 'count': len(results)}
+
+
+def tool_get_recommendations(user, args):
+    """Items to suggest next. With a product slug: what other customers bought in
+    the same orders, topped up from the same shelf. Without one: bestsellers.
+    Only active, in-stock products, public fields only (G2) - and no combos, so
+    every pick has pack sizes the assistant can propose directly."""
+    from django.db.models import Count, Sum
+    from django.db.models.functions import Coalesce
+    from orders.models import OrderItem
+
+    limit = min(_coerce_limit(args, default=3), 5)
+    slug = args.get('slug')
+    anchor = None
+    if isinstance(slug, str) and slug.strip():
+        slug = slug.strip()
+        anchor = Product.objects.filter(slug=slug, is_active=True).first()
+        if anchor is None and not ProductCombo.objects.filter(slug=slug, is_active=True).exists():
+            return {'error': 'not_found', 'message': 'No such product.'}
+
+    # An order counts as a real purchase unless it was cancelled or never paid.
+    # The same rule twice: from an OrderItem, and from a Product via its items.
+    counted = ~Q(order__status='cancelled') & ~Q(order__payment_status__in=('rejected', 'failed'))
+    counted_via_product = (~Q(orderitem__order__status='cancelled')
+                           & ~Q(orderitem__order__payment_status__in=('rejected', 'failed')))
+    picks = []          # (product, reason)
+    seen = {anchor.pk} if anchor else set()
+
+    def take(queryset, reason):
+        for p in queryset.prefetch_related('variants'):
+            if len(picks) >= limit:
+                return
+            if p.pk not in seen:
+                seen.add(p.pk)
+                picks.append((p, reason))
+
+    base = in_stock_products(Product.objects.filter(is_active=True)).select_related('category')
+    if anchor is not None:
+        order_ids = OrderItem.objects.filter(counted, product=anchor).values('order_id')
+        take(base.filter(orderitem__order_id__in=order_ids).exclude(pk=anchor.pk)
+             .annotate(n=Count('orderitem__order', distinct=True)).order_by('-n', '-id')[:limit * 2],
+             'bought_together')
+        take(base.filter(category_id=anchor.category_id).exclude(pk=anchor.pk)
+             .order_by('-is_featured', '-id')[:limit * 2], 'same_shelf')
+    if len(picks) < limit:
+        take(base.annotate(sold=Coalesce(Sum('orderitem__quantity', filter=counted_via_product), 0))
+             .order_by('-sold', '-is_featured', '-id')[:limit * 2], 'bestseller')
+
+    rows = []
+    for p, reason in picks:
+        row = _product_public(p)
+        row['reason'] = reason
+        rows.append(row)
+    _attach_variants(rows)
+    return {'recommendations': rows, 'count': len(rows)}
 
 
 def tool_get_product_reviews(user, args):
@@ -729,8 +820,10 @@ READ_TOOLS = {
     'browse_products': tool_browse_products,
     'get_product_details': tool_get_product_details,
     'get_product_reviews': tool_get_product_reviews,
+    'get_recommendations': tool_get_recommendations,
     'list_categories': tool_list_categories,
     'get_policy': tool_get_policy,
+    'search_faq': tool_search_faq,
     'get_offers': tool_get_offers,
     'get_delivery_info': tool_get_delivery_info,
     'get_tracking': tool_get_tracking,
@@ -786,9 +879,12 @@ def _bool(desc):
 
 
 TOOL_SCHEMAS = [
-    _fn('search_products', 'Fuzzy-find products/combos by name or Hinglish term.',
+    _fn('search_products', 'Find products/combos by name or Hinglish term. Hits carry '
+        '`variants` (variant_id, weight, price, in_stock): match the customer\'s size to a '
+        'variant_id, or ASK which size.',
         {'query': _str('What the customer named, e.g. haldi, garam masala.')}, ['query']),
-    _fn('browse_products', 'Structured catalogue browse/filter.',
+    _fn('browse_products', 'Browse/filter the catalogue ("all ...", "under Rs.100", combos, '
+        'offers, cheapest).',
         {'category': _str('Category name or slug.'), 'min_price': {'type': 'number'},
          'max_price': {'type': 'number'},
          'spice_form': _str('whole, powder, crushed or mixed.'),
@@ -796,30 +892,39 @@ TOOL_SCHEMAS = [
          'include_combos': _bool('Include combos (default true).'),
          'sort': _str('price_asc, price_desc, featured or newest.'),
          'limit': _int('Max rows (default 8, max 20).')}),
+    _fn('get_recommendations', 'Items to suggest next (in stock, with sizes). Slug of the '
+        'item just chosen = what goes with it; no slug = bestsellers. Suggest ONE.',
+        {'slug': _str('Product just chosen (optional).'),
+         'limit': _int('Max items (default 3).')}),
     _fn('get_product_details', 'Price, weight and description for ONE product/combo.',
         {'slug': _str('Product or combo slug.')}, ['slug']),
     _fn('get_product_reviews', 'Rating summary + recent reviews for ONE item.',
         {'slug': _str('Product or combo slug.'), 'limit': _int('Max reviews (default 5).')},
         ['slug']),
     _fn('list_categories', "The store's product categories.", {}),
-    _fn('get_policy', 'Shipping or return policy text (from the static pages).',
+    _fn('get_policy', 'FULL shipping/return policy text. Long: try search_faq first.',
         {'kind': _str('shipping or return.')}, ['kind']),
-    _fn('get_offers', 'Currently redeemable coupon offers.',
+    _fn('search_faq', 'Call FIRST for common shop questions (delivery, COD, payment, '
+        'cancelling, returns, refunds, bills, storage, contact, bulk). Pass their words.',
+        {'query': _str("The customer's question, in their own words.")}, ['query']),
+    _fn('get_offers', 'Redeemable coupon offers. Only when the customer asks about offers.',
         {'limit': _int('Max offers (default 20).')}),
     _fn('get_delivery_info', 'Delivery fee facts: net fee, GST rate, total, free-shipping threshold.', {}),
     _fn('get_tracking', "Courier + tracking link for ONE of the user's orders.",
         {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
     _fn('get_order_status', "Quick status of ONE of the user's orders.",
         {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
-    _fn('get_order_details', "Line items of ONE of the user's orders.",
+    _fn('get_order_details', "Line items of ONE of the user's orders (\"what was in X\", reorder).",
         {'order_number': _str('e.g. ORD-000123.')}, ['order_number']),
-    _fn('list_my_orders', "The user's recent orders.",
+    _fn('list_my_orders', "The user's recent orders: number, status, date, total.",
         {'limit': _int('Max orders (default 6).')}),
-    _fn('get_cart', "The user's current cart contents.", {}),
+    _fn('get_cart', "The user's cart: items, total, `free_delivery_gap` (rupees still "
+        "needed for free delivery; 0 = free).", {}),
 ]
 
 ACTION_SCHEMAS = [
-    _fn('add_to_cart', 'PROPOSE adding one item (customer confirms in the app).',
+    _fn('add_to_cart', 'PROPOSE adding one item (customer confirms). Name product and '
+        'price first.',
         {'product_id': _int('Product or combo id.'),
          'variant_id': _int('Exact pack-size id from search variants. Ask the '
                             'customer for the size; never guess the default.'),
@@ -833,7 +938,7 @@ ACTION_SCHEMAS = [
     _fn('edit_cart', 'PROPOSE cart edits (set quantity, 0 removes a line).',
         {'lines': {'type': 'array', 'description': 'Lines with variant_id/product_id and quantity.',
                    'items': {'type': 'object'}}}, ['lines']),
-    _fn('checkout', 'PROPOSE going to checkout.', {}),
+    _fn('checkout', 'PROPOSE going to checkout once the customer is done.', {}),
     _fn('navigate', 'PROPOSE opening an in-store page.',
         {'route': _str('e.g. /products, /cart, /my-orders.')}, ['route']),
     _fn('escalate_to_human', 'Flag the thread for a human. Call ONLY when the '

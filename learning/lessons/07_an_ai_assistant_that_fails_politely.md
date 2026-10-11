@@ -2,8 +2,8 @@
 
 > Source: `Backend/assistant/agent.py`, `Backend/assistant/views.py`,
 > `Backend/assistant/tools.py`; findings A2–A5 in `AUDIT_AND_PLAN_2026-10.md`
-> Fixed: 2026-10-01 · Tests: `Backend/assistant/test_llm_failure.py`,
-> `test_agent_escalation.py`, `test_chat_limits.py`, `test_guardrails.py`
+> Fixed: 2026-10-01 · Tests: `Backend/assistant/tests.py` (sections llm_failure,
+> agent_escalation, chat_limits, guardrails)
 
 ---
 
@@ -45,7 +45,9 @@ Two more limits were added, because "it failed" was not the only bad outcome.
 
 - **20 seconds per model call**, with one retry. The web server can handle six
   requests at a time. A chat request that waits two minutes holds one of those
-  six, and checkout shares them.
+  six, and checkout shares them. *(2026-10-03: the retry was removed and a
+  whole-turn time budget added, because these limits did not add up to less than
+  the proxy's 60 seconds. See [lesson 10](10_timeouts_that_nest_and_replies_in_the_right_language.md).)*
 - **One message in progress per account.** `cache.add` sets a key only if it is
   absent. A second message while the first is still running gets a 429. The key
   is claimed *before* the message is saved, so a refused message leaves nothing

@@ -19,12 +19,13 @@ import logging
 from django.conf import settings
 from django.db.models import OuterRef, Subquery
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import Throttled
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 
-from . import stt
+from . import compaction, stt
 from .models import AssistantConversation, AssistantMessage
 from .serializers import (
     AssistantChatRequestSerializer,
@@ -36,11 +37,33 @@ from .serializers import (
 from .throttles import (
     AssistantBurstThrottle,
     AssistantDailyThrottle,
+    AdminAssistantBurstThrottle,
+    AdminAssistantDailyThrottle,
     AssistantTranscribeThrottle,
 )
-from .agent import Agent, MAX_HISTORY_MESSAGES
+from .agent import Agent, MAX_HISTORY_MESSAGES, TURN_BUDGET_SECONDS, make_title
 
 logger = logging.getLogger(__name__)
+
+# What a 429 says, so the storefront can tell the three apart (DRF's own text is
+# one generic sentence for all of them). The widget matches on these.
+DAILY_LIMIT_DETAIL = 'Daily chat limit reached.'
+BURST_LIMIT_DETAIL = 'Too many messages. Please wait a moment.'
+BUSY_DETAIL = 'A reply is already in progress.'
+
+
+class NamedThrottleMixin:
+    """Say WHICH limit was hit: the daily cost cap or the per-minute burst cap.
+    A shopper who hit the burst cap should wait a minute; one who hit the daily
+    cap should be told it resets tomorrow."""
+
+    def check_throttles(self, request):
+        for throttle in self.get_throttles():
+            if not throttle.allow_request(request, self):
+                daily = getattr(throttle, 'scope', '').endswith('_day')
+                raise Throttled(wait=throttle.wait(),
+                                detail=DAILY_LIMIT_DETAIL if daily else BURST_LIMIT_DETAIL)
+
 
 # Bound on how many conversations a single list response returns (admin + customer).
 MAX_PAGE_SIZE = 100
@@ -126,7 +149,7 @@ def _prepare_customer_turn(request):
     return user, conversation, message, data.get('language') or '', history, is_first_turn, None
 
 
-class AssistantChatView(APIView):
+class AssistantChatView(NamedThrottleMixin, APIView):
     permission_classes = [IsAuthenticated]
     throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
 
@@ -144,8 +167,12 @@ class AssistantChatView(APIView):
     def load_history(conversation):
         # Load the most recent messages (bounded to avoid an unbounded queryset
         # on a runaway thread); the agent then token-trims to the context budget.
-        msgs = conversation.messages.filter(role__in=['user', 'assistant', 'admin']) \
-            .order_by('-created_at', '-id')[:MAX_HISTORY_MESSAGES]
+        # Messages already folded into the thread's summary are not loaded: the
+        # model reads the summary (conversation.summary) in their place.
+        msgs = conversation.messages.filter(role__in=['user', 'assistant', 'admin'])
+        if conversation.summary_upto:
+            msgs = msgs.filter(id__gt=conversation.summary_upto)
+        msgs = msgs.order_by('-created_at', '-id')[:MAX_HISTORY_MESSAGES]
         return [
             {'role': m.role, 'content': m.content, 'sender_name': m.sender_name}
             for m in reversed(list(msgs))
@@ -165,19 +192,49 @@ class AssistantChatView(APIView):
                 _prepare_customer_turn(request)
             if paused is not None:
                 return Response(paused)
-            completion = getattr(request, '_assistant_completion', None)
-            agent = Agent(user, completion=completion)
-            result = agent.run(message, history=history, language=language)
+            result = _run_turn(request, user, message, history, language,
+                               summary=conversation.summary)
             payload = _finalize_turn(conversation, message, result, is_first_turn)
             return Response(payload)
         finally:
             _release_turn(inflight_key)
 
 
+def _faq_result(message, language, history):
+    """A turn answered from the FAQ file with NO model call, or None.
+
+    Only a near-exact, unambiguous match qualifies (faq.direct_answer); anything
+    else goes to the agent. The result has the same shape as Agent.run's, so the
+    turn is persisted exactly like any other - `llm_used` False, `reason` 'faq'.
+    """
+    from . import faq, lang
+    hit = faq.direct_answer(message, lang.resolve(language, message))
+    if hit is None:
+        return None
+    return {
+        'reply': hit['answer'], 'proposed_action': None,
+        'sources': [{'tool': 'faq', 'args': {'id': hit['id']}}],
+        'escalate': False, 'llm_used': False,
+        'title': make_title(message, history), 'history_truncated': False,
+        'reason': 'faq',
+    }
+
+
+def _run_turn(request, user, message, history, language, summary=''):
+    """FAQ file first (free), the agent otherwise. Shared by both chat views."""
+    result = _faq_result(message, language, history)
+    if result is not None:
+        return result
+    completion = getattr(request, '_assistant_completion', None)
+    return Agent(user, completion=completion).run(
+        message, history=history, language=language, summary=summary)
+
+
 # Dead-man's release if the worker dies mid-turn. Must outlast the slowest
-# possible turn (MAX_ITERATIONS LLM calls, each up to timeout x 2 attempts =
-# 160 s) or the guard lapses while the turn it guards is still running.
-INFLIGHT_TTL_SECONDS = 180
+# possible turn - the turn budget (the agent starts no round it cannot finish
+# inside it, so a turn ends within roughly that) plus slack for the last model
+# call and the DB writes - or the guard lapses while its turn is still running.
+INFLIGHT_TTL_SECONDS = TURN_BUDGET_SECONDS + 30
 
 
 def _claim_turn(user):
@@ -193,7 +250,7 @@ def _release_turn(key):
 
 
 def _turn_in_progress():
-    return Response({'detail': 'A reply is already in progress.'},
+    return Response({'detail': BUSY_DETAIL},
                     status=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
@@ -239,22 +296,28 @@ def _finalize_turn(conversation, message, result, is_first_turn):
         },
     )
 
+    # Fold the thread's oldest part into its summary if it has grown long. Runs
+    # in a background thread after the reply is saved: it costs this request
+    # nothing and its failure changes nothing (see assistant/compaction.py).
+    compaction.schedule(conversation.pk)
+
     return {
         'conversation_id': str(conversation.conversation_id),
         'reply': result.get('reply', ''),
         'proposed_action': proposed_action,
         'sources': result.get('sources', []),
-        # True once the thread no longer fits the model's context window and
-        # its oldest turns were dropped from the prompt. The client shows a
-        # "start a new chat" notice — the assistant is now answering without
-        # the earliest part of this conversation.
+        # True when messages that are NOT covered by the thread's summary were
+        # dropped from the prompt to fit the model's context window. The client
+        # shows a "start a new chat" notice - the assistant is now answering
+        # without part of this conversation. (Messages that were summarised do
+        # not count: their substance is still in the prompt.)
         'history_truncated': bool(result.get('history_truncated')),
         'ai_paused': False,
         'handled_by': '',
     }
 
 
-class AssistantChatStreamView(APIView):
+class AssistantChatStreamView(NamedThrottleMixin, APIView):
     """Server-sent events for one assistant turn (AP10b).
 
     Same preamble, throttles, in-flight guard, agent run and persistence as
@@ -277,9 +340,8 @@ class AssistantChatStreamView(APIView):
             if paused is not None:
                 return StreamingHttpResponse(
                     self._events(paused), content_type='text/event-stream')
-            completion = getattr(request, '_assistant_completion', None)
-            agent = Agent(user, completion=completion)
-            result = agent.run(message, history=history, language=language)
+            result = _run_turn(request, user, message, history, language,
+                               summary=conversation.summary)
             payload = _finalize_turn(conversation, message, result, is_first_turn)
             return StreamingHttpResponse(
                 self._events(payload), content_type='text/event-stream')
@@ -302,7 +364,7 @@ class AssistantChatStreamView(APIView):
 # Admin assistant chat (store-manager Q&A over business data)
 # ---------------------------------------------------------------------------
 
-class AdminAssistantChatView(APIView):
+class AdminAssistantChatView(NamedThrottleMixin, APIView):
     """Plain-English Q&A over the store's own data for staff.
 
     Stateless by design: the admin panel holds the short conversation in the
@@ -313,7 +375,9 @@ class AdminAssistantChatView(APIView):
     so a customer path can never reach these tools.
     """
     permission_classes = [IsAdminUser]
-    throttle_classes = [AssistantBurstThrottle, AssistantDailyThrottle]
+    # Own counters: the owner questioning the dashboard must not eat the
+    # allowance of a shopper chatting under the same account, or the reverse.
+    throttle_classes = [AdminAssistantBurstThrottle, AdminAssistantDailyThrottle]
 
     MAX_HISTORY = 20  # recent turns the client may send back
 

@@ -315,7 +315,8 @@ ADMIN_TOOL_SCHEMAS = [
     _fn('sales_summary', 'Revenue, order count and average order value.',
         {'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
     _fn('count_orders', 'How many orders match a status and/or period.',
-        {'status': {'type': 'string', 'description': 'Order status, or unshipped.'},
+        {'status': {'type': 'string', 'description': 'pending, confirmed, processing, shipped, '
+                    'delivering, delivered, cancelled, or unshipped (= confirmed + processing).'},
          'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
     _fn('list_recent_orders', 'Recent orders with number, customer, status, total.',
         {'status': {'type': 'string', 'description': 'Filter by status.'},
@@ -332,7 +333,8 @@ ADMIN_TOOL_SCHEMAS = [
         {'query': {'type': 'string', 'description': 'Name, email or phone fragment.'},
          'include_contact': {'type': 'boolean', 'description': 'Full contact ONLY when asked.'}},
         ['query']),
-    _fn('search_report', 'Top and zero-result searches for a period.',
+    _fn('search_report', 'What customers searched for, including searches that found '
+        'nothing (demand the store may not be stocking).',
         {'period': {'type': 'string', 'description': 'today, 7d, 30d, 90d or all.'}}),
 ]
 

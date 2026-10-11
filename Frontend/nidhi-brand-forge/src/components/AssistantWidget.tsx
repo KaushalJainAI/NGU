@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   assistantAPI, AssistantReply, ProposedAction, ProposalLine, ConversationSummary, ChatMessage,
 } from "@/lib/api/assistant";
+import { APIError } from "@/lib/api/config";
 import { cartAPI } from "@/lib/api/cart";
 import { trackEvent } from "@/lib/api/analytics";
 import { MAX_ITEM_QUANTITY } from "@/config/limits";
@@ -121,7 +122,7 @@ const AssistantWidget = () => {
   const { user } = useAuth();
   const { addToCart, updateQuantity, removeFromCart, fetchCartFromBackend } = useCart();
   const queryClient = useQueryClient();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const LANGUAGES = [
     { code: "auto", label: t('assistant.langAuto') },
@@ -351,8 +352,8 @@ const AssistantWidget = () => {
 
   // ── Chat send ──────────────────────────────────────────────────────────────
   const mutation = useMutation({
-    mutationFn: (message: string) =>
-      assistantAPI.chat(message, activeConvId, language),
+    mutationFn: ({ message, lang }: { message: string; lang?: string }) =>
+      assistantAPI.chat(message, activeConvId, lang ?? language),
     onSuccess: (data: AssistantReply) => {
       setActiveConvId(data.conversation_id);
       localStorage.setItem("assistant_conversation_id", data.conversation_id);
@@ -374,25 +375,41 @@ const AssistantWidget = () => {
       queryClient.invalidateQueries({ queryKey: ["assistant-threads"] });
       speak(data.reply);
     },
-    onError: () => {
-      setTurns((prev) => [
-        ...prev,
-        { role: "assistant", text: t('assistant.error') },
-      ]);
+    onError: (err: unknown) => {
+      // The three 429s mean different things to the customer: the daily cap
+      // (come back tomorrow), the per-minute cap and a reply still in progress
+      // (wait a few seconds). The backend names which in the error text.
+      let text = t('assistant.error');
+      if (err instanceof APIError && err.status === 429) {
+        text = /daily/i.test(err.message) ? t('assistant.errorDaily') : t('assistant.errorBusy');
+      }
+      setTurns((prev) => [...prev, { role: "assistant", text }]);
     },
   });
 
   const send = useCallback(
-    (raw: string, viaVoice = false) => {
+    (raw: string, viaVoice = false, lang?: string) => {
       const message = raw.trim();
       if (!message || mutation.isPending) return;
       voiceTurnRef.current = viaVoice;
       setTurns((prev) => [...prev, { role: "user", text: message }]);
       setInput("");
-      mutation.mutate(message);
+      mutation.mutate({ message, lang });
     },
     [mutation]
   );
+
+  // Suggested questions under the greeting. Each one is worded exactly like a
+  // question in the backend's faq_data.json, so tapping it is answered from the
+  // FAQ file with no AI call. They are in the site language, so that language is
+  // sent with them (the Devanagari of Hindi and Marathi can't be told apart).
+  const chips = [
+    t('assistant.chipDelivery'),
+    t('assistant.chipDeliveryTime'),
+    t('assistant.chipCod'),
+    t('assistant.chipReturns'),
+  ];
+  const chipLanguage = language === "auto" ? (i18n.resolvedLanguage || "auto") : language;
 
   // Expose the latest `send` to the voice hook's onTranscript callback.
   sendRef.current = send;
@@ -708,6 +725,21 @@ const AssistantWidget = () => {
                 </div>
               );
             })}
+
+            {turns.length === 1 && !mutation.isPending && (
+              <div className="flex flex-wrap gap-2 pl-9">
+                {chips.map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    onClick={() => send(chip, false, chipLanguage)}
+                    className="px-3 py-1.5 rounded-full border text-xs hover:bg-accent transition-colors"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {mutation.isPending && (
               <div className="flex items-center gap-2 text-muted-foreground text-sm">
