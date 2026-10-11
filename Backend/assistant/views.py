@@ -258,6 +258,11 @@ def _finalize_turn(conversation, message, result, is_first_turn):
     """Escalation/email, title stamp, persist, payload. Shared by the chat and
     stream endpoints so both persist exactly the same turn (AP10b)."""
     proposed_action = result.get('proposed_action')
+    if result.get('escalate'):
+        # Single signal: the thread is already flagged for a human and the
+        # reply says so with contact details — a lingering "Connect me with
+        # a human" button next to it contradicts that.
+        proposed_action = None
 
     # Escalation (AP9): ONLY an explicit escalate_to_human call from the
     # model — i.e. the customer asked for a human — flags the thread.

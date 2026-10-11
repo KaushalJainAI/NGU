@@ -34,6 +34,7 @@ from .prompts import (
 )
 from . import tools as toolkit
 from . import admin_tools
+from . import lang as langmod
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -332,7 +333,10 @@ class Agent:
                     'history_truncated': False, 'reason': 'llm_unavailable'}
 
         # Build the message list: system + language directive + history + new turn.
-        system_text = self._system_prompt + '\n\n' + language_directive(language)
+        # The directive carries the RESOLVED language (auto -> detected, explicit
+        # in-chat request -> requested), never a vague "same as the user".
+        effective_language = langmod.resolve(language, message)
+        system_text = self._system_prompt + '\n\n' + language_directive(effective_language)
         messages = [('system', system_text)]
 
         # Token-budgeted history: keep as many of the most recent turns as fit
@@ -520,7 +524,12 @@ class Agent:
             return ('', False) if with_flag else ''
         from django.utils.html import strip_tags
         text = strip_tags(reply)
-        text = re.sub(r'https?://\S+', '', text)
+        # Strip URLs with a space so neighbours never fuse ("sakta.<link>checkout"
+        # must not become "sakta.checkout"), then collapse the gap and any
+        # stray full-stop left doubling a danda ("।." -> "। ").
+        text = re.sub(r'https?://\S+', ' ', text)
+        text = re.sub(r'[ \t]+', ' ', text)
+        text = re.sub(r'([।!?])\.(?=\S)', r'\1 ', text)
         text, was_cut = cut_reply(text.strip())
         return (text, was_cut) if with_flag else text
 

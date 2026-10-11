@@ -692,7 +692,9 @@ LLM_MODEL=minimax/minimax-m2.5     # model for synonym generation
 
 # Optional: a separate (stronger) model for the shopping assistant
 ASSISTANT_MODEL_PROVIDER=openrouter
-ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
+ASSISTANT_LLM_MODEL=anthropic/claude-haiku-5.5
+ASSISTANT_REASONING_EFFORT=low
+ASSISTANT_MODEL_CONTEXT_TOKENS=100000
 
 # Query limits (spices_backend/limits.py — all optional, defaults shown)
 MAX_SEARCH_Q=200

@@ -12,6 +12,8 @@ Devanagari is shared by Hindi and Marathi and cannot be told apart this way;
 a customer who picked Marathi explicitly keeps it.
 """
 
+import re
+
 SUPPORTED = ('en', 'hi', 'hinglish', 'gu', 'mr', 'pa')
 
 # (first, last) code points of each script block.
@@ -56,8 +58,44 @@ def detect(text):
 
 
 def resolve(code, message=''):
-    """The customer's explicit choice if there is one, else the message's language."""
+    """The customer's explicit choice if there is one, else the message's language.
+
+    An explicit in-chat language request ("reply in English only",
+    "English me baat karo") always wins over the dropdown setting, so a
+    customer who cannot read the current language is never trapped."""
+    override = detect_override(message)
+    if override:
+        return override
     code = (code or '').strip().lower()
     if code in SUPPORTED:
         return code
     return detect(message)
+
+
+# Explicit language requests inside the chat override the dropdown. A language
+# name alone ("English masala") is not a request — it needs a request verb.
+_OVERRIDE_LANGUAGES = (
+    ('en', ('english', 'angrezi', 'angreji')),
+    ('hi', ('hindi', 'devanagari')),
+    ('hinglish', ('hinglish', 'hinglis', 'roman hindi')),
+    ('gu', ('gujarati', 'gujrati', 'gujrati')),
+    ('mr', ('marathi',)),
+    ('pa', ('punjabi', 'panjabi')),
+)
+_OVERRIDE_REQUEST = re.compile(
+    r'reply|speak|talk|answer|respond|switch|change|likho|batao|baat karo|me baat|me jawab|me bolo|me likho',
+    re.IGNORECASE,
+)
+
+
+def detect_override(text):
+    """A language code the customer explicitly asked for, or None."""
+    if not isinstance(text, str) or not text:
+        return None
+    if not _OVERRIDE_REQUEST.search(text):
+        return None
+    lowered = text.lower()
+    for code, names in _OVERRIDE_LANGUAGES:
+        if any(name in lowered for name in names):
+            return code
+    return None

@@ -683,7 +683,9 @@ LLM_MODEL=minimax/minimax-m2.5
 
 # Optional: stronger model for the assistant
 ASSISTANT_MODEL_PROVIDER=openrouter
-ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
+ASSISTANT_LLM_MODEL=anthropic/claude-haiku-5.5
+ASSISTANT_REASONING_EFFORT=low
+ASSISTANT_MODEL_CONTEXT_TOKENS=100000
 
 # Optional: how hard a reasoning model thinks (sent to OpenRouter as
 # reasoning.effort). Unset = provider default. Thinking tokens are billed as

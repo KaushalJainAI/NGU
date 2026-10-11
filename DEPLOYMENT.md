@@ -449,7 +449,9 @@ LLM_MODEL=minimax/minimax-m2.5
 # Optional: give the assistant a stronger chat model than the synonym generator.
 # Falls back to MODEL_PROVIDER / LLM_MODEL when unset.
 ASSISTANT_MODEL_PROVIDER=openrouter
-ASSISTANT_LLM_MODEL=openai/gpt-4o-mini
+ASSISTANT_LLM_MODEL=anthropic/claude-haiku-5.5
+ASSISTANT_REASONING_EFFORT=low
+ASSISTANT_MODEL_CONTEXT_TOKENS=100000
 ```
 
 > ⚠️ **Cloudinary is a hard startup dependency now.** If `CLOUDINARY_CLOUD_NAME`,

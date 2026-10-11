@@ -191,6 +191,10 @@
         "COD milega kya",
         "cash on delivery hai kya",
         "COD kyu nahi ho raha",
+        "COD hai kya",
+        "COD available hai kya",
+        "COD par order kar sakte hain kya",
+        "cod option hai kya",
         "क्या कैश ऑन डिलीवरी है",
         "सीओडी क्यों नहीं हो रहा",
         "શું કૅશ ઑન ડિલિવરી મળે છે",
@@ -206,6 +210,33 @@
         "pa": "ਹਾਂ, ₹{cod_max} ਤੱਕ ਦੇ ਆਰਡਰ 'ਤੇ ਪੂਰੇ ਭਾਰਤ ਵਿੱਚ ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਉਪਲਬਧ ਹੈ। ਤੁਹਾਡੀ ਈਮੇਲ ਵੈਰੀਫ਼ਾਈ ਹੋਈ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ, ਅਤੇ ਇੱਕ ਸਮੇਂ ਵੱਧ ਤੋਂ ਵੱਧ {cod_open} ਕੈਸ਼ ਆਨ ਡਿਲੀਵਰੀ ਆਰਡਰ ਚੱਲ ਸਕਦੇ ਹਨ।"
       },
       "route": null,
+      "direct": true
+    },
+    {
+      "id": "payment-failed-debit",
+      "topic": "payment",
+      "questions": [
+        "My money was debited but the order was not placed",
+        "Amount deducted from UPI but no order",
+        "paise kat gaye UPI se",
+        "paise kat gaye UPI se order nahi hua",
+        "paise kat gaye par order confirm nahi hua",
+        "UTR number kahan bheju paise katne par",
+        "पैसे कट गए पर ऑर्डर नहीं हुआ",
+        "पैसे कट गए UPI से",
+        "પૈસા કપાયા પણ ઓર્ડર થયો નથી",
+        "पैसे कपले पण ऑर्डर झाले नाही",
+        "ਪੈਸੇ ਕੱਟ ਗਏ ਪਰ ਆਰਡਰ ਨਹੀਂ ਹੋਇਆ"
+      ],
+      "answer": {
+        "en": "Don't worry — a failed UPI debit usually reverses automatically to your account within 3–5 working days. Please check My Orders first; if there is no order, keep your UTR number and payment screenshot ready and message us on WhatsApp/call at {phone} (Mon–Sat, 9 AM–6 PM) so we can trace it.",
+        "hi": "घबराइए मत — UPI से कटा पैसा आमतौर पर 3–5 कार्यदिवस में अपने आप वापस आ जाता है। पहले My Orders में देखें; अगर ऑर्डर नहीं है तो UTR नंबर और पेमेंट स्क्रीनशॉट तैयार रखें और {phone} पर WhatsApp/कॉल करें (सोम–शनि, सुबह 9–शाम 6) ताकि हम पता लगा सकें।",
+        "hinglish": "Ghabraiye mat — UPI se kata paisa aam taur par 3–5 working days me apne aap wapas aa jata hai. Pehle My Orders me dekhiye; agar order nahi hai to UTR number aur payment screenshot ready rakhiye aur {phone} par WhatsApp/call kijiye (Mon–Sat, 9 AM–6 PM) taaki hum trace kar saken.",
+        "gu": "ચિંતા ન કરો — UPIથી કપાયેલા પૈસા સામાન્ય રીતે 3–5 કાર્યદિવસમાં આપમેળે પાછા આવે છે. પહેલા My Orders માં જુઓ; જો ઓર્ડર ન હોય તો UTR નંબર અને પેમેન્ટ સ્ક્રીનશૉટ તૈયાર રાખો અને {phone} પર WhatsApp/કૉલ કરો (સોમ–શનિ, સવારે 9–સાંજે 6) જેથી અમે તપાસી શકીએ.",
+        "mr": "काळजी करू नका — UPI ने कापलेले पैसे साधारणपणे 3–5 कामकाजी दिवसांत आपोआप परत येतात. आधी My Orders मध्ये पहा; ऑर्डर नसल्यास UTR नंबर आणि पेमेंट स्क्रीनशॉट तयार ठेवा आणि {phone} वर WhatsApp/कॉल करा (सोम–शनि, सकाळी 9–संध्याकाळी 6) म्हणजे आम्ही तपासू शकू.",
+        "pa": "ਚਿੰਤਾ ਨਾ ਕਰੋ — UPI ਰਾਹੀਂ ਕੱਟੇ ਪੈਸੇ ਆਮ ਤੌਰ 'ਤੇ 3–5 ਕੰਮਕਾਜੀ ਦਿਨਾਂ ਵਿੱਚ ਆਪਣੇ ਆਪ ਵਾਪਸ ਆ ਜਾਂਦੇ ਹਨ। ਪਹਿਲਾਂ My Orders ਵਿੱਚ ਵੇਖੋ; ਜੇ ਆਰਡਰ ਨਹੀਂ ਹੈ ਤਾਂ UTR ਨੰਬਰ ਅਤੇ ਪੇਮੈਂਟ ਸਕ੍ਰੀਨਸ਼ਾਟ ਤਿਆਰ ਰੱਖੋ ਅਤੇ {phone} 'ਤੇ WhatsApp/ਕਾਲ ਕਰੋ (ਸੋਮ–ਸ਼ਨੀ, ਸਵੇਰੇ 9–ਸ਼ਾਮ 6) ਤਾਂ ਜੋ ਅਸੀਂ ਪਤਾ ਲਗਾ ਸਕੀਏ।"
+      },
+      "route": "/contact",
       "direct": true
     },
     {
@@ -488,6 +519,64 @@
       },
       "route": "/contact",
       "direct": true
+    },
+    {
+      "id": "quality-purity",
+      "topic": "products",
+      "questions": [
+        "Are your spices pure?",
+        "Are your spices of good quality?",
+        "Do you add artificial colour or preservatives?",
+        "Is there any adulteration in your spices?",
+        "masale pure hain kya",
+        "masale me milavat to nahi hai",
+        "kya masalon me colour ya preservative milaya hai",
+        "quality kaisi hai masalon ki",
+        "क्या मसाले शुद्ध हैं",
+        "मसालों में मिलावट तो नहीं है",
+        "શું મસાલા શુદ્ધ છે",
+        "मसाले शुद्ध आहेत का",
+        "ਕੀ ਮਸਾਲੇ ਸ਼ੁੱਧ ਹਨ"
+      ],
+      "answer": {
+        "en": "Yes — our spices are ground from selected whole spices with no added artificial colour or preservatives. They are packed fresh in our FSSAI-licensed facility in Barnagar, Ujjain, where we have been making spices since 1995. If anything ever tastes off, tell us within 7 days of delivery and we will replace it.",
+        "hi": "हाँ — हमारे मसाले चुने हुए खड़े मसालों से पिसे जाते हैं, इनमें कोई artificial रंग या preservative नहीं मिलाया जाता। ये बड़नगर, उज्जैन की हमारी FSSAI-लाइसेंस प्राप्त यूनिट में ताज़ा पैक होते हैं — हम 1995 से मसाले बना रहे हैं। अगर कभी स्वाद में दिक्कत लगे तो डिलीवरी के 7 दिन के अंदर बताइए, हम बदल देंगे।",
+        "hinglish": "Haan — hamare masale selected khade masalon se pise jate hain, inme koi artificial colour ya preservative nahi milaya jata. Ye Barnagar, Ujjain ki hamari FSSAI-licensed facility me fresh pack hote hain — hum 1995 se masale bana rahe hain. Agar kabhi taste me dikkat lage to delivery ke 7 din ke andar bataiye, hum replace kar denge.",
+        "gu": "હા — અમારા મસાલા પસંદ કરેલા આખા મસાલામાંથી દળવામાં આવે છે, તેમાં કોઈ artificial રંગ કે preservative ઉમેરવામાં આવતું નથી. તે બડનગર, ઉજ્જૈનની અમારી FSSAI-લાઇસન્સવાળી યુનિટમાં તાજા પૅક થાય છે — અમે 1995 થી મસાલા બનાવીએ છીએ. જો ક્યારેય સ્વાદમાં તકલીફ લાગે તો ડિલિવરીના 7 દિવસમાં કહો, અમે બદલી આપીશું.",
+        "mr": "होय — आमचे मसाले निवडक आख्ख्या मसाल्यांपासून दळले जातात, त्यात कोणताही artificial रंग किंवा preservative मिसळलेले नसते. ते बडनगर, उज्जैन येथील आमच्या FSSAI-परवानाधारक युनिटमध्ये ताजे पॅक होतात — आम्ही 1995 पासून मसाले बनवत आहोत. कधी चवीत तक्रार वाटल्यास डिलिव्हरीनंतर 7 दिवसांत सांगा, आम्ही बदलून देऊ.",
+        "pa": "ਹਾਂ — ਸਾਡੇ ਮਸਾਲੇ ਚੁਣੇ ਹੋਏ ਸਾਬਤ ਮਸਾਲਿਆਂ ਤੋਂ ਪੀਸੇ ਜਾਂਦੇ ਹਨ, ਇਨ੍ਹਾਂ ਵਿੱਚ ਕੋਈ artificial ਰੰਗ ਜਾਂ preservative ਨਹੀਂ ਮਿਲਾਇਆ ਜਾਂਦਾ। ਇਹ ਬੜਨਗਰ, ਉੱਜੈਨ ਦੀ ਸਾਡੀ FSSAI-ਲਾਇਸੰਸ ਵਾਲੀ ਯੂਨਿਟ ਵਿੱਚ ਤਾਜ਼ੇ ਪੈਕ ਹੁੰਦੇ ਹਨ — ਅਸੀਂ 1995 ਤੋਂ ਮਸਾਲੇ ਬਣਾ ਰਹੇ ਹਾਂ। ਜੇ ਕਦੇ ਸਵਾਦ ਵਿੱਚ ਦਿੱਕਤ ਲੱਗੇ ਤਾਂ ਡਿਲੀਵਰੀ ਦੇ 7 ਦਿਨਾਂ ਵਿੱਚ ਦੱਸੋ, ਅਸੀਂ ਬਦਲ ਦੇਵਾਂਗੇ।"
+      },
+      "route": "/about",
+      "direct": true
+    },
+    {
+      "id": "quality-taste",
+      "topic": "products",
+      "questions": [
+        "How is the taste of your spices?",
+        "Which masala is best for daily cooking?",
+        "Which chilli powder is less spicy?",
+        "Which garam masala is most aromatic?",
+        "masalon ka taste kaisa hai",
+        "roz ke khane ke liye kaun sa masala best hai",
+        "kam teekhi mirch kaun si hai",
+        "swad kaisa hai masalon ka",
+        "मसालों का स्वाद कैसा है",
+        "रोज़ के खाने के लिए कौन सा मसाला अच्छा है",
+        "મસાલાનો સ્વાદ કેવો છે",
+        "मसाल्यांची चव कशी आहे",
+        "ਮਸਾਲਿਆਂ ਦਾ ਸਵਾਦ ਕਿਹੋ ਜਿਹਾ ਹੈ"
+      ],
+      "answer": {
+        "en": "Customers like our spices for their fresh, homely taste — strong aroma without being overly sharp. Tell me what you cook most (dal, sabzi, poha, chai) and I will pick the right masala and pack size for you.",
+        "hi": "हमारे मसाले अपने ताज़ा, घर जैसे स्वाद के लिए पसंद किए जाते हैं — तेज़ खुशबू, पर बहुत ज़्यादा तीखापन नहीं। आप सबसे ज़्यादा क्या बनाते हैं, बताइए (दाल, सब्ज़ी, पोहा, चाय) — मैं आपके लिए सही मसाला और पैक साइज़ चुन देता हूँ।",
+        "hinglish": "Hamare masale apne fresh, ghar jaise taste ke liye pasand kiye jate hain — tez khushboo, par bahut zyada teekhapan nahi. Aap sabse zyada kya banate hain, bataiye (dal, sabzi, poha, chai) — main aapke liye sahi masala aur pack size chun deta hoon.",
+        "gu": "અમારા મસાલા તેમના તાજા, ઘર જેવા સ્વાદ માટે પસંદ કરાય છે — તેજ સુગંધ, પણ વધુ પડતી તીખાશ નહીં. તમે સૌથી વધુ શું બનાવો છો તે કહો (દાળ, શાક, પોહા, ચા) — હું તમારા માટે યોગ્ય મસાલો અને પૅક સાઇઝ પસંદ કરી આપીશ.",
+        "mr": "आमचे मसाले त्यांच्या ताज्या, घरगुती चवीसाठी आवडतात — छान सुगंध, पण अती तिखटपणा नाही. तुम्ही जास्त काय बनवता ते सांगा (डाळ, भाजी, पोहे, चहा) — मी तुमच्यासाठी योग्य मसाला आणि पॅक साइज निवडून देतो.",
+        "pa": "ਸਾਡੇ ਮਸਾਲੇ ਆਪਣੇ ਤਾਜ਼ੇ, ਘਰ ਵਰਗੇ ਸਵਾਦ ਲਈ ਪਸੰਦ ਕੀਤੇ ਜਾਂਦੇ ਹਨ — ਤੇਜ਼ ਖੁਸ਼ਬੂ, ਪਰ ਬਹੁਤ ਜ਼ਿਆਦਾ ਤਿੱਖਾਪਣ ਨਹੀਂ। ਤੁਸੀਂ ਸਭ ਤੋਂ ਵੱਧ ਕੀ ਬਣਾਉਂਦੇ ਹੋ, ਦੱਸੋ (ਦਾਲ, ਸਬਜ਼ੀ, ਪੋਹਾ, ਚਾਹ) — ਮੈਂ ਤੁਹਾਡੇ ਲਈ ਸਹੀ ਮਸਾਲਾ ਅਤੇ ਪੈਕ ਸਾਈਜ਼ ਚੁਣ ਦਿੰਦਾ ਹਾਂ।"
+      },
+      "route": "/products",
+      "direct": false
     }
   ]
 }

@@ -2635,7 +2635,7 @@ class TestPrompt:
 
     def test_prompt_sells_without_pushing(self):
         for needle in ('SELLING', 'search_faq', 'get_recommendations', 'free_delivery_gap',
-                       'no invented', 'in-stock', 'never pushy', 'only when asked'):
+                       'no invented', 'in-stock', 'salesman', 'satisfied'):
             assert needle.lower() in SYSTEM_PROMPT.lower(), needle
 
     def test_every_tool_the_prompt_names_exists(self):

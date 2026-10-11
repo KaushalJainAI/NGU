@@ -102,7 +102,7 @@ const ProposalCard = ({
         </div>
       ))}
       <Button
-        type="button" size="sm" className="w-full gap-1.5"
+        type="button" size="sm" className="w-full gap-1.5 h-auto min-h-9 whitespace-normal text-left leading-snug"
         disabled={disabled}
         onClick={confirm}
       >
@@ -286,7 +286,7 @@ const AssistantWidget = () => {
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns, open, view]);
+  }, [turns, open, view, mutation.isPending]);
 
   // ── Load a thread's history from the server ────────────────────────────────
   const loadThread = useCallback(async (convId: string) => {
@@ -354,8 +354,7 @@ const AssistantWidget = () => {
   const mutation = useMutation({
     mutationFn: ({ message, lang }: { message: string; lang?: string }) =>
       assistantAPI.chat(message, activeConvId, lang ?? language),
-    onSuccess: (data: AssistantReply) => {
-      setActiveConvId(data.conversation_id);
+    onSuccess: (data: AssistantReply) => {      setActiveConvId(data.conversation_id);
       localStorage.setItem("assistant_conversation_id", data.conversation_id);
       if (data.history_truncated) setContextFull(true);
 
@@ -390,7 +389,13 @@ const AssistantWidget = () => {
   const send = useCallback(
     (raw: string, viaVoice = false, lang?: string) => {
       const message = raw.trim();
-      if (!message || mutation.isPending) return;
+      if (!message) return;
+      // One in-flight turn per account: the backend answers 429 while a reply
+      // is pending. Keep the typed text and say so instead of dropping it.
+      if (mutation.isPending) {
+        toast.info(t('assistant.errorBusy'));
+        return;
+      }
       voiceTurnRef.current = viaVoice;
       setTurns((prev) => [...prev, { role: "user", text: message }]);
       setInput("");
@@ -706,7 +711,7 @@ const AssistantWidget = () => {
                       <Button
                         size="sm"
                         variant="secondary"
-                        className="gap-1.5"
+                        className="gap-1.5 h-auto min-h-8 max-w-full whitespace-normal text-left leading-snug"
                         onClick={() => handleAction(turn.action!, i)}
                       >
                         {turn.action.type === "add_to_cart"
@@ -812,9 +817,10 @@ const AssistantWidget = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={
-                recording ? t('assistant.listening') : transcribing ? t('assistant.transcribing') : t('assistant.inputPlaceholder')
+                recording ? t('assistant.listening') : transcribing ? t('assistant.transcribing') : mutation.isPending ? t('assistant.errorBusy') : t('assistant.inputPlaceholder')
               }
               className="flex-1"
+              disabled={mutation.isPending}
             />
             <Button type="submit" size="icon" disabled={!input.trim() || mutation.isPending}>
               <Send className="h-4 w-4" />
