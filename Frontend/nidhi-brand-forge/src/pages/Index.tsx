@@ -321,12 +321,43 @@ const Index = () => {
           </div>
         </section>
 
+        {/* Combo Offers & Value Bundles */}
+        {formattedCombos.length > 0 && (
+          <section className="py-8 sm:py-10">
+            <div className="container mx-auto px-2 sm:px-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 sm:mb-8 gap-3 sm:gap-0">
+                <div>
+                  <h2 className="text-xl sm:text-3xl md:text-4xl font-bold mb-1 sm:mb-2 text-foreground">
+                    {t('home.combos.title')}
+                  </h2>
+                  <p className="text-xs sm:text-base text-muted-foreground">{t('home.combos.subtitle')}</p>
+                </div>
+                <Button variant="outline" className="w-full sm:w-auto hidden sm:flex" asChild>
+                  <Link to="/combos">
+                    {t('common.viewAll')}
+                    <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </Link>
+                </Button>
+              </div>
+              <ProductCarousel items={formattedCombos} />
+              <div className="mt-4 sm:hidden text-center">
+                <Button variant="outline" size="sm" className="w-full" asChild>
+                  <Link to="/combos">
+                    {t('common.viewAll')}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Trending */}
         {trending.length > 0 && (
           <section className="py-8 sm:py-10">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="mb-4">
-                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.trending.title')}</h2>
+                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-1">{t('home.trending.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground">{t('home.trending.subtitle')}</p>
               </div>
               <ProductCarousel items={trending} />
@@ -339,7 +370,7 @@ const Index = () => {
           <section className="py-9 sm:py-12 bg-muted/30">
             <div className="container mx-auto px-2 sm:px-4">
               <div className="text-center mb-6">
-                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.categories.title')}</h2>
+                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">{t('home.categories.title')}</h2>
                 <p className="text-xs sm:text-base text-muted-foreground max-w-2xl mx-auto">
                   {t('home.categories.subtitle')}
                 </p>
@@ -364,23 +395,6 @@ const Index = () => {
                   </button>
                 ))}
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* Combo Offers */}
-        {formattedCombos.length > 0 && (
-          <section className="py-8 sm:py-10">
-            <div className="container mx-auto px-2 sm:px-4">
-              <div className="text-center mb-5">
-                                <h2 className="text-xl sm:text-3xl md:text-4xl font-bold text-foreground mb-2">
-                  {t('home.combos.title')}
-                </h2>
-                <p className="text-xs sm:text-base text-muted-foreground max-w-2xl mx-auto">
-                  {t('home.combos.subtitle')}
-                </p>
-              </div>
-              <ProductCarousel items={formattedCombos} />
             </div>
           </section>
         )}
